@@ -18,6 +18,7 @@ import '../styles/PDFViewer.css';
 
 export default function PDFWorkspace({
     files,
+    workspaceId,
     requestedActiveId,
     onCloseFile,
     onImportPDF,
@@ -34,8 +35,8 @@ export default function PDFWorkspace({
 
     // Read existing assets from the SiliconVault database.
     const libraryAssets = useLiveQuery(
-        () => db.assets.toArray(),
-        [],
+        () => workspaceId == null ? [] : db.assets.where('workspaceId').equals(workspaceId).toArray(),
+        [workspaceId],
         []
     );
 
