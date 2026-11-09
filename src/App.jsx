@@ -9,10 +9,9 @@ import {
   Database, ShieldCheck, Sparkles, Eye
 } from 'lucide-react';
 import PDFWorkspace from './components/PDFWorkspace.jsx';
-import { db, initializeVault } from './lib/db';
+import { db, initializeVault, createFolder, createProject } from './lib/db';
 import AdvancedEditor from './components/AdvancedEditor.jsx';
 import ExplorerTree from './components/ExplorerTree.jsx';
-import { createFolder, createProject } from './lib/db';
 
 const navigation = [
   {
@@ -109,6 +108,37 @@ function App() {
     window.setTimeout(() => setNotice(''), 3000);
   };
 
+  const selectedFolderScope = useMemo(() => {
+    if (!selectedFolderId) return null;
+
+    const descendants = new Set([selectedFolderId]);
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      for (const folder of folders) {
+        if (folder.parentFolderId != null && descendants.has(folder.parentFolderId) && !descendants.has(folder.id)) {
+          descendants.add(folder.id);
+          changed = true;
+        }
+      }
+    }
+
+    return descendants;
+  }, [folders, selectedFolderId]);
+
+  const getFolderPath = (folderId) => {
+    const names = [];
+    let current = folders.find(folder => folder.id === folderId);
+
+    while (current) {
+      names.unshift(current.name);
+      current = folders.find(folder => folder.id === current.parentFolderId);
+    }
+
+    return names.join(' / ') || 'Unsorted';
+  };
+
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
       const collection = collections.find(
@@ -129,7 +159,7 @@ function App() {
         doc.collectionId === selectedCollection;
 
       const matchesFolder =
-        !selectedFolderId || doc.folderId === selectedFolderId;
+        !selectedFolderScope || selectedFolderScope.has(doc.folderId);
 
       const matchesSection =
         active === 'Code Studio'
@@ -140,7 +170,7 @@ function App() {
 
       return matchesSearch && matchesCollection && matchesFolder && matchesSection;
     });
-  }, [documents, collections, query, selectedCollection, selectedFolderId, active]);
+  }, [documents, collections, query, selectedCollection, selectedFolderScope, active]);
 
   const totalBytes = assets.reduce(
     (sum, asset) => sum + (asset.size || 0),
@@ -235,7 +265,6 @@ function App() {
           kind,
           collectionId: collections[0]?.id,
           folderId: selectedFolderId ?? null,
-          folderId: selectedFolderId ?? null,
           content,
           tags: [],
           bookmarked: false,
@@ -249,6 +278,7 @@ function App() {
           size: file.size,
           blob: file,
           collectionId: collections[0]?.id,
+          folderId: selectedFolderId ?? null,
           createdAt: now
         });
       }
@@ -367,6 +397,7 @@ function App() {
       size: file.size,
       blob: file,
       collectionId: collections[0]?.id,
+      folderId: selectedFolderId ?? null,
       createdAt: now
     });
 
@@ -795,7 +826,7 @@ function App() {
 
                 <div>
                   <h2>{active}</h2>
-                  <p>{filteredDocuments.length} items</p>
+                  <p>{filteredDocuments.length} items · {selectedFolderId ? getFolderPath(selectedFolderId) : selectedProjectId ? projects.find(project => project.id === selectedProjectId)?.name : 'All folders'}</p>
                 </div>
 
                 <div className="view-controls">
@@ -821,6 +852,8 @@ function App() {
               <DocumentList
                 documents={filteredDocuments}
                 collections={collections}
+                folders={folders}
+                getFolderPath={getFolderPath}
                 view={view}
                 openEditor={openEditor}
                 exportDocument={exportDocument}
@@ -1072,6 +1105,8 @@ function EmptyState({ icon: Icon, title, description }) {
 function DocumentList({
   documents,
   collections,
+  folders = [],
+  getFolderPath,
   view,
   openEditor,
   exportDocument,
@@ -1111,8 +1146,7 @@ function DocumentList({
               <b>{doc.title}</b>
 
               <small>
-                {collections.find(c => c.id === doc.collectionId)?.name
-                  || 'Unsorted'}
+                {getFolderPath?.(doc.folderId) || 'Unsorted'}
               </small>
             </button>
 
@@ -1143,7 +1177,7 @@ function DocumentList({
 
       <div className="table-head">
         <span>NAME</span>
-        <span>COLLECTION</span>
+        <span>LOCATION</span>
         <span>TYPE</span>
         <span>MODIFIED</span>
         <span>SIZE</span>
@@ -1167,8 +1201,7 @@ function DocumentList({
           </button>
 
           <span className="muted">
-            {collections.find(c => c.id === doc.collectionId)?.name
-              || 'Unsorted'}
+            {getFolderPath?.(doc.folderId) || 'Unsorted'}
           </span>
 
           <span>

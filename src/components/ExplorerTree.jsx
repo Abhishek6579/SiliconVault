@@ -113,7 +113,7 @@ export default function ExplorerTree({
       })}
 
       <div className="explorer-section-label explorer-section-spaced">
-        <span>PERSONAL FOLDERS</span>
+        <span>WORKSPACE FOLDERS</span>
       </div>
       {personalFolders.map(folder => (
         <FolderNode
