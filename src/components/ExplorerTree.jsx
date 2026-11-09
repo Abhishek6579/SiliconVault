@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus,
-  FilePlus2, Layers3, Plus, FolderTree
+  FilePlus2, Layers3, Plus, FolderTree, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 
 function FolderNode({ folder, folders, selectedFolderId, onSelectFolder, depth = 0 }) {
@@ -19,7 +19,7 @@ function FolderNode({ folder, folders, selectedFolderId, onSelectFolder, depth =
         >
           {children.length ? (expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />) : <span className="explorer-spacer" />}
         </button>
-        <button className="explorer-entry" onClick={() => onSelectFolder(folder)}>
+        <button className="explorer-entry" title={folder.name} onClick={() => onSelectFolder(folder)}>
           {expanded && children.length ? <FolderOpen size={15} /> : <Folder size={15} />}
           <span title={folder.name}>{folder.name}</span>
         </button>
@@ -49,16 +49,19 @@ export default function ExplorerTree({
   onCreateProject
 }) {
   const [expandedProjects, setExpandedProjects] = useState({});
+  const [compactMode, setCompactMode] = useState(false);
   const personalFolders = useMemo(
     () => folders.filter(folder => folder.projectId == null && folder.parentFolderId == null),
     [folders]
   );
 
   return (
-    <section className="explorer">
+    <section className={`explorer ${compactMode ? "explorer-compact" : ""}`}>
+
       <div className="explorer-heading">
         <span>EXPLORER</span>
         <div className="explorer-tools">
+          <button title={compactMode ? "Show descriptive Explorer" : "Show compact icon Explorer"} onClick={() => setCompactMode(value => !value)}>{compactMode ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}</button>
           <button title="New folder" onClick={() => onCreateFolder(selectedFolderId ?? null, selectedProjectId ?? null)}><FolderPlus size={14} /></button>
           <button title="New project" onClick={onCreateProject}><Plus size={15} /></button>
         </div>
@@ -83,7 +86,7 @@ export default function ExplorerTree({
               >
                 {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               </button>
-              <button className="explorer-entry" onClick={() => onSelectProject(project)}>
+              <button className="explorer-entry" title={project.name} onClick={() => onSelectProject(project)}>
                 <Layers3 size={15} />
                 <span title={project.name}>{project.name}</span>
               </button>
