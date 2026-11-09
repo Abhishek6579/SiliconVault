@@ -1628,3 +1628,7 @@ body,
 .sidebar-collapsed .sidebar-bottom { padding: 10px 8px; }
 .sidebar-collapsed .sidebar-bottom > .nav-item { justify-content: center; padding: 11px 0; }
 @media (max-width: 760px) { .sidebar-collapsed { width: 66px; } }
+
+.sidebar-collapsed .brand { height: 82px; flex-direction: column; padding: 8px 0; gap: 5px; }
+.sidebar-collapsed .brand-mark { width: 25px; height: 25px; }
+.sidebar-collapsed .sidebar-toggle { position: static; margin: 0; }
