@@ -65,7 +65,6 @@ function App() {
   const [view, setView] = useState('list');
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
-  const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => {
@@ -86,10 +85,6 @@ function App() {
 
   const workspaces = useLiveQuery(() => db.workspaces.orderBy('name').toArray(), [], []);
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId) ?? workspaces[0] ?? null;
-
-  const collections = useLiveQuery(
-    () => db.collections.toArray(), [], []
-  );
 
   const documents = useLiveQuery(
     () => activeWorkspaceId == null ? [] : db.documents.where('workspaceId').equals(activeWorkspaceId).sortBy('updatedAt').then(rows => rows.reverse()),
@@ -136,7 +131,6 @@ function App() {
   useEffect(() => {
     setSelectedFolderId(null);
     setSelectedProjectId(null);
-    setSelectedCollection(null);
     setOpenDocuments([]);
     setOpenPDFs([]);
     setActivePDFId(null);
@@ -249,38 +243,7 @@ function App() {
     return names.join(' / ') || 'Unsorted';
   };
 
-  const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const collection = collections.find(
-        (item) => item.id === doc.collectionId
-      );
-
-      const searchable = [
-        doc.title,
-        collection?.name || '',
-        kindName(doc.kind),
-        ...(doc.tags || [])
-      ].join(' ').toLowerCase();
-
-      const matchesSearch = searchable.includes(query.toLowerCase());
-
-      const matchesCollection =
-        !selectedCollection ||
-        doc.collectionId === selectedCollection;
-
-      const matchesFolder =
-        !selectedFolderScope || selectedFolderScope.has(doc.folderId);
-
-      const matchesSection =
-        active === 'Code Studio'
-          ? ['verilog', 'systemverilog'].includes(doc.kind)
-          : active === 'Bookmarks'
-            ? Boolean(doc.bookmarked)
-            : true;
-
-      return matchesSearch && matchesCollection && matchesFolder && matchesSection;
-    });
-  }, [documents, collections, query, selectedCollection, selectedFolderScope, active]);
+  const filteredDocuments=useMemo(()=>documents.filter(doc=>{const searchable=[doc.title,getFolderPath(doc.folderId),kindName(doc.kind),...(doc.tags||[])].join(' ').toLowerCase();const matchesSearch=searchable.includes(query.toLowerCase());const matchesFolder=!selectedFolderScope||selectedFolderScope.has(doc.folderId);const matchesSection=active==='Code Studio'?['verilog','systemverilog'].includes(doc.kind):active==='Bookmarks'?Boolean(doc.bookmarked):true;return matchesSearch&&matchesFolder&&matchesSection;}),[documents,query,selectedFolderScope,active,folders]);
 
   const totalBytes = assets.reduce(
     (sum, asset) => sum + (asset.size || 0),
@@ -338,8 +301,6 @@ function App() {
   const createDocument = async (kind) => {
     const now = new Date().toISOString();
 
-    const defaultCollection = collections[0]?.id;
-
     const title = {
       markdown: 'Untitled note',
       verilog: 'Untitled.v',
@@ -353,7 +314,6 @@ function App() {
     const id = await db.documents.add({
       title,
       kind,
-      collectionId: defaultCollection,
       folderId: selectedFolderId ?? null,
       workspaceId: activeWorkspaceId,
       content,
@@ -411,7 +371,6 @@ function App() {
         await db.documents.add({
           title: file.name,
           kind,
-          collectionId: collections[0]?.id,
           folderId: selectedFolderId ?? null,
           workspaceId: activeWorkspaceId,
           content,
@@ -426,7 +385,6 @@ function App() {
           mimeType: file.type || 'application/octet-stream',
           size: file.size,
           blob: file,
-          collectionId: collections[0]?.id,
           folderId: selectedFolderId ?? null,
           workspaceId: activeWorkspaceId,
           createdAt: now
@@ -466,21 +424,8 @@ function App() {
   };
 
   const exportBackup = async () => {
-    const [allDocuments, allCollections, allProjects] =
-      await Promise.all([
-        db.documents.toArray(),
-        db.collections.toArray(),
-        db.projects.toArray()
-      ]);
-
-    const backup = {
-      application: 'SiliconVault',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      documents: allDocuments,
-      collections: allCollections,
-      projects: allProjects
-    };
+    const [allDocuments,allFolders,allProjects]=await Promise.all([db.documents.toArray(),db.folders.toArray(),db.projects.toArray()]);
+    const backup={application:'SiliconVault',version:2,exportedAt:new Date().toISOString(),documents:allDocuments,folders:allFolders,projects:allProjects};
 
     const blob = new Blob(
       [JSON.stringify(backup, null, 2)],
@@ -542,7 +487,6 @@ function App() {
       mimeType: 'application/pdf',
       size: file.size,
       blob: file,
-      collectionId: collections[0]?.id,
       folderId: selectedFolderId ?? null,
       workspaceId: activeWorkspaceId,
       createdAt: now
@@ -644,8 +588,7 @@ function App() {
                     }`}
                   onClick={() => {
                     setActive(item.name);
-                    setSelectedCollection(null);
-                  }}
+                                  }}
                 >
                   <item.icon size={16} />
                   <span>{item.name}</span>
@@ -662,14 +605,12 @@ function App() {
             selectedProjectId={selectedProjectId}
             onSelectFolder={(folder) => {
               setActive('Documents');
-              setSelectedCollection(null);
-              setSelectedFolderId(folder.id);
+                        setSelectedFolderId(folder.id);
               setSelectedProjectId(folder.projectId ?? null);
             }}
             onSelectProject={(project) => {
               setActive('Documents');
-              setSelectedCollection(null);
-              setSelectedProjectId(project.id);
+                        setSelectedProjectId(project.id);
               setSelectedFolderId(project.rootFolderId ?? null);
             }}
             onCreateFolder={async (parentFolderId, projectId) => {
@@ -913,54 +854,6 @@ function App() {
               <section className="section-block">
 
                 <div className="section-heading">
-                  <div>
-                    <h2>Collections</h2>
-                    <p>Jump back into a subject</p>
-                  </div>
-
-                  <span className="text-button">
-                    {collections.length} collections
-                  </span>
-                </div>
-
-                <div className="collection-grid">
-
-                  {collections.map((collection) => (
-                    <button
-                      className="collection-card"
-                      key={collection.id}
-                      onClick={() => {
-                        setActive('Documents');
-                        setSelectedCollection(collection.id);
-                        setSelectedFolderId(null);
-                        setSelectedProjectId(null);
-                      }}
-                    >
-                      <div className={`folder-art ${collection.color}`}>
-                        <FolderOpen size={25} />
-                      </div>
-
-                      <div className="collection-info">
-                        <b>{collection.name}</b>
-
-                        <small>
-                          {documents.filter(
-                            d => d.collectionId === collection.id
-                          ).length} documents
-                        </small>
-                      </div>
-
-                      <ChevronRight size={15} />
-                    </button>
-                  ))}
-
-                </div>
-
-              </section>
-
-              <section className="section-block">
-
-                <div className="section-heading">
 
                   <div>
                     <h2>Recent files</h2>
@@ -996,7 +889,6 @@ function App() {
 
                 <DocumentList
                   documents={filteredDocuments.slice(0, 6)}
-                  collections={collections}
                   view={view}
                   openEditor={openEditor}
                   exportDocument={exportDocument}
@@ -1044,7 +936,6 @@ function App() {
 
               <DocumentList
                 documents={filteredDocuments}
-                collections={collections}
                 folders={folders}
                 getFolderPath={getFolderPath}
                 view={view}
@@ -1232,7 +1123,8 @@ function App() {
               <div key={doc.id} className="unified-document-panel" style={{ display: activeWorkspaceTab === `doc:${doc.id}` ? 'flex' : 'none' }}>
                 <AdvancedEditor
                   document={doc}
-                  collections={collections}
+                  folders={folders}
+                  getFolderPath={getFolderPath}
                   onSave={saveDocument}
                   onClose={() => closeWorkspaceTab(`doc:${doc.id}`)}
                   embedded
@@ -1305,7 +1197,6 @@ function EmptyState({ icon: Icon, title, description }) {
 
 function DocumentList({
   documents,
-  collections,
   folders = [],
   getFolderPath,
   view,

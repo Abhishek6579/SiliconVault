@@ -32,13 +32,14 @@ const EMPTY_DOCUMENT = {
   title: '',
   kind: 'markdown',
   content: '',
-  collectionId: '',
+  folderId: null,
   tags: []
 };
 
 export default function AdvancedEditor({
   document: initialDocument,
-  collections = [],
+  folders = [],
+  getFolderPath,
   onSave,
   onClose,
   embedded = false
@@ -181,25 +182,10 @@ export default function AdvancedEditor({
           </div>
 
           <div className="editor-field">
-            <label>
-              <Folder size={13} /> Collection
-            </label>
-
-            <select
-              value={draft.collectionId ?? ''}
-              onChange={event =>
-                updateDraft(
-                  'collectionId',
-                  event.target.value ? Number(event.target.value) : null
-                )
-              }
-            >
-              <option value="">Unassigned</option>
-              {collections.map(collection => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
+            <label><Folder size={13} /> Folder</label>
+            <select value={draft.folderId ?? ''} onChange={event=>updateDraft('folderId',event.target.value?Number(event.target.value):null)}>
+              <option value="">Unsorted</option>
+              {folders.map(folder=><option key={folder.id} value={folder.id}>{getFolderPath?.(folder.id)||folder.name}</option>)}
             </select>
           </div>
         </div>

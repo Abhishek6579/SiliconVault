@@ -92,6 +92,16 @@ db.version(3).stores({
 });
 
 
+db.version(4).stores({collections:'++id, name, color, createdAt',workspaces:'++id, name, createdAt',folders:'++id, name, parentFolderId, projectId, workspaceId, createdAt, updatedAt',documents:'++id, title, kind, folderId, workspaceId, updatedAt, *tags',assets:'++id, name, mimeType, folderId, workspaceId, createdAt',projects:'++id, name, status, rootFolderId, workspaceId, updatedAt'}).upgrade(async tx=>{
+ const now=new Date().toISOString(),collections=await tx.table('collections').toArray(),workspaces=await tx.table('workspaces').toArray(),folders=await tx.table('folders').toArray(),map=new Map();
+ for(const workspace of workspaces)for(const collection of collections){let folder=folders.find(f=>f.legacyCollectionId===collection.id&&f.workspaceId===workspace.id);if(!folder){const id=await tx.table('folders').add({name:collection.name,parentFolderId:null,projectId:null,workspaceId:workspace.id,createdAt:collection.createdAt||now,updatedAt:now});folder={id,workspaceId:workspace.id,legacyCollectionId:collection.id};folders.push(folder);}map.set(workspace.id+':'+collection.id,folder.id);}
+ const byId=new Map(folders.map(f=>[f.id,f]));
+ for(const doc of await tx.table('documents').toArray()){const old=byId.get(doc.folderId),legacy=doc.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(doc.workspaceId+':'+legacy),keep=old&&old.workspaceId===doc.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=doc;await tx.table('documents').put({...clean,folderId:keep?doc.folderId:(mapped??null)});}
+ for(const asset of await tx.table('assets').toArray()){const old=byId.get(asset.folderId),legacy=asset.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(asset.workspaceId+':'+legacy),keep=old&&old.workspaceId===asset.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=asset;await tx.table('assets').put({...clean,folderId:keep?asset.folderId:(mapped??null)});}
+ for(const folder of folders)if(folder.legacyCollectionId!=null){const{legacyCollectionId,...clean}=folder;await tx.table('folders').put(clean);}
+});
+db.version(5).stores({collections:null,workspaces:'++id, name, createdAt',folders:'++id, name, parentFolderId, projectId, workspaceId, createdAt, updatedAt',documents:'++id, title, kind, folderId, workspaceId, updatedAt, *tags',assets:'++id, name, mimeType, folderId, workspaceId, createdAt',projects:'++id, name, status, rootFolderId, workspaceId, updatedAt'});
+
 export async function createWorkspace({ name, description = '' }) {
   const cleanName = name?.trim();
   if (!cleanName) throw new Error('Workspace name cannot be empty.');
@@ -181,74 +191,6 @@ export async function createProject({
   });
 }
 
-async function ensureFolderStructure() {
-  const now = new Date().toISOString();
-
-  // Also handles fresh installs where starter collections are seeded after
-  // the v2 upgrade has already run.
-  const collections = await db.collections.toArray();
-
-  for (const collection of collections) {
-    const existing = await db.folders
-      .where('legacyCollectionId')
-      .equals(collection.id)
-      .first();
-
-    if (!existing) {
-      await db.folders.add({
-        name: collection.name,
-        parentFolderId: null,
-        projectId: null,
-        legacyCollectionId: collection.id,
-        createdAt: collection.createdAt || now,
-        updatedAt: now
-      });
-    }
-  }
-
-  const projects = await db.projects.toArray();
-
-  for (const project of projects) {
-    if (project.rootFolderId && await db.folders.get(project.rootFolderId)) {
-      continue;
-    }
-
-    const rootFolderId = await db.folders.add({
-      name: project.name,
-      parentFolderId: null,
-      projectId: project.id,
-      legacyCollectionId: null,
-      createdAt: now,
-      updatedAt: now
-    });
-
-    await db.projects.update(project.id, { rootFolderId });
-  }
-
-  // Backfill records created by older code after the migration.
-  const collectionFolders = await db.folders.toArray();
-  const folderByCollectionId = new Map(
-    collectionFolders
-      .filter(folder => folder.legacyCollectionId != null)
-      .map(folder => [folder.legacyCollectionId, folder.id])
-  );
-
-  for (const document of await db.documents.toArray()) {
-    if (document.folderId == null && document.collectionId != null) {
-      const folderId = folderByCollectionId.get(document.collectionId);
-      if (folderId) await db.documents.update(document.id, { folderId });
-    }
-  }
-
-  for (const asset of await db.assets.toArray()) {
-    if (asset.folderId == null && asset.collectionId != null) {
-      const folderId = folderByCollectionId.get(asset.collectionId);
-      if (folderId) await db.assets.update(asset.id, { folderId });
-    }
-  }
-}
-
-
 async function ensureWorkspaceStructure() {
   let workspaces = await db.workspaces.toArray();
   if (!workspaces.length) {
@@ -275,129 +217,12 @@ async function ensureWorkspaceStructure() {
   return workspaces;
 }
 
-export async function initializeVault() {
-  await ensureWorkspaceStructure();
-  const count = await db.collections.count();
-
-  if (count === 0) {
-    const now = new Date().toISOString();
-
-    const collectionRows = [
-      { name: 'Digital Electronics', color: 'amber', createdAt: now },
-      { name: 'Verilog & SystemVerilog', color: 'blue', createdAt: now },
-      { name: 'Computer Architecture', color: 'violet', createdAt: now },
-      { name: 'RISC-V CPU', color: 'green', createdAt: now }
-    ];
-
-    await db.collections.bulkAdd(collectionRows);
-
-    const collections = await db.collections.toArray();
-    const byName = Object.fromEntries(
-      collections.map(collection => [collection.name, collection.id])
-    );
-
-    await db.documents.bulkAdd([
-      {
-        title: 'Welcome to SiliconVault',
-        kind: 'markdown',
-        collectionId: byName['Digital Electronics'],
-        content: `# Welcome to SiliconVault
-
-This is your local engineering knowledge base.
-
-- Create Markdown notes
-- Import code and PDF files
-- Organize work into folders and projects
-
-Your data is stored in this browser using IndexedDB.`,
-        tags: ['welcome'],
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        title: 'Blocking vs Non-blocking Assignments',
-        kind: 'markdown',
-        collectionId: byName['Verilog & SystemVerilog'],
-        content: `# Blocking vs Non-blocking Assignments
-
-Use = for blocking assignments and <= for non-blocking assignments in sequential RTL.
-
-## Notes
-
-Add your own explanation here.`,
-        tags: ['verilog', 'rtl'],
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        title: 'Pipeline Datapath — Design Notes',
-        kind: 'markdown',
-        collectionId: byName['Computer Architecture'],
-        content: `# Pipeline Datapath
-
-Document the stages, pipeline registers, hazards and control signals here.`,
-        tags: ['architecture'],
-        createdAt: now,
-        updatedAt: now
-      },
-      {
-        title: '16-bit ALU Implementation',
-        kind: 'verilog',
-        collectionId: byName['Verilog & SystemVerilog'],
-        content: `module alu #(parameter WIDTH = 16) (
-  input  logic [WIDTH-1:0] a, b,
-  input  logic [2:0]       op,
-  output logic [WIDTH-1:0] y
-);
-
-  always_comb begin
-    case (op)
-      3'b000: y = a + b;
-      3'b001: y = a - b;
-      3'b010: y = a & b;
-      3'b011: y = a | b;
-      default: y = '0;
-    endcase
-  end
-
-endmodule`,
-        tags: ['verilog', 'alu'],
-        createdAt: now,
-        updatedAt: now
-      }
-    ]);
-
-    await db.projects.bulkAdd([
-      {
-        name: 'RISC-V CPU',
-        detail: 'Single-cycle processor',
-        status: 'active',
-        progress: 28,
-        updatedAt: now
-      },
-      {
-        name: 'Verilog Practice',
-        detail: 'RTL exercises',
-        status: 'active',
-        progress: 64,
-        updatedAt: now
-      },
-      {
-        name: 'Pipeline Processor',
-        detail: 'Architecture study',
-        status: 'planning',
-        progress: 12,
-        updatedAt: now
-      }
-    ]);
-  }
-
-  await ensureFolderStructure();
-  await ensureWorkspaceStructure();
-
-  try {
-    await navigator.storage?.persist?.();
-  } catch (error) {
-    console.warn('Persistent storage request failed:', error);
-  }
+export async function initializeVault(){
+ const workspaces=await ensureWorkspaceStructure(),workspaceId=workspaces[0].id;
+ for(const project of await db.projects.toArray()){const root=project.rootFolderId==null?null:await db.folders.get(project.rootFolderId);if(root&&root.workspaceId===project.workspaceId)continue;const now=new Date().toISOString(),rootFolderId=await db.folders.add({name:project.name,parentFolderId:null,projectId:project.id,workspaceId:project.workspaceId,createdAt:now,updatedAt:now});await db.projects.update(project.id,{rootFolderId});}
+ if(await db.documents.count()===0&&await db.folders.count()===0){const now=new Date().toISOString(),ids={};
+  for(const name of ['Digital Electronics','Verilog & SystemVerilog','Computer Architecture','RISC-V CPU'])ids[name]=await createFolder({name,workspaceId});
+  await db.documents.bulkAdd([{title:'Welcome to SiliconVault',kind:'markdown',folderId:ids['Digital Electronics'],workspaceId,content:'# Welcome to SiliconVault\\n\\nThis is your local engineering knowledge base.',tags:['welcome'],createdAt:now,updatedAt:now},{title:'Blocking vs Non-blocking Assignments',kind:'markdown',folderId:ids['Verilog & SystemVerilog'],workspaceId,content:'# Blocking vs Non-blocking Assignments\\n\\nUse = for blocking assignments and <= for non-blocking assignments in sequential RTL.',tags:['verilog','rtl'],createdAt:now,updatedAt:now},{title:'Pipeline Datapath — Design Notes',kind:'markdown',folderId:ids['Computer Architecture'],workspaceId,content:'# Pipeline Datapath\\n\\nDocument stages, pipeline registers, hazards and control signals.',tags:['architecture'],createdAt:now,updatedAt:now}]);
+  for(const [name,detail,status] of [['RISC-V CPU','Single-cycle processor','active'],['Verilog Practice','RTL exercises','active'],['Pipeline Processor','Architecture study','planning']])await createProject({name,detail,status,workspaceId});}
+ try{await navigator.storage?.persist?.();}catch(error){console.warn('Persistent storage request failed:',error);}
 }
