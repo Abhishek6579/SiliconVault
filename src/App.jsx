@@ -68,6 +68,11 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => {
+    const saved = Number(localStorage.getItem('siliconvault-active-workspace'));
+    return Number.isFinite(saved) && saved > 0 ? saved : null;
+  });
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
 
   const [editorDoc, setEditorDoc] = useState(null);
   const [openPDFs, setOpenPDFs] = useState([]);
@@ -77,31 +82,59 @@ function App() {
 
   const uploadRef = useRef(null);
 
+  const workspaces = useLiveQuery(() => db.workspaces.orderBy('name').toArray(), [], []);
+  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId) ?? workspaces[0] ?? null;
+
   const collections = useLiveQuery(
     () => db.collections.toArray(), [], []
   );
 
   const documents = useLiveQuery(
-    () => db.documents.orderBy('updatedAt').reverse().toArray(),
-    [],
+    () => activeWorkspaceId == null ? [] : db.documents.where('workspaceId').equals(activeWorkspaceId).sortBy('updatedAt').then(rows => rows.reverse()),
+    [activeWorkspaceId],
     []
   );
 
   const assets = useLiveQuery(
-    () => db.assets.toArray(), [], []
+    () => activeWorkspaceId == null ? [] : db.assets.where('workspaceId').equals(activeWorkspaceId).toArray(),
+    [activeWorkspaceId],
+    []
   );
 
   const projects = useLiveQuery(
-    () => db.projects.toArray(), [], []
+    () => activeWorkspaceId == null ? [] : db.projects.where('workspaceId').equals(activeWorkspaceId).toArray(),
+    [activeWorkspaceId],
+    []
   );
 
   const folders = useLiveQuery(
-    () => db.folders.orderBy('name').toArray(), [], []
+    () => activeWorkspaceId == null ? [] : db.folders.where('workspaceId').equals(activeWorkspaceId).sortBy('name'),
+    [activeWorkspaceId],
+    []
   );
 
   useEffect(() => {
     initializeVault().catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!workspaces.length) return;
+    const valid = workspaces.some(workspace => workspace.id === activeWorkspaceId);
+    if (!valid) setActiveWorkspaceId(workspaces[0].id);
+  }, [workspaces, activeWorkspaceId]);
+
+  useEffect(() => {
+    if (activeWorkspaceId != null) localStorage.setItem('siliconvault-active-workspace', String(activeWorkspaceId));
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    setSelectedFolderId(null);
+    setSelectedProjectId(null);
+    setSelectedCollection(null);
+    setEditorDoc(null);
+    setOpenPDFs([]);
+    setActivePDFId(null);
+  }, [activeWorkspaceId]);
 
   const notify = (message) => {
     setNotice(message);
@@ -210,6 +243,7 @@ function App() {
       kind,
       collectionId: defaultCollection,
       folderId: selectedFolderId ?? null,
+      workspaceId: activeWorkspaceId,
       content,
       tags: [],
       bookmarked: false,
@@ -231,6 +265,7 @@ function App() {
 
     const data = {
       ...documentData,
+      workspaceId: documentData.workspaceId ?? activeWorkspaceId,
       updatedAt: now,
       createdAt: documentData.createdAt ?? now
     };
@@ -265,6 +300,7 @@ function App() {
           kind,
           collectionId: collections[0]?.id,
           folderId: selectedFolderId ?? null,
+          workspaceId: activeWorkspaceId,
           content,
           tags: [],
           bookmarked: false,
@@ -279,6 +315,7 @@ function App() {
           blob: file,
           collectionId: collections[0]?.id,
           folderId: selectedFolderId ?? null,
+          workspaceId: activeWorkspaceId,
           createdAt: now
         });
       }
@@ -398,6 +435,7 @@ function App() {
       blob: file,
       collectionId: collections[0]?.id,
       folderId: selectedFolderId ?? null,
+      workspaceId: activeWorkspaceId,
       createdAt: now
     });
 
@@ -451,15 +489,33 @@ function App() {
           <span className="local-dot" />
         </div>
 
-        <div className="workspace-switch">
-          <div className="workspace-avatar">SV</div>
-
-          <div className="workspace-meta">
-            <b>Personal workspace</b>
-            <small>Local · This device</small>
-          </div>
-
-          <ChevronDown size={14} />
+        <div className="workspace-switch-wrap">
+          <button className="workspace-switch" onClick={() => setWorkspaceMenuOpen(value => !value)} aria-expanded={workspaceMenuOpen}>
+            <div className="workspace-avatar">{(activeWorkspace?.name || 'W').slice(0, 2).toUpperCase()}</div>
+            <div className="workspace-meta"><b>{activeWorkspace?.name || 'Loading workspace'}</b><small>Local · This device</small></div>
+            <ChevronDown size={14} />
+          </button>
+          {workspaceMenuOpen && <div className="workspace-menu">
+            <div className="workspace-menu-label">SWITCH WORKSPACE</div>
+            {workspaces.map(workspace => <button key={workspace.id} className={workspace.id === activeWorkspaceId ? 'selected' : ''} onClick={() => {
+              setActiveWorkspaceId(workspace.id); setWorkspaceMenuOpen(false); setActive('Overview'); setQuery('');
+            }}>
+              <span className="workspace-menu-avatar">{workspace.name.slice(0, 1).toUpperCase()}</span>
+              <span><b>{workspace.name}</b><small>{workspace.description || 'Local workspace'}</small></span>
+              {workspace.id === activeWorkspaceId && <span className="workspace-current-dot" />}
+            </button>)}
+            <div className="workspace-menu-divider" />
+            <button className="workspace-create" onClick={async () => {
+              const name = window.prompt('New workspace name (e.g. School, Projects, Personal)');
+              if (!name?.trim()) return;
+              try {
+                const now = new Date().toISOString();
+                const id = await db.workspaces.add({ name: name.trim(), description: 'Local workspace', createdAt: now, updatedAt: now });
+                setActiveWorkspaceId(id); setWorkspaceMenuOpen(false); setActive('Overview');
+                notify(`Workspace “${name.trim()}” created`);
+              } catch (error) { notify(error.message || 'Could not create workspace'); }
+            }}><Plus size={14} /> Create workspace</button>
+          </div>}
         </div>
 
         <div className="side-scroll">
@@ -508,7 +564,7 @@ function App() {
               const name = window.prompt('Folder name');
               if (!name?.trim()) return;
               try {
-                await createFolder({ name, parentFolderId, projectId });
+                await createFolder({ name, parentFolderId, projectId, workspaceId: activeWorkspaceId });
                 notify('Folder created');
               } catch (error) {
                 notify(error.message || 'Could not create folder');
@@ -518,7 +574,7 @@ function App() {
               const name = window.prompt('Project name');
               if (!name?.trim()) return;
               try {
-                await createProject({ name });
+                await createProject({ name, workspaceId: activeWorkspaceId });
                 notify('Project created');
               } catch (error) {
                 notify(error.message || 'Could not create project');
