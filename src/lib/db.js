@@ -66,10 +66,49 @@ db.version(2).stores({
   }
 });
 
+
+db.version(3).stores({
+  collections: '++id, name, color, createdAt',
+  workspaces: '++id, name, createdAt',
+  folders: '++id, name, parentFolderId, projectId, workspaceId, legacyCollectionId, createdAt, updatedAt',
+  documents: '++id, title, kind, collectionId, folderId, workspaceId, updatedAt, *tags',
+  assets: '++id, name, mimeType, collectionId, folderId, workspaceId, createdAt',
+  projects: '++id, name, status, rootFolderId, workspaceId, updatedAt'
+}).upgrade(async (tx) => {
+  const now = new Date().toISOString();
+  const workspaceId = await tx.table('workspaces').add({
+    name: 'Personal',
+    description: 'Your default local workspace',
+    createdAt: now,
+    updatedAt: now
+  });
+
+  for (const tableName of ['folders', 'documents', 'assets', 'projects']) {
+    const rows = await tx.table(tableName).toArray();
+    for (const row of rows) {
+      await tx.table(tableName).update(row.id, { workspaceId });
+    }
+  }
+});
+
+
+export async function createWorkspace({ name, description = '' }) {
+  const cleanName = name?.trim();
+  if (!cleanName) throw new Error('Workspace name cannot be empty.');
+  const now = new Date().toISOString();
+  return db.workspaces.add({
+    name: cleanName,
+    description: description.trim(),
+    createdAt: now,
+    updatedAt: now
+  });
+}
+
 export async function createFolder({
   name,
   parentFolderId = null,
-  projectId = null
+  projectId = null,
+  workspaceId = null
 }) {
   const cleanName = name?.trim();
 
@@ -95,6 +134,7 @@ export async function createFolder({
     name: cleanName,
     parentFolderId,
     projectId,
+    workspaceId,
     legacyCollectionId: null,
     createdAt: now,
     updatedAt: now
@@ -104,7 +144,8 @@ export async function createFolder({
 export async function createProject({
   name,
   detail = '',
-  status = 'planning'
+  status = 'planning',
+  workspaceId = null
 }) {
   const cleanName = name?.trim();
 
@@ -121,6 +162,7 @@ export async function createProject({
       status,
       progress: 0,
       rootFolderId: null,
+      workspaceId,
       updatedAt: now
     });
 
@@ -128,6 +170,7 @@ export async function createProject({
       name: cleanName,
       parentFolderId: null,
       projectId,
+      workspaceId,
       legacyCollectionId: null,
       createdAt: now,
       updatedAt: now
@@ -205,7 +248,35 @@ async function ensureFolderStructure() {
   }
 }
 
+
+async function ensureWorkspaceStructure() {
+  let workspaces = await db.workspaces.toArray();
+  if (!workspaces.length) {
+    const now = new Date().toISOString();
+    const id = await db.workspaces.add({
+      name: 'Personal',
+      description: 'Your default local workspace',
+      createdAt: now,
+      updatedAt: now
+    });
+    workspaces = [await db.workspaces.get(id)];
+  }
+  const defaultWorkspaceId = workspaces[0].id;
+
+  for (const tableName of ['folders', 'documents', 'assets', 'projects']) {
+    const table = db.table(tableName);
+    const rows = await table.toArray();
+    for (const row of rows) {
+      if (row.workspaceId == null) {
+        await table.update(row.id, { workspaceId: defaultWorkspaceId });
+      }
+    }
+  }
+  return workspaces;
+}
+
 export async function initializeVault() {
+  await ensureWorkspaceStructure();
   const count = await db.collections.count();
 
   if (count === 0) {
@@ -322,6 +393,7 @@ endmodule`,
   }
 
   await ensureFolderStructure();
+  await ensureWorkspaceStructure();
 
   try {
     await navigator.storage?.persist?.();
