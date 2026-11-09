@@ -1632,3 +1632,114 @@ body,
 .sidebar-collapsed .brand { height: 82px; flex-direction: column; padding: 8px 0; gap: 5px; }
 .sidebar-collapsed .brand-mark { width: 25px; height: 25px; }
 .sidebar-collapsed .sidebar-toggle { position: static; margin: 0; }
+
+
+/* SV-003B: shared tabs for notes, HDL source files and PDFs. */
+.unified-tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 42px;
+  padding: 5px 14px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: rgba(8, 12, 18, 0.92);
+  border-bottom: 1px solid rgba(160, 190, 210, 0.12);
+  scrollbar-width: thin;
+}
+.unified-tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 250px;
+  flex: 0 1 210px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: rgba(255,255,255,0.025);
+  color: #aab5c2;
+}
+.unified-tab.active {
+  color: #e8eef6;
+  background: rgba(35, 48, 64, 0.72);
+  border-color: rgba(160, 190, 210, 0.15);
+}
+.unified-tab.minimized { opacity: .55; }
+.unified-tab-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  padding: 10px 8px 9px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.unified-tab-select span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+.unified-tab-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.unified-tab-action:hover { background: rgba(255,255,255,.09); color: #fff; }
+.unified-tab-action.close { margin-right: 4px; }
+.unified-workspace-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #0b0f14;
+}
+.unified-document-panel,
+.unified-pdf-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.advanced-editor-overlay.embedded {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  backdrop-filter: none;
+}
+.advanced-editor-overlay.embedded .advanced-editor {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.pdf-workspace-unified .pdf-tab-bar,
+.pdf-workspace-unified .pdf-minimized-bar { display: none; }
+.pdf-workspace-unified { height: 100%; min-height: 0; }
+.pdf-workspace-unified .pdf-workspace-stage { min-height: 0; }
+@media (max-width: 720px) {
+  .unified-tab-bar { padding-left: 8px; padding-right: 8px; }
+  .unified-tab { flex-basis: 160px; }
+}
