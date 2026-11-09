@@ -1547,3 +1547,50 @@ body,
 .side-scroll::-webkit-scrollbar-thumb:hover {
   background: #555555;
 }
+
+
+/* SV-003 — workspace switcher */
+.workspace-switch-wrap { position: relative; margin: 13px 10px 15px; }
+.workspace-switch-wrap .workspace-switch {
+  width: 100%; cursor: pointer; text-align: left; font: inherit;
+}
+.workspace-menu {
+  position: absolute; z-index: 40; top: calc(100% + 7px); left: 0; right: 0;
+  padding: 6px; border: 1px solid #303030; border-radius: 8px;
+  background: #111; box-shadow: 0 18px 45px #000b;
+}
+.workspace-menu-label {
+  padding: 8px 9px 7px; color: #777; font-size: 8px; font-weight: 700; letter-spacing: 1px;
+}
+.workspace-menu > button {
+  width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px;
+  border: 0; border-radius: 5px; background: transparent; color: #ccc; text-align: left;
+}
+.workspace-menu > button:hover, .workspace-menu > button.selected { background: #202020; }
+.workspace-menu > button > span:nth-child(2) { min-width: 0; flex: 1; }
+.workspace-menu b, .workspace-menu small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-menu b { font-size: 10px; font-weight: 600; }
+.workspace-menu small { margin-top: 3px; color: #777; font-size: 8px; }
+.workspace-menu-avatar {
+  width: 25px; height: 25px; display: grid; place-items: center; flex: 0 0 25px;
+  border-radius: 6px; background: #242424; color: #ddd; font-size: 10px; font-weight: 700;
+}
+.workspace-current-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #a6c7f4; }
+.workspace-menu-divider { height: 1px; margin: 5px 3px; background: #292929; }
+.workspace-menu > button.workspace-create { color: #d0d0d0; font-size: 10px; }
+
+/* Explorer presentation toggle: descriptive tree <-> compact icon tree */
+.explorer-compact .explorer-section-label,
+.explorer-compact .explorer-entry span,
+.explorer-compact .explorer-empty { display: none; }
+.explorer-compact .explorer-heading { justify-content: center; padding: 0; }
+.explorer-compact .explorer-heading > span { display: none; }
+.explorer-compact .explorer-tools { gap: 2px; }
+.explorer-compact .explorer-tools button { padding: 5px; }
+.explorer-compact .explorer-row { justify-content: center; padding-left: 2px !important; padding-right: 2px; }
+.explorer-compact .explorer-disclosure { width: 13px; flex-basis: 13px; }
+.explorer-compact .explorer-entry { flex: 0 0 24px; justify-content: center; padding: 4px 0; }
+.explorer-compact .explorer-inline-action { display: none; }
+.explorer-compact .explorer-project-tree { margin-left: 4px; }
+.explorer-compact .explorer-root-link { justify-content: center; margin-left: 0; font-size: 0; }
+.explorer-compact .explorer-root-link svg { flex: 0 0 auto; }
