@@ -563,6 +563,7 @@ function App() {
   const deleteAsset = async (id) => {
     if (!window.confirm('Delete this imported file?')) return;
 
+    if (openPDFs.some(pdf => pdf.id === id)) closeWorkspaceTab(`pdf:${id}`);
     await db.assets.delete(id);
     notify('File deleted');
   };
