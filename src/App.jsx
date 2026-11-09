@@ -339,6 +339,31 @@ function App() {
     setActivePDFId(asset.id);
   };
 
+  const importPDFToWorkspace = async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      notify('Please select a PDF file');
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const id = await db.assets.add({
+      name: file.name,
+      mimeType: 'application/pdf',
+      size: file.size,
+      blob: file,
+      collectionId: collections[0]?.id,
+      createdAt: now
+    });
+
+    const asset = await db.assets.get(id);
+
+    setOpenPDFs(current => [...current, asset]);
+    setActivePDFId(id);
+
+    notify(`${file.name} opened successfully`);
+  };
+
   const closePDF = (id) => {
     setOpenPDFs(current =>
       current.filter(pdf => pdf.id !== id)
@@ -959,6 +984,8 @@ function App() {
           files={openPDFs}
           requestedActiveId={activePDFId}
           onCloseFile={closePDF}
+          onImportPDF={importPDFToWorkspace}
+          onOpenExistingPDF={openPDF}
         />
       )}
 
