@@ -1760,7 +1760,7 @@ body,
 }
 .unified-tab-bar { flex: 0 0 42px; }
 .unified-workspace-stage { flex: 1 1 auto; }
-.pdf-workspace-unified {
+.pdf-workspace.pdf-workspace-unified {
   position: relative;
   inset: auto;
   z-index: auto;
