@@ -59,7 +59,7 @@ export default function ExplorerTree({
       <div className="explorer-heading">
         <span>EXPLORER</span>
         <div className="explorer-tools">
-          <button title="New folder" onClick={() => onCreateFolder(null, null)}><FolderPlus size={14} /></button>
+          <button title="New folder" onClick={() => onCreateFolder(selectedFolderId ?? null, selectedProjectId ?? null)}><FolderPlus size={14} /></button>
           <button title="New project" onClick={onCreateProject}><Plus size={15} /></button>
         </div>
       </div>
