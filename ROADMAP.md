@@ -28,7 +28,14 @@ SiliconVault is a local-first engineering workspace for organizing technical doc
 - [ ] Show file-type icons for PDF, Markdown, Verilog, SystemVerilog, and other assets.
 - [ ] Preserve the compact VS Code-inspired visual direction.
 
-### SV-003 — Unified workspace shell
+### SV-003A — Multiple local workspaces and Explorer modes
+- [x] Add a versioned workspace store and migrate existing vault data into a default Personal workspace.
+- [x] Add a workspace switcher and create-workspace action.
+- [x] Scope projects, folders, documents, assets, and the PDF library to the active workspace.
+- [x] Add descriptive and compact icon-only Explorer modes.
+- [ ] Verify migration and switching against a copy of a populated IndexedDB vault.
+
+### SV-003B — Unified workspace shell
 - [ ] Move PDF tabs into the common workspace tab system.
 - [ ] Open Markdown and code documents as tabs beside PDFs.
 - [ ] Support tab selection, close, and restore/minimize behavior.
