@@ -123,8 +123,8 @@ export async function createFolder({
       throw new Error('Parent folder does not exist.');
     }
 
-    if ((parent.projectId ?? null) !== (projectId ?? null)) {
-      throw new Error('A folder must remain inside its current workspace or project.');
+    if ((parent.projectId ?? null) !== (projectId ?? null) || parent.workspaceId !== workspaceId) {
+      throw new Error('A folder must remain inside its current workspace and project.');
     }
   }
 
