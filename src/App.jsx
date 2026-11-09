@@ -9,7 +9,7 @@ import {
   Database, ShieldCheck, Sparkles, Eye, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import PDFWorkspace from './components/PDFWorkspace.jsx';
-import { db, initializeVault, createFolder, createProject } from './lib/db';
+import { db, initializeVault, createFolder, createProject, assertWorkspaceFolder } from './lib/db';
 import AdvancedEditor from './components/AdvancedEditor.jsx';
 import ExplorerTree from './components/ExplorerTree.jsx';
 
@@ -299,6 +299,7 @@ function App() {
   };
 
   const createDocument = async (kind) => {
+    await assertWorkspaceFolder(selectedFolderId, activeWorkspaceId);
     const now = new Date().toISOString();
 
     const title = {
@@ -333,6 +334,7 @@ function App() {
 
 
   async function saveDocument(documentData) {
+    await assertWorkspaceFolder(documentData.folderId, documentData.workspaceId ?? activeWorkspaceId);
     const now = new Date().toISOString();
 
     const data = {
@@ -359,6 +361,7 @@ function App() {
 
 
   const importFiles = async (fileList) => {
+    await assertWorkspaceFolder(selectedFolderId, activeWorkspaceId);
     const files = Array.from(fileList || []);
 
     for (const file of files) {
@@ -475,6 +478,7 @@ function App() {
   };
 
   const importPDFToWorkspace = async (file) => {
+    await assertWorkspaceFolder(selectedFolderId, activeWorkspaceId);
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
       notify('Please select a PDF file');
       return;

@@ -94,7 +94,7 @@ db.version(3).stores({
 
 db.version(4).stores({collections:'++id, name, color, createdAt',workspaces:'++id, name, createdAt',folders:'++id, name, parentFolderId, projectId, workspaceId, createdAt, updatedAt',documents:'++id, title, kind, folderId, workspaceId, updatedAt, *tags',assets:'++id, name, mimeType, folderId, workspaceId, createdAt',projects:'++id, name, status, rootFolderId, workspaceId, updatedAt'}).upgrade(async tx=>{
  const now=new Date().toISOString(),collections=await tx.table('collections').toArray(),workspaces=await tx.table('workspaces').toArray(),folders=await tx.table('folders').toArray(),map=new Map();
- for(const workspace of workspaces)for(const collection of collections){let folder=folders.find(f=>f.legacyCollectionId===collection.id&&f.workspaceId===workspace.id);if(!folder){const id=await tx.table('folders').add({name:collection.name,parentFolderId:null,projectId:null,workspaceId:workspace.id,createdAt:collection.createdAt||now,updatedAt:now});folder={id,workspaceId:workspace.id,legacyCollectionId:collection.id};folders.push(folder);}map.set(workspace.id+':'+collection.id,folder.id);}
+ for(const workspace of workspaces)for(const collection of collections){let folder=folders.find(f=>f.legacyCollectionId===collection.id&&f.workspaceId===workspace.id);if(!folder){const id=await tx.table('folders').add({name:collection.name,parentFolderId:null,projectId:null,workspaceId:workspace.id,createdAt:collection.createdAt||now,updatedAt:now});folder={id,workspaceId:workspace.id,legacyCollectionId:collection.id,name:collection.name,parentFolderId:null,projectId:null,createdAt:collection.createdAt||now,updatedAt:now};folders.push(folder);}map.set(workspace.id+':'+collection.id,folder.id);}
  const byId=new Map(folders.map(f=>[f.id,f]));
  for(const doc of await tx.table('documents').toArray()){const old=byId.get(doc.folderId),legacy=doc.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(doc.workspaceId+':'+legacy),keep=old&&old.workspaceId===doc.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=doc;await tx.table('documents').put({...clean,folderId:keep?doc.folderId:(mapped??null)});}
  for(const asset of await tx.table('assets').toArray()){const old=byId.get(asset.folderId),legacy=asset.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(asset.workspaceId+':'+legacy),keep=old&&old.workspaceId===asset.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=asset;await tx.table('assets').put({...clean,folderId:keep?asset.folderId:(mapped??null)});}
@@ -114,41 +114,25 @@ export async function createWorkspace({ name, description = '' }) {
   });
 }
 
-export async function createFolder({
-  name,
-  parentFolderId = null,
-  projectId = null,
-  workspaceId = null
-}) {
+export async function assertWorkspaceFolder(folderId, workspaceId, projectId) {
+  if (folderId == null) return null;
+  const folder = await db.folders.get(folderId);
+  if (!folder || folder.workspaceId !== workspaceId) throw new Error('The selected folder does not belong to the active workspace.');
+  if (projectId !== undefined && (folder.projectId ?? null) !== (projectId ?? null)) throw new Error('The selected folder belongs to a different project.');
+  return folder;
+}
+
+export async function createFolder({ name, parentFolderId = null, projectId = null, workspaceId }) {
   const cleanName = name?.trim();
-
-  if (!cleanName) {
-    throw new Error('Folder name cannot be empty.');
+  if (!cleanName) throw new Error('Folder name cannot be empty.');
+  if (workspaceId == null || !await db.workspaces.get(workspaceId)) throw new Error('A valid workspace is required.');
+  if (projectId != null) {
+    const project = await db.projects.get(projectId);
+    if (!project || project.workspaceId !== workspaceId) throw new Error('A project must belong to the active workspace.');
   }
-
-  if (parentFolderId !== null) {
-    const parent = await db.folders.get(parentFolderId);
-
-    if (!parent) {
-      throw new Error('Parent folder does not exist.');
-    }
-
-    if ((parent.projectId ?? null) !== (projectId ?? null) || parent.workspaceId !== workspaceId) {
-      throw new Error('A folder must remain inside its current workspace and project.');
-    }
-  }
-
+  if (parentFolderId !== null) await assertWorkspaceFolder(parentFolderId, workspaceId, projectId);
   const now = new Date().toISOString();
-
-  return db.folders.add({
-    name: cleanName,
-    parentFolderId,
-    projectId,
-    workspaceId,
-    legacyCollectionId: null,
-    createdAt: now,
-    updatedAt: now
-  });
+  return db.folders.add({ name: cleanName, parentFolderId, projectId, workspaceId, createdAt: now, updatedAt: now });
 }
 
 export async function createProject({
@@ -159,9 +143,8 @@ export async function createProject({
 }) {
   const cleanName = name?.trim();
 
-  if (!cleanName) {
-    throw new Error('Project name cannot be empty.');
-  }
+  if (!cleanName) throw new Error('Project name cannot be empty.');
+  if (workspaceId == null || !await db.workspaces.get(workspaceId)) throw new Error('A valid workspace is required.');
 
   const now = new Date().toISOString();
 
@@ -181,7 +164,6 @@ export async function createProject({
       parentFolderId: null,
       projectId,
       workspaceId,
-      legacyCollectionId: null,
       createdAt: now,
       updatedAt: now
     });
