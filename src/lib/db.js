@@ -94,7 +94,18 @@ db.version(3).stores({
 
 db.version(4).stores({collections:'++id, name, color, createdAt',workspaces:'++id, name, createdAt',folders:'++id, name, parentFolderId, projectId, workspaceId, createdAt, updatedAt',documents:'++id, title, kind, folderId, workspaceId, updatedAt, *tags',assets:'++id, name, mimeType, folderId, workspaceId, createdAt',projects:'++id, name, status, rootFolderId, workspaceId, updatedAt'}).upgrade(async tx=>{
  const now=new Date().toISOString(),collections=await tx.table('collections').toArray(),workspaces=await tx.table('workspaces').toArray(),folders=await tx.table('folders').toArray(),map=new Map();
- for(const workspace of workspaces)for(const collection of collections){let folder=folders.find(f=>f.legacyCollectionId===collection.id&&f.workspaceId===workspace.id);if(!folder){const id=await tx.table('folders').add({name:collection.name,parentFolderId:null,projectId:null,workspaceId:workspace.id,createdAt:collection.createdAt||now,updatedAt:now});folder={id,workspaceId:workspace.id,legacyCollectionId:collection.id,name:collection.name,parentFolderId:null,projectId:null,createdAt:collection.createdAt||now,updatedAt:now};folders.push(folder);}map.set(workspace.id+':'+collection.id,folder.id);}
+ const assignments=new Map();
+ const mark=(workspaceId,collectionId)=>{if(collectionId==null)return;if(!assignments.has(workspaceId))assignments.set(workspaceId,new Set());assignments.get(workspaceId).add(collectionId);};
+ const documents=await tx.table('documents').toArray(),assets=await tx.table('assets').toArray();
+ for(const doc of documents)mark(doc.workspaceId,doc.collectionId);
+ for(const asset of assets)mark(asset.workspaceId,asset.collectionId);
+ for(const folder of folders)if(folder.legacyCollectionId!=null)mark(folder.workspaceId,folder.legacyCollectionId);
+ for(const workspace of workspaces)for(const collectionId of assignments.get(workspace.id)||[]){
+  const collection=collections.find(c=>c.id===collectionId);
+  let folder=folders.find(f=>f.legacyCollectionId===collectionId&&f.workspaceId===workspace.id);
+  if(!folder&&collection){const createdAt=collection.createdAt||now,id=await tx.table('folders').add({name:collection.name,parentFolderId:null,projectId:null,workspaceId:workspace.id,createdAt,updatedAt:now});folder={id,workspaceId:workspace.id,legacyCollectionId:collectionId,name:collection.name,parentFolderId:null,projectId:null,createdAt,updatedAt:now};folders.push(folder);}
+  if(folder)map.set(workspace.id+':'+collectionId,folder.id);
+ }
  const byId=new Map(folders.map(f=>[f.id,f]));
  for(const doc of await tx.table('documents').toArray()){const old=byId.get(doc.folderId),legacy=doc.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(doc.workspaceId+':'+legacy),keep=old&&old.workspaceId===doc.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=doc;await tx.table('documents').put({...clean,folderId:keep?doc.folderId:(mapped??null)});}
  for(const asset of await tx.table('assets').toArray()){const old=byId.get(asset.folderId),legacy=asset.collectionId??old?.legacyCollectionId,mapped=legacy==null?null:map.get(asset.workspaceId+':'+legacy),keep=old&&old.workspaceId===asset.workspaceId&&old.legacyCollectionId==null,{collectionId,...clean}=asset;await tx.table('assets').put({...clean,folderId:keep?asset.folderId:(mapped??null)});}
