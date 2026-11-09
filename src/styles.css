@@ -1409,3 +1409,119 @@ body,
   background: #090909;
   border-color: #292929;
 }
+
+
+/* SV-002 — hierarchical Explorer */
+.explorer {
+  padding: 4px 8px 14px;
+  margin: 2px 0 18px;
+  border-top: 1px solid var(--border);
+}
+.explorer-heading {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 5px;
+  color: #8793a2;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.15px;
+}
+.explorer-tools, .explorer-inline-action {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.explorer-tools button, .explorer-inline-action {
+  border: 0;
+  border-radius: 4px;
+  padding: 4px;
+  background: transparent;
+  color: #778493;
+}
+.explorer-tools button:hover, .explorer-inline-action:hover {
+  background: #202020;
+  color: #e8e8e8;
+}
+.explorer-section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 5px 5px 8px;
+  color: #6f7885;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.explorer-section-spaced { margin-top: 13px; }
+.explorer-row {
+  min-width: 0;
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 2px;
+  border-radius: 4px;
+  color: #a0a9b5;
+}
+.explorer-row:hover { background: #171717; color: #e5e5e5; }
+.explorer-row.selected {
+  background: #20252c;
+  color: #dce9fa;
+  box-shadow: inset 2px 0 #8ab4f8;
+}
+.explorer-disclosure {
+  width: 17px;
+  height: 22px;
+  flex: 0 0 17px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  color: #707b89;
+  background: transparent;
+}
+.explorer-entry {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-size: 10px;
+}
+.explorer-entry > svg { flex: 0 0 auto; color: #b7a078; }
+.explorer-entry span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.explorer-spacer { width: 4px; }
+.explorer-project-tree { margin-left: 13px; }
+.explorer-root-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 2px 24px;
+  padding: 4px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #8c98a7;
+  font-size: 9px;
+}
+.explorer-root-link:hover { background: #171717; color: #e5e5e5; }
+.explorer-root-link svg { color: #b7a078; }
+.explorer-empty {
+  margin: 5px 8px;
+  color: #697482;
+  font-size: 9px;
+}
+@media (max-width: 760px) {
+  .explorer { display: none; }
+}
