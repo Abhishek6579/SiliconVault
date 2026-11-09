@@ -6,7 +6,7 @@ import {
   Code2, Cpu, FileCode2, FileText, Folder, FolderOpen,
   HardDrive, Home, Layers3, LayoutGrid, List, Plus, Search,
   Settings, Upload, X, Download, Trash2, ArrowUpRight,
-  Database, ShieldCheck, Sparkles, Eye
+  Database, ShieldCheck, Sparkles, Eye, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import PDFWorkspace from './components/PDFWorkspace.jsx';
 import { db, initializeVault, createFolder, createProject } from './lib/db';
@@ -73,6 +73,7 @@ function App() {
     return Number.isFinite(saved) && saved > 0 ? saved : null;
   });
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('siliconvault-sidebar-collapsed') === 'true');
 
   const [editorDoc, setEditorDoc] = useState(null);
   const [openPDFs, setOpenPDFs] = useState([]);
@@ -126,6 +127,10 @@ function App() {
   useEffect(() => {
     if (activeWorkspaceId != null) localStorage.setItem('siliconvault-active-workspace', String(activeWorkspaceId));
   }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    localStorage.setItem('siliconvault-sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     setSelectedFolderId(null);
@@ -475,7 +480,7 @@ function App() {
 
       {/* SIDEBAR */}
 
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
 
         <div className="brand">
           <div className="brand-mark">
@@ -487,6 +492,9 @@ function App() {
           </span>
 
           <span className="local-dot" />
+          <button className="sidebar-toggle" title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => { setSidebarCollapsed(value => !value); setWorkspaceMenuOpen(false); }}>
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
 
         <div className="workspace-switch-wrap">
