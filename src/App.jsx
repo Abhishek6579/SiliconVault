@@ -8,8 +8,9 @@ import {
   Settings, Upload, X, Download, Trash2, ArrowUpRight,
   Database, ShieldCheck, Sparkles, Eye
 } from 'lucide-react';
-
+import PDFViewer from './components/PDFViewer.jsx';
 import { db, initializeVault } from './lib/db';
+import AdvancedEditor from './components/AdvancedEditor.jsx';
 
 const navigation = [
   {
@@ -66,6 +67,7 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState(null);
 
   const [editorDoc, setEditorDoc] = useState(null);
+  const [selectedPDF, setSelectedPDF] = useState(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
 
@@ -180,22 +182,30 @@ function App() {
     openEditor(doc);
   };
 
-  const saveDocument = async () => {
-    if (!editorDoc) return;
+  
+async function saveDocument(documentData) {
+  const now = new Date().toISOString();
 
-    const now = new Date().toISOString();
-
-    await db.documents.update(editorDoc.id, {
-      title: draftTitle.trim() || 'Untitled',
-      content: draftContent,
-      updatedAt: now
-    });
-
-    const updated = await db.documents.get(editorDoc.id);
-
-    setEditorDoc(updated);
-    notify('Document saved locally');
+  const data = {
+    ...documentData,
+    updatedAt: now,
+    createdAt: documentData.createdAt ?? now
   };
+
+  if (data.id) {
+    await db.documents.update(data.id, data);
+    return data;
+  }
+
+  const { id, ...newDocument } = data;
+  const newId = await db.documents.add(newDocument);
+
+  return {
+    ...newDocument,
+    id: newId
+  };
+}
+
 
   const importFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -374,9 +384,8 @@ function App() {
               {group.items.map((item) => (
                 <button
                   key={item.name}
-                  className={`nav-item ${
-                    active === item.name ? 'active' : ''
-                  }`}
+                  className={`nav-item ${active === item.name ? 'active' : ''
+                    }`}
                   onClick={() => {
                     setActive(item.name);
                     setSelectedCollection(null);
@@ -397,9 +406,8 @@ function App() {
             {collections.map((collection) => (
               <button
                 key={collection.id}
-                className={`nav-item folder-nav ${
-                  selectedCollection === collection.id ? 'active' : ''
-                }`}
+                className={`nav-item folder-nav ${selectedCollection === collection.id ? 'active' : ''
+                  }`}
                 onClick={() => {
                   setActive('Documents');
                   setSelectedCollection(collection.id);
@@ -785,13 +793,22 @@ function App() {
                           {formatSize(asset.size)} · {asset.mimeType}
                         </small>
                       </div>
-
+                    {asset.mimeType === 'application/pdf' && (
+  <button
+    className="icon-btn"
+    onClick={() => setSelectedPDF(asset)}
+    title="Open PDF"
+  >
+    <Eye size={15} />
+  </button>
+)}
                       <button
                         className="icon-btn"
                         onClick={() => downloadAsset(asset)}
                         title="Download"
                       >
                         <Download size={15} />
+                        
                       </button>
 
                       <button
@@ -911,88 +928,21 @@ function App() {
       {/* DOCUMENT EDITOR */}
 
       {editorDoc && (
-
-        <div className="editor-overlay">
-
-          <div className="editor-modal">
-
-            <div className="editor-header">
-
-              <div>
-                <span className="file-icon doc">
-                  {editorDoc.kind === 'verilog' ? 'V' :
-                   editorDoc.kind === 'systemverilog' ? 'SV' : 'MD'}
-                </span>
-
-                <b>{kindName(editorDoc.kind)} editor</b>
-
-                <small>Local document</small>
-              </div>
-
-              <button className="icon-btn" onClick={closeEditor}>
-                <X size={18} />
-              </button>
-
-            </div>
-
-            <input
-              className="editor-title"
-              value={draftTitle}
-              onChange={e => setDraftTitle(e.target.value)}
-              placeholder="Document title"
-            />
-
-            <textarea
-              className="editor-textarea"
-              spellCheck={false}
-              value={draftContent}
-              onChange={e => setDraftContent(e.target.value)}
-              placeholder="Start writing..."
-            />
-
-            <div className="editor-footer">
-
-              <span>
-                {editorDoc.kind === 'markdown'
-                  ? 'Markdown document'
-                  : 'Source code document'}
-              </span>
-
-              <div>
-
-                <button
-                  className="button secondary"
-                  onClick={() => exportDocument({
-                    ...editorDoc,
-                    title: draftTitle,
-                    content: draftContent
-                  })}
-                >
-                  <Download size={14} />
-                  Export
-                </button>
-
-                <button
-                  className="button secondary"
-                  onClick={() => deleteDocument(editorDoc.id)}
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-
-                <button className="button primary" onClick={saveDocument}>
-                  Save changes
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
+        <AdvancedEditor
+          document={editorDoc}
+          collections={collections}
+          onSave={saveDocument}
+          onClose={closeEditor}
+        />
       )}
+
+      {selectedPDF && (
+        <PDFViewer
+          file={selectedPDF}
+          onClose={() => setSelectedPDF(null)}
+        />
+      )}
+
 
       {notice && (
 
@@ -1072,7 +1022,7 @@ function DocumentList({
               <div className="tile-top">
                 <span className="file-icon code">
                   {doc.kind === 'verilog' ? 'V' :
-                   doc.kind === 'systemverilog' ? 'SV' : 'MD'}
+                    doc.kind === 'systemverilog' ? 'SV' : 'MD'}
                 </span>
 
                 <span className="type-pill">{kindName(doc.kind)}</span>
@@ -1130,7 +1080,7 @@ function DocumentList({
           >
             <span className="file-icon code">
               {doc.kind === 'verilog' ? 'V' :
-               doc.kind === 'systemverilog' ? 'SV' : 'MD'}
+                doc.kind === 'systemverilog' ? 'SV' : 'MD'}
             </span>
 
             <b>{doc.title}</b>
