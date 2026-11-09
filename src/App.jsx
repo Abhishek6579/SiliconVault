@@ -8,7 +8,7 @@ import {
   Settings, Upload, X, Download, Trash2, ArrowUpRight,
   Database, ShieldCheck, Sparkles, Eye
 } from 'lucide-react';
-import PDFViewer from './components/PDFViewer.jsx';
+import PDFWorkspace from './components/PDFWorkspace.jsx';
 import { db, initializeVault } from './lib/db';
 import AdvancedEditor from './components/AdvancedEditor.jsx';
 
@@ -67,7 +67,8 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState(null);
 
   const [editorDoc, setEditorDoc] = useState(null);
-  const [selectedPDF, setSelectedPDF] = useState(null);
+  const [openPDFs, setOpenPDFs] = useState([]);
+  const [activePDFId, setActivePDFId] = useState(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
 
@@ -182,29 +183,29 @@ function App() {
     openEditor(doc);
   };
 
-  
-async function saveDocument(documentData) {
-  const now = new Date().toISOString();
 
-  const data = {
-    ...documentData,
-    updatedAt: now,
-    createdAt: documentData.createdAt ?? now
-  };
+  async function saveDocument(documentData) {
+    const now = new Date().toISOString();
 
-  if (data.id) {
-    await db.documents.update(data.id, data);
-    return data;
+    const data = {
+      ...documentData,
+      updatedAt: now,
+      createdAt: documentData.createdAt ?? now
+    };
+
+    if (data.id) {
+      await db.documents.update(data.id, data);
+      return data;
+    }
+
+    const { id, ...newDocument } = data;
+    const newId = await db.documents.add(newDocument);
+
+    return {
+      ...newDocument,
+      id: newId
+    };
   }
-
-  const { id, ...newDocument } = data;
-  const newId = await db.documents.add(newDocument);
-
-  return {
-    ...newDocument,
-    id: newId
-  };
-}
 
 
   const importFiles = async (fileList) => {
@@ -325,6 +326,23 @@ async function saveDocument(documentData) {
     link.click();
 
     URL.revokeObjectURL(url);
+  };
+  const openPDF = (asset) => {
+    setOpenPDFs(current => {
+      if (current.some(pdf => pdf.id === asset.id)) {
+        return current;
+      }
+
+      return [...current, asset];
+    });
+
+    setActivePDFId(asset.id);
+  };
+
+  const closePDF = (id) => {
+    setOpenPDFs(current =>
+      current.filter(pdf => pdf.id !== id)
+    );
   };
 
   const deleteAsset = async (id) => {
@@ -793,22 +811,22 @@ async function saveDocument(documentData) {
                           {formatSize(asset.size)} · {asset.mimeType}
                         </small>
                       </div>
-                    {asset.mimeType === 'application/pdf' && (
-  <button
-    className="icon-btn"
-    onClick={() => setSelectedPDF(asset)}
-    title="Open PDF"
-  >
-    <Eye size={15} />
-  </button>
-)}
+                      {asset.mimeType === 'application/pdf' && (
+                        <button
+                          className="icon-btn"
+                          onClick={() => openPDF(asset)}
+                          title="Open PDF"
+                        >
+                          <Eye size={15} />
+                        </button>
+                      )}
                       <button
                         className="icon-btn"
                         onClick={() => downloadAsset(asset)}
                         title="Download"
                       >
                         <Download size={15} />
-                        
+
                       </button>
 
                       <button
@@ -936,10 +954,11 @@ async function saveDocument(documentData) {
         />
       )}
 
-      {selectedPDF && (
-        <PDFViewer
-          file={selectedPDF}
-          onClose={() => setSelectedPDF(null)}
+      {openPDFs.length > 0 && (
+        <PDFWorkspace
+          files={openPDFs}
+          requestedActiveId={activePDFId}
+          onCloseFile={closePDF}
         />
       )}
 

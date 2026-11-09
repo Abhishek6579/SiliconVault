@@ -1199,3 +1199,213 @@ h1 {
     gap: 5px;
   }
 }
+
+
+/* =====================================================
+   SILICONVAULT — NEUTRAL BLACK THEME
+   Append at the END of the existing stylesheet
+===================================================== */
+
+:root {
+  --bg: #090909;
+  --panel: #111111;
+  --panel-hover: #191919;
+  --border: #292929;
+  --text: #e8e8e8;
+  --muted: #929292;
+  --blue: #8ab4f8;
+  --blue-bg: #202020;
+
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* GLOBAL BACKGROUND */
+
+body,
+.app-shell {
+  background: #090909;
+  color: #e8e8e8;
+}
+
+.app-shell {
+  background: #090909;
+}
+
+/* SIDEBAR */
+
+.sidebar {
+  background: #0d0d0d;
+  border-color: #292929;
+}
+
+.brand-mark,
+.workspace-avatar,
+.profile-avatar,
+.avatar-mini {
+  background: #202020;
+  border-color: #353535;
+  color: #bdbdbd;
+}
+
+.brand-light {
+  color: #e8e8e8;
+}
+
+.workspace-switch,
+.storage-card {
+  background: #141414;
+  border-color: #292929;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  background: #1b1b1b;
+  color: #f0f0f0;
+  box-shadow: inset 2px 0 #888888;
+}
+
+/* TOPBAR */
+
+.topbar {
+  background: rgba(12, 12, 12, 0.94);
+  border-color: #292929;
+}
+
+.searchbox {
+  background: #151515;
+  border-color: #303030;
+}
+
+/* DASHBOARD */
+
+.stat-card,
+.section-block,
+.project-card,
+.file-tile,
+.collection-card {
+  background: #111111;
+  border-color: #292929;
+}
+
+.collection-card:hover,
+.file-tile:hover {
+  background: #191919;
+  border-color: #444444;
+  transform: none;
+}
+
+.stat-icon,
+.folder-art {
+  background: #202020;
+  color: #c0c0c0;
+}
+
+.folder-art.amber {
+  background: #29241b;
+}
+
+.folder-art.violet {
+  background: #242124;
+}
+
+.folder-art.green {
+  background: #1d2721;
+}
+
+.collection-card > svg {
+  color: #888888;
+}
+
+/* BUTTONS AND INTERACTIVE ELEMENTS */
+
+.button.primary {
+  background: #303030;
+  border-color: #484848;
+  color: #f5f5f5;
+}
+
+.button.primary:hover {
+  background: #414141;
+}
+
+.button.secondary {
+  background: #151515;
+  border-color: #303030;
+  color: #d0d0d0;
+}
+
+.button.secondary:hover {
+  background: #202020;
+  border-color: #484848;
+}
+
+.text-button {
+  color: #b5b5b5;
+}
+
+.view-controls > button.selected {
+  background: #242424;
+  border-color: #414141;
+  color: #ededed;
+}
+
+/* FILES AND TABLES */
+
+.table-head {
+  border-color: #292929;
+}
+
+.file-row {
+  border-color: #242424;
+}
+
+.file-row:hover {
+  background: #151515;
+}
+
+.type-pill {
+  background: #202020;
+  color: #bdbdbd;
+}
+
+.file-icon.code {
+  background: #202020;
+  color: #c5c5c5;
+}
+
+.file-icon.doc {
+  background: #1d2721;
+  color: #9bc9a9;
+}
+
+.file-icon.pdf {
+  background: #292020;
+  color: #e5a0a0;
+}
+
+.tile-foot {
+  border-color: #292929;
+}
+
+/* DROPDOWNS AND BASIC EDITOR */
+
+.dropdown,
+.editor-modal {
+  background: #111111;
+  border-color: #303030;
+}
+
+.dropdown button:hover {
+  background: #222222;
+}
+
+.editor-title {
+  background: #171717;
+  border-color: #303030;
+}
+
+.editor-textarea {
+  background: #090909;
+  border-color: #292929;
+}

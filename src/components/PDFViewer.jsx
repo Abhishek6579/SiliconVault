@@ -6,11 +6,11 @@ import {
   ZoomOut,
   FileText,
   LoaderCircle,
-  AlertCircle
+  AlertCircle,
+  Minus
 } from 'lucide-react';
 
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
 import '../styles/PDFViewer.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -28,27 +28,18 @@ function PDFPage({ pdf, pageNumber, maxWidth, zoom }) {
         setError('');
 
         const page = await pdf.getPage(pageNumber);
-
         if (cancelled || !canvasRef.current) return;
 
         const originalViewport = page.getViewport({ scale: 1 });
-
-        const fitScale = Math.min(
-          1,
-          maxWidth / originalViewport.width
-        );
-
-        const scale = fitScale * zoom;
-        const viewport = page.getViewport({ scale });
+        const fitScale = Math.min(1, maxWidth / originalViewport.width);
+        const viewport = page.getViewport({ scale: fitScale * zoom });
 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
-
         const pixelRatio = window.devicePixelRatio || 1;
 
         canvas.width = Math.floor(viewport.width * pixelRatio);
         canvas.height = Math.floor(viewport.height * pixelRatio);
-
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
 
@@ -61,10 +52,6 @@ function PDFPage({ pdf, pageNumber, maxWidth, zoom }) {
         });
 
         await renderTask.promise;
-
-        if (!cancelled) {
-          console.log(`Rendered PDF page ${pageNumber}`);
-        }
       } catch (err) {
         if (err?.name !== 'RenderingCancelledException' && !cancelled) {
           console.error(`Page ${pageNumber} rendering failed:`, err);
@@ -83,9 +70,7 @@ function PDFPage({ pdf, pageNumber, maxWidth, zoom }) {
 
   return (
     <div className="pdf-page-wrapper">
-      <div className="pdf-page-label">
-        Page {pageNumber}
-      </div>
+      <div className="pdf-page-label">Page {pageNumber}</div>
 
       {error ? (
         <div className="pdf-page-error">
@@ -99,7 +84,12 @@ function PDFPage({ pdf, pageNumber, maxWidth, zoom }) {
   );
 }
 
-export default function PDFViewer({ file, onClose }) {
+export default function PDFViewer({
+  file,
+  isActive,
+  onMinimize,
+  onClose
+}) {
   const [pdf, setPdf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -108,10 +98,9 @@ export default function PDFViewer({ file, onClose }) {
 
   const contentRef = useRef(null);
 
-  // Load the PDF document.
   useEffect(() => {
     let cancelled = false;
-    let loadingTask = null;
+    let loadingTask;
 
     async function loadPDF() {
       try {
@@ -124,7 +113,6 @@ export default function PDFViewer({ file, onClose }) {
         }
 
         const buffer = await file.blob.arrayBuffer();
-
         if (cancelled) return;
 
         loadingTask = pdfjs.getDocument({
@@ -137,12 +125,6 @@ export default function PDFViewer({ file, onClose }) {
           await loadedPDF.destroy();
           return;
         }
-
-        console.log(
-          'PDF loaded successfully:',
-          loadedPDF.numPages,
-          'pages'
-        );
 
         setPdf(loadedPDF);
         setLoading(false);
@@ -159,17 +141,12 @@ export default function PDFViewer({ file, onClose }) {
 
     return () => {
       cancelled = true;
-
-      if (loadingTask) {
-        loadingTask.destroy();
-      }
+      loadingTask?.destroy();
     };
   }, [file]);
 
-  // Measure the available document width.
   useEffect(() => {
     const element = contentRef.current;
-
     if (!element) return;
 
     const updateWidth = () => {
@@ -184,21 +161,6 @@ export default function PDFViewer({ file, onClose }) {
     return () => observer.disconnect();
   }, []);
 
-  // Close the viewer with Escape.
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
   const changeZoom = (amount) => {
     setZoom(current =>
       Math.min(2.5, Math.max(0.5, current + amount))
@@ -206,118 +168,109 @@ export default function PDFViewer({ file, onClose }) {
   };
 
   return (
-    <div className="pdf-overlay">
-      <section className="pdf-viewer">
-
-        {/* HEADER */}
-        <header className="pdf-header">
-          <div className="pdf-file-info">
-            <div className="pdf-file-icon">
-              <FileText size={19} />
-            </div>
-
-            <div className="pdf-title-group">
-              <h3 title={file?.name}>{file?.name || 'PDF Document'}</h3>
-
-              <span>
-                {pdf
-                  ? `${pdf.numPages} pages`
-                  : 'PDF Document'}
-              </span>
-            </div>
+    <section
+      className="pdf-viewer"
+      style={{ display: isActive ? 'flex' : 'none' }}
+    >
+      <header className="pdf-header">
+        <div className="pdf-file-info">
+          <div className="pdf-file-icon">
+            <FileText size={19} />
           </div>
+
+          <div className="pdf-title-group">
+            <h3 title={file.name}>{file.name}</h3>
+            <span>
+              {pdf ? `${pdf.numPages} pages` : 'PDF Document'}
+            </span>
+          </div>
+        </div>
+
+        <div className="pdf-header-actions">
+          <button
+            className="pdf-close-button"
+            onClick={onMinimize}
+            title="Minimize PDF"
+            aria-label="Minimize PDF"
+          >
+            <Minus size={18} />
+          </button>
 
           <button
             className="pdf-close-button"
             onClick={onClose}
-            aria-label="Close PDF viewer"
-            title="Close"
+            title="Close PDF"
+            aria-label="Close PDF"
           >
-            <X size={19} />
+            <X size={18} />
           </button>
-        </header>
-
-        {/* TOOLBAR */}
-        <div className="pdf-toolbar">
-          <div className="pdf-toolbar-left">
-            <span className="pdf-document-status">
-              {loading
-                ? 'Loading document'
-                : error
-                  ? 'Loading failed'
-                  : 'Document ready'}
-            </span>
-          </div>
-
-          <div className="pdf-zoom-controls">
-            <button
-              onClick={() => changeZoom(-0.1)}
-              disabled={zoom <= 0.5 || loading}
-              title="Zoom out"
-            >
-              <ZoomOut size={17} />
-            </button>
-
-            <span>{Math.round(zoom * 100)}%</span>
-
-            <button
-              onClick={() => changeZoom(0.1)}
-              disabled={zoom >= 2.5 || loading}
-              title="Zoom in"
-            >
-              <ZoomIn size={17} />
-            </button>
-          </div>
         </div>
+      </header>
 
-        {/* PDF CONTENT */}
-        <main className="pdf-content" ref={contentRef}>
+      <div className="pdf-toolbar">
+        <span className="pdf-document-status">
+          {loading
+            ? 'Loading document'
+            : error
+              ? 'Loading failed'
+              : 'Document ready'}
+        </span>
 
-          {loading && (
-            <div className="pdf-state">
-              <LoaderCircle className="pdf-spinner" size={28} />
-              <p>Loading PDF document...</p>
-            </div>
-          )}
+        <div className="pdf-zoom-controls">
+          <button
+            onClick={() => changeZoom(-0.1)}
+            disabled={zoom <= 0.5 || loading}
+            title="Zoom out"
+          >
+            <ZoomOut size={17} />
+          </button>
 
-          {error && (
-            <div className="pdf-state pdf-error">
-              <AlertCircle size={26} />
-              <p>{error}</p>
-            </div>
-          )}
+          <span>{Math.round(zoom * 100)}%</span>
 
-          {pdf && !loading && !error && (
-            <div className="pdf-pages">
-              {Array.from(
-                { length: pdf.numPages },
-                (_, index) => (
-                  <PDFPage
-                    key={`${file.id}-${index + 1}`}
-                    pdf={pdf}
-                    pageNumber={index + 1}
-                    maxWidth={maxWidth}
-                    zoom={zoom}
-                  />
-                )
-              )}
-            </div>
-          )}
+          <button
+            onClick={() => changeZoom(0.1)}
+            disabled={zoom >= 2.5 || loading}
+            title="Zoom in"
+          >
+            <ZoomIn size={17} />
+          </button>
+        </div>
+      </div>
 
-        </main>
+      <main className="pdf-content" ref={contentRef}>
+        {loading && (
+          <div className="pdf-state">
+            <LoaderCircle className="pdf-spinner" size={28} />
+            <p>Loading PDF document...</p>
+          </div>
+        )}
 
-        {/* FOOTER */}
-        <footer className="pdf-footer">
-          <span>
-            SiliconVault PDF Viewer
-          </span>
+        {error && (
+          <div className="pdf-state pdf-error">
+            <AlertCircle size={26} />
+            <p>{error}</p>
+          </div>
+        )}
 
-          <span>
-            {pdf ? `${pdf.numPages} total pages` : 'Local document'}
-          </span>
-        </footer>
+        {pdf && !loading && !error && (
+          <div className="pdf-pages">
+            {Array.from({ length: pdf.numPages }, (_, index) => (
+              <PDFPage
+                key={`${file.id}-${index + 1}`}
+                pdf={pdf}
+                pageNumber={index + 1}
+                maxWidth={maxWidth}
+                zoom={zoom}
+              />
+            ))}
+          </div>
+        )}
+      </main>
 
-      </section>
-    </div>
+      <footer className="pdf-footer">
+        <span>SiliconVault PDF Viewer</span>
+        <span>{pdf ? `${pdf.numPages} total pages` : 'Local document'}</span>
+      </footer>
+    </section>
   );
 }

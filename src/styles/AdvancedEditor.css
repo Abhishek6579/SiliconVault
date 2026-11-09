@@ -536,3 +536,121 @@
     max-width: 120px;
   }
 }
+
+
+/* =====================================================
+   ADVANCED MARKDOWN / CODE EDITOR
+===================================================== */
+
+.advanced-editor-overlay {
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.advanced-editor {
+  background: #0d0d0d;
+  border-color: #303030;
+  color: #e8e8e8;
+}
+
+.advanced-editor-header,
+.advanced-editor-footer,
+.editor-toolbar,
+.editor-pane-heading,
+.editor-code-info {
+  background: #141414;
+  border-color: #303030;
+}
+
+.editor-file-icon {
+  background: #222222;
+  border-color: #383838;
+  color: #d0d0d0;
+}
+
+.editor-field input,
+.editor-field select {
+  background: #171717;
+  border-color: #333333;
+  color: #e8e8e8;
+}
+
+.editor-view-controls {
+  background: #0d0d0d;
+  border-color: #303030;
+}
+
+.editor-view-controls button.active {
+  background: #292929;
+  color: #f0f0f0;
+}
+
+.editor-workspace {
+  background: #0b0b0b;
+}
+
+.editor-pane {
+  border-color: #303030;
+}
+
+.editor-pane .cm-gutters {
+  background: #141414;
+  border-color: #303030;
+}
+
+.editor-preview-pane {
+  background: #101010;
+}
+
+.markdown-preview {
+  color: #cccccc;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4 {
+  color: #f0f0f0;
+}
+
+.markdown-preview pre {
+  background: #080808;
+  border-color: #303030;
+}
+
+.markdown-preview :not(pre) > code {
+  color: #d0d0d0;
+  background: #242424;
+}
+
+.markdown-preview blockquote {
+  background: #191919;
+  border-left-color: #777777;
+}
+
+.markdown-preview th {
+  background: #222222;
+  color: #eeeeee;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border-color: #333333;
+}
+
+.editor-save-button {
+  background: #303030;
+  border-color: #505050;
+}
+
+.editor-save-button:hover {
+  background: #414141;
+}
+
+/* FOCUS */
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline-color: #a0a0a0;
+}
+
