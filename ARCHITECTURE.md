@@ -1,63 +1,45 @@
 # SiliconVault Architecture
 
-## Current application
-- **Frontend:** React + Vite.
-- **Persistence:** Dexie over browser IndexedDB.
-- **Document editing:** CodeMirror-based editor.
-- **PDF rendering:** PDF.js.
-- **UI icons:** lucide-react.
-- **Deployment model:** browser application; user data remains in the local browser profile.
+## Canonical hierarchy
+```text
+Workspace
+├── Project
+│   └── Folder
+│       ├── Document
+│       └── Asset (PDF or other file)
+└── Folder
+    ├── Document
+    └── Asset
+```
 
-## Storage model
+Workspaces are independent contexts such as School, Projects, and Personal. Projects are workspace-owned engineering efforts. Folders organize documents and assets. Every file belongs to one workspace and may optionally belong to one folder. Collections are not part of the product model.
 
-### Existing tables
-| Table | Purpose |
-|---|---|
-| collections | Legacy top-level subject groups retained for compatibility |
-| documents | Markdown and code documents |
-| assets | Imported binary files, including PDF Blobs |
-| projects | Engineering project metadata |
+## IndexedDB stores
 
-### Folder/project foundation (schema v2)
-| Table | Purpose |
-|---|---|
-| folders | Hierarchical folders; parentFolderId links nested folders |
-| documents | Adds folderId while retaining legacy collectionId |
-| assets | Adds folderId while retaining legacy collectionId |
-| projects | Adds rootFolderId pointing to the project's root folder |
+| Store | Responsibility | Boundary |
+|---|---|---|
+| workspaces | Workspace metadata | Primary boundary |
+| projects | Engineering project metadata and root-folder reference | workspaceId |
+| folders | Hierarchical organization | workspaceId and optional projectId |
+| documents | Markdown and source-code documents | workspaceId and optional folderId |
+| assets | Imported files and binary Blobs | workspaceId and optional folderId |
 
-Folder fields:
-- id: auto-increment primary key.
-- name: visible folder name.
-- parentFolderId: parent folder ID, or null for a root.
-- projectId: owning project ID, or null for the general workspace.
-- legacyCollectionId: links migrated subject folders to their original collection.
-- createdAt and updatedAt: ISO timestamps.
+## Dexie migrations
+- v1: Initial collections, documents, assets, and projects.
+- v2: Adds folders, legacy collection folders, and project roots.
+- v3: Adds workspaces and assigns existing records to Personal.
+- v4: Converts collection assignments into ordinary folders scoped to each file's workspace; removes collectionId and legacyCollectionId.
+- v5: Deletes the now-empty collections object store.
 
-A project's root folder has projectId set to the project ID and parentFolderId set to null. Nested project folders inherit the same projectId. General workspace folders use projectId: null.
+The migration changes metadata only. Document content and asset Blob values are preserved. A legacy collection becomes a folder only in workspaces containing files assigned to it; no cross-workspace references are created.
 
-## Migration and compatibility
-Dexie schema v2 adds the folder table and new indexes without deleting the v1 tables or fields.
+## Integrity rules
+- Every project, folder, document, and asset belongs to one workspace.
+- A document or asset may reference only a folder in the same workspace.
+- A project root folder shares its workspaceId and projectId.
+- Nested folders remain inside the parent's workspace and project.
+- Create projects and root folders in one IndexedDB transaction.
+- Never clear browser site data to troubleshoot a migration; test against a copy and verify record counts and Blob sizes.
 
-During upgrade:
-1. Every existing collection becomes a top-level general-workspace folder.
-2. Every existing project receives a dedicated root folder.
-3. Existing documents and assets receive a folderId corresponding to their former collection.
-4. Original collection rows and collectionId values remain intact during the transition.
-5. Asset Blob values are not read, transformed, or rewritten by the migration.
-
-On initialization, missing collection folders and project root folders are repaired idempotently. This also handles fresh installs, where starter records are seeded after the schema upgrade.
-
-## Data integrity rules
-- Do not delete legacy collection data as part of the folder migration.
-- Do not replace an imported asset record merely to move it between folders; update its metadata only.
-- A folder's parent and project must belong to the same workspace/project boundary.
-- Create a project and its root folder in one IndexedDB transaction.
-- Before introducing a destructive migration, test it against a copy of a populated database and verify document counts and PDF Blob sizes.
-
-## Current limitations
-- The visible UI still uses the older collection-oriented navigation.
-- Folder creation helpers exist, but explorer CRUD and move operations are not yet exposed in the UI.
-- Documents/assets still carry legacy collectionId fields for compatibility.
-- Unified tabs for PDFs, Markdown, and code are not yet implemented.
-- Backup currently needs a binary-safe format to include PDF and other asset Blobs.
+## Unified workspace
+Markdown, Verilog, SystemVerilog, and PDF tabs share one editor shell. Tab references and active/minimized state are scoped by workspace; document bodies and PDF Blobs remain in IndexedDB.

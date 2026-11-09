@@ -13,7 +13,7 @@ SiliconVault is a local-first engineering workspace for organizing technical doc
 
 ### SV-001 — Folder and project storage foundation
 - [x] Add a versioned Dexie schema for folders.
-- [x] Preserve legacy collections and collection references during migration.
+- [x] Convert legacy collections into ordinary folders and retire collection references in Dexie v4/v5.
 - [x] Create a root folder for each existing project.
 - [x] Backfill document and asset folder references.
 - [x] Add transactional helpers for creating folders and projects.
@@ -21,7 +21,7 @@ SiliconVault is a local-first engineering workspace for organizing technical doc
 - [ ] Add UI for creating, renaming, moving, and deleting folders/projects.
 
 ### SV-002 — Explorer interface
-- [ ] Replace collection navigation with an expandable file explorer.
+- [x] Remove collection navigation and use workspace-owned folders as the only organizational layer.
 - [ ] Support top-level folders and project roots.
 - [ ] Support nested folders inside projects.
 - [ ] Add context menus for new folder, rename, move, and delete.
@@ -80,4 +80,4 @@ SiliconVault is a local-first engineering workspace for organizing technical doc
 - [ ] Bring README and user documentation in line with the shipped application.
 
 ## Development rule
-Implement one coherent milestone at a time. For each milestone: inspect current behavior, define acceptance criteria, identify affected files, implement the smallest safe change, run a production build and targeted tests, then update this roadmap and PROGRESS.md.
+Group related schema, migration, UI, documentation, and tests into substantial reviewable PRs; avoid trivial commits.

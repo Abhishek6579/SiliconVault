@@ -3,29 +3,21 @@
 Last updated: 2026-11-09
 
 ## Current milestone
-**SV-003B — Unified workspace shell**
+**SV-003C — Workspace-scoped folders and collection retirement**
 
-### Implemented
-- Added a shared tab strip for Markdown, Verilog, SystemVerilog, and PDF files.
-- Added per-tab activation, close, minimize, and restore actions.
-- Keep all open editor instances and PDF viewers mounted while hidden, preserving their in-session draft and reader state when switching tabs.
-- Persist open tab references, minimized state, and active tab per workspace in localStorage; document contents and PDF blobs remain in IndexedDB.
-- Embed the PDF reader inside the common workspace shell instead of displaying a second independent tab bar.
-- Update tab titles/metadata when an open document is saved.
+### Implemented in this branch
+- Added staged Dexie v4/v5 migration to convert legacy collections into ordinary folders and retire the global store.
+- Removed collectionId and legacyCollectionId from the active schema.
+- Preserved document content, project metadata, and imported asset Blob values.
+- Removed collection dashboard cards, filters, editor selector, and collection-based assignments.
+- Replaced the editor selector with a workspace folder selector.
+- Retained the unified Markdown/HDL/PDF workspace from SV-003B.
 
-### Not yet verified
-- Production build and browser-level interaction tests.
-- Switching between multiple editor tabs and PDFs while editing and reading.
-- Persistence and restoration of open tabs after reload.
-- PDF page/zoom and CodeMirror state retention in a real browser session.
-- Unsaved editor draft recovery after a full reload is not implemented yet.
+### Verification required before merge
+- Run npm ci and npm run build.
+- Test v1→v5 migration against a copy of a populated IndexedDB vault.
+- Compare document/asset counts and PDF Blob sizes before and after migration.
+- Verify all folder references remain within the owning workspace.
+- Switch workspaces and confirm files/folders remain isolated.
 
-### Next milestone
-**SV-004 — PDF reader**
-- PDF text extraction and full-document search.
-- Search result navigation and text highlighting.
-- Fit width/page, rotate, fullscreen, and keyboard navigation.
-- Bookmarks, annotations, and reading-position persistence.
-
-## Important data-safety note
-Do not clear browser site data to troubleshoot a migration. That can permanently remove the local vault. Export or otherwise back up the existing data before testing.
+The migration does not clear IndexedDB or rewrite asset Blobs. Do not clear browser site data to troubleshoot.
