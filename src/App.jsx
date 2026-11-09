@@ -384,6 +384,7 @@ function App() {
 
     if (data.id) {
       await db.documents.update(data.id, data);
+      setOpenDocuments(current => current.map(doc => doc.id === data.id ? data : doc));
       return data;
     }
 
