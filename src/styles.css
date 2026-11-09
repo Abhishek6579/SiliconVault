@@ -1594,3 +1594,37 @@ body,
 .explorer-compact .explorer-project-tree { margin-left: 4px; }
 .explorer-compact .explorer-root-link { justify-content: center; margin-left: 0; font-size: 0; }
 .explorer-compact .explorer-root-link svg { flex: 0 0 auto; }
+
+/* Sidebar sizing and workspace switcher overflow correction */
+.workspace-switch-wrap { min-width: 0; width: calc(100% - 20px); box-sizing: border-box; }
+.workspace-switch-wrap .workspace-switch { box-sizing: border-box; width: 100%; min-width: 0; margin: 0; overflow: hidden; }
+.workspace-switch .workspace-avatar { flex: 0 0 30px; }
+.workspace-switch .workspace-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.workspace-switch .workspace-meta b, .workspace-switch .workspace-meta small { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-switch > svg { flex: 0 0 14px; }
+.workspace-menu { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+.workspace-menu > button { box-sizing: border-box; min-width: 0; }
+.workspace-menu > button > span:nth-child(2) { min-width: 0; overflow: hidden; }
+.workspace-menu b, .workspace-menu small { max-width: 100%; }
+
+/* Full sidebar mode: descriptive navigation <-> compact icon rail */
+.brand { min-width: 0; }
+.sidebar-toggle { width: 25px; height: 25px; flex: 0 0 25px; display: grid; place-items: center; margin-left: auto; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #858585; cursor: pointer; }
+.sidebar-toggle:hover { color: #e0e0e0; background: #1b1b1b; border-color: #303030; }
+.sidebar-collapsed { width: 66px; }
+.sidebar-collapsed .brand { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
+.sidebar-collapsed .brand > span, .sidebar-collapsed .brand .local-dot { display: none; }
+.sidebar-collapsed .brand-mark { margin: 0; }
+.sidebar-collapsed .sidebar-toggle { position: absolute; top: 47px; right: 20px; z-index: 3; margin: 0; }
+.sidebar-collapsed .workspace-switch-wrap { width: 42px; margin: 18px auto 15px; }
+.sidebar-collapsed .workspace-switch { justify-content: center; padding: 7px; }
+.sidebar-collapsed .workspace-meta, .sidebar-collapsed .workspace-switch > svg { display: none; }
+.sidebar-collapsed .workspace-switch .workspace-avatar { flex-basis: 26px; }
+.sidebar-collapsed .workspace-menu { left: calc(100% + 8px); right: auto; top: 0; width: 230px; max-width: min(230px, calc(100vw - 82px)); }
+.sidebar-collapsed .side-scroll { padding: 0 8px; }
+.sidebar-collapsed .nav-label, .sidebar-collapsed .nav-item span, .sidebar-collapsed .explorer, .sidebar-collapsed .sidebar-bottom .storage-card, .sidebar-collapsed .sidebar-bottom .profile { display: none; }
+.sidebar-collapsed .nav-group { margin-bottom: 12px; }
+.sidebar-collapsed .nav-item { justify-content: center; gap: 0; padding: 11px 0; }
+.sidebar-collapsed .sidebar-bottom { padding: 10px 8px; }
+.sidebar-collapsed .sidebar-bottom > .nav-item { justify-content: center; padding: 11px 0; }
+@media (max-width: 760px) { .sidebar-collapsed { width: 66px; } }
