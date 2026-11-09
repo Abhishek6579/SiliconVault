@@ -219,15 +219,17 @@ export default function PDFWorkspace({
                         Upload PDF
                     </button>
 
-                    {/* CLOSE ALL */}
-                    <button
-                        className="pdf-workspace-close"
-                        onClick={() => files.forEach(file => onCloseFile(file.id))}
-                        title="Close all PDFs"
-                    >
-                        <X size={17} />
-                        Close all
-                    </button>
+                    {/* The unified tab strip owns per-file closing in the shared workspace. */}
+                    {!unified && (
+                        <button
+                            className="pdf-workspace-close"
+                            onClick={() => files.forEach(file => onCloseFile(file.id))}
+                            title="Close all PDFs"
+                        >
+                            <X size={17} />
+                            Close all
+                        </button>
+                    )}
                 </div>
             </header>
 
