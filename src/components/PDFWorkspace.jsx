@@ -22,7 +22,8 @@ export default function PDFWorkspace({
     requestedActiveId,
     onCloseFile,
     onImportPDF,
-    onOpenExistingPDF
+    onOpenExistingPDF,
+    unified = false
 }) {
     const [activeId, setActiveId] = useState(
         files[files.length - 1]?.id ?? null
@@ -132,7 +133,7 @@ export default function PDFWorkspace({
     const openIds = files.map(file => file.id);
 
     return (
-        <div className="pdf-workspace">
+        <div className={`pdf-workspace ${unified ? 'pdf-workspace-unified' : ''}`}>
 
             {/* HEADER */}
             <header className="pdf-workspace-header">
@@ -218,15 +219,17 @@ export default function PDFWorkspace({
                         Upload PDF
                     </button>
 
-                    {/* CLOSE ALL */}
-                    <button
-                        className="pdf-workspace-close"
-                        onClick={() => files.forEach(file => onCloseFile(file.id))}
-                        title="Close all PDFs"
-                    >
-                        <X size={17} />
-                        Close all
-                    </button>
+                    {/* The unified tab strip owns per-file closing in the shared workspace. */}
+                    {!unified && (
+                        <button
+                            className="pdf-workspace-close"
+                            onClick={() => files.forEach(file => onCloseFile(file.id))}
+                            title="Close all PDFs"
+                        >
+                            <X size={17} />
+                            Close all
+                        </button>
+                    )}
                 </div>
             </header>
 

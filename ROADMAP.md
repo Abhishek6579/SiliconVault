@@ -36,11 +36,14 @@ SiliconVault is a local-first engineering workspace for organizing technical doc
 - [ ] Verify migration and switching against a copy of a populated IndexedDB vault.
 
 ### SV-003B — Unified workspace shell
-- [ ] Move PDF tabs into the common workspace tab system.
-- [ ] Open Markdown and code documents as tabs beside PDFs.
-- [ ] Support tab selection, close, and restore/minimize behavior.
-- [ ] Keep editor state stable when switching between open tabs.
-- [ ] Persist open tabs and active tab across reloads.
+- [x] Move PDF tabs into the common workspace tab strip.
+- [x] Open Markdown, Verilog, and SystemVerilog documents beside PDFs.
+- [x] Support shared tab selection, close, and minimize/restore behavior.
+- [x] Keep editor components and PDF viewers mounted while switching tabs to preserve in-session state.
+- [x] Persist open tab references, minimized state, and active tab per workspace across reloads.
+- [ ] Persist unsaved editor drafts across reloads (separate recovery/autosave work).
+- [ ] Verify PDF page/zoom and CodeMirror state retention in a browser session.
+- [ ] Run production build and targeted interaction tests.
 
 ### SV-004 — PDF reader
 - [x] Multiple PDF tabs and minimize/restore behavior (existing implementation).

@@ -75,11 +75,12 @@ function App() {
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('siliconvault-sidebar-collapsed') === 'true');
 
-  const [editorDoc, setEditorDoc] = useState(null);
+  const [openDocuments, setOpenDocuments] = useState([]);
   const [openPDFs, setOpenPDFs] = useState([]);
   const [activePDFId, setActivePDFId] = useState(null);
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState(null);
+  const [minimizedTabKeys, setMinimizedTabKeys] = useState([]);
+  const [tabsHydratedFor, setTabsHydratedFor] = useState(null);
 
   const uploadRef = useRef(null);
 
@@ -136,10 +137,81 @@ function App() {
     setSelectedFolderId(null);
     setSelectedProjectId(null);
     setSelectedCollection(null);
-    setEditorDoc(null);
+    setOpenDocuments([]);
     setOpenPDFs([]);
     setActivePDFId(null);
+    setActiveWorkspaceTab(null);
+    setMinimizedTabKeys([]);
+    setTabsHydratedFor(null);
   }, [activeWorkspaceId]);
+
+  // Restore open tabs per workspace without copying document contents into localStorage.
+  useEffect(() => {
+    if (activeWorkspaceId == null || tabsHydratedFor === activeWorkspaceId) return;
+    let cancelled = false;
+
+    async function restoreTabs() {
+      const storageKey = `siliconvault-open-tabs-${activeWorkspaceId}`;
+      let saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (!Array.isArray(saved)) saved = [];
+      } catch {
+        saved = [];
+      }
+
+      const restoredDocuments = [];
+      const restoredPDFs = [];
+      const restoredMinimized = [];
+
+      for (const item of saved) {
+        if (!item || !['doc', 'pdf'].includes(item.type) || item.id == null) continue;
+        const record = item.type === 'doc'
+          ? await db.documents.get(item.id)
+          : await db.assets.get(item.id);
+        if (!record || record.workspaceId !== activeWorkspaceId) continue;
+        if (item.type === 'doc') restoredDocuments.push(record);
+        else if (record.mimeType === 'application/pdf' || record.name?.toLowerCase().endsWith('.pdf')) restoredPDFs.push(record);
+        if (item.minimized) restoredMinimized.push(`${item.type}:${item.id}`);
+      }
+
+      if (cancelled) return;
+      setOpenDocuments(restoredDocuments);
+      setOpenPDFs(restoredPDFs);
+      setMinimizedTabKeys(restoredMinimized);
+      const savedActive = localStorage.getItem(`siliconvault-active-tab-${activeWorkspaceId}`);
+      const validKeys = new Set([
+        ...restoredDocuments.map(item => `doc:${item.id}`),
+        ...restoredPDFs.map(item => `pdf:${item.id}`)
+      ]);
+      const nextActive = validKeys.has(savedActive) && !restoredMinimized.includes(savedActive)
+        ? savedActive
+        : restoredDocuments[0] ? `doc:${restoredDocuments[0].id}`
+          : restoredPDFs[0] ? `pdf:${restoredPDFs[0].id}` : null;
+      setActiveWorkspaceTab(nextActive);
+      setActivePDFId(nextActive?.startsWith('pdf:') ? Number(nextActive.slice(4)) : null);
+      setTabsHydratedFor(activeWorkspaceId);
+    }
+
+    restoreTabs().catch(error => {
+      console.error('Could not restore workspace tabs:', error);
+      if (!cancelled) setTabsHydratedFor(activeWorkspaceId);
+    });
+
+    return () => { cancelled = true; };
+  }, [activeWorkspaceId, tabsHydratedFor]);
+
+  // Persist tab references and minimized state; document bodies remain safely in IndexedDB.
+  useEffect(() => {
+    if (activeWorkspaceId == null || tabsHydratedFor !== activeWorkspaceId) return;
+    const tabs = [
+      ...openDocuments.map(item => ({ type: 'doc', id: item.id, minimized: minimizedTabKeys.includes(`doc:${item.id}`) })),
+      ...openPDFs.map(item => ({ type: 'pdf', id: item.id, minimized: minimizedTabKeys.includes(`pdf:${item.id}`) }))
+    ];
+    localStorage.setItem(`siliconvault-open-tabs-${activeWorkspaceId}`, JSON.stringify(tabs));
+    if (activeWorkspaceTab) localStorage.setItem(`siliconvault-active-tab-${activeWorkspaceId}`, activeWorkspaceTab);
+    else localStorage.removeItem(`siliconvault-active-tab-${activeWorkspaceId}`);
+  }, [activeWorkspaceId, tabsHydratedFor, openDocuments, openPDFs, activeWorkspaceTab, minimizedTabKeys]);
 
   const notify = (message) => {
     setNotice(message);
@@ -219,13 +291,48 @@ function App() {
   );
 
   const openEditor = (doc) => {
-    setEditorDoc(doc);
-    setDraftTitle(doc.title);
-    setDraftContent(doc.content || '');
+    setOpenDocuments(current => current.some(item => item.id === doc.id)
+      ? current
+      : [...current, doc]);
+    const key = `doc:${doc.id}`;
+    setMinimizedTabKeys(current => current.filter(item => item !== key));
+    setActiveWorkspaceTab(key);
   };
 
-  const closeEditor = () => {
-    setEditorDoc(null);
+  const closeWorkspaceTab = (key) => {
+    const [type, rawId] = key.split(':');
+    const id = Number(rawId);
+    const nextDocuments = type === 'doc' ? openDocuments.filter(item => item.id !== id) : openDocuments;
+    const nextPDFs = type === 'pdf' ? openPDFs.filter(item => item.id !== id) : openPDFs;
+    setOpenDocuments(nextDocuments);
+    setOpenPDFs(nextPDFs);
+    setMinimizedTabKeys(current => current.filter(item => item !== key));
+    if (activeWorkspaceTab === key) {
+      const next = [
+        ...nextDocuments.map(item => `doc:${item.id}`),
+        ...nextPDFs.map(item => `pdf:${item.id}`)
+      ].find(item => !minimizedTabKeys.includes(item)) ?? null;
+      setActiveWorkspaceTab(next);
+      setActivePDFId(next?.startsWith('pdf:') ? Number(next.slice(4)) : null);
+    }
+  };
+
+  const minimizeWorkspaceTab = (key) => {
+    setMinimizedTabKeys(current => current.includes(key) ? current : [...current, key]);
+    if (activeWorkspaceTab === key) {
+      const next = [
+        ...openDocuments.filter(item => `doc:${item.id}` !== key).map(item => `doc:${item.id}`),
+        ...openPDFs.filter(item => `pdf:${item.id}` !== key).map(item => `pdf:${item.id}`)
+      ].find(item => !minimizedTabKeys.includes(item)) ?? null;
+      setActiveWorkspaceTab(next);
+      setActivePDFId(next?.startsWith('pdf:') ? Number(next.slice(4)) : null);
+    }
+  };
+
+  const activateWorkspaceTab = (key) => {
+    setMinimizedTabKeys(current => current.filter(item => item !== key));
+    setActiveWorkspaceTab(key);
+    setActivePDFId(key.startsWith('pdf:') ? Number(key.slice(4)) : null);
   };
 
   const createDocument = async (kind) => {
@@ -277,6 +384,7 @@ function App() {
 
     if (data.id) {
       await db.documents.update(data.id, data);
+      setOpenDocuments(current => current.map(doc => doc.id === data.id ? data : doc));
       return data;
     }
 
@@ -396,8 +504,8 @@ function App() {
 
     await db.documents.delete(id);
 
-    if (editorDoc?.id === id) {
-      closeEditor();
+    if (openDocuments.some(doc => doc.id === id)) {
+      closeWorkspaceTab(`doc:${id}`);
     }
 
     notify('Document deleted');
@@ -414,15 +522,11 @@ function App() {
     URL.revokeObjectURL(url);
   };
   const openPDF = (asset) => {
-    setOpenPDFs(current => {
-      if (current.some(pdf => pdf.id === asset.id)) {
-        return current;
-      }
-
-      return [...current, asset];
-    });
-
+    setOpenPDFs(current => current.some(pdf => pdf.id === asset.id) ? current : [...current, asset]);
+    const key = `pdf:${asset.id}`;
+    setMinimizedTabKeys(current => current.filter(item => item !== key));
     setActivePDFId(asset.id);
+    setActiveWorkspaceTab(key);
   };
 
   const importPDFToWorkspace = async (file) => {
@@ -448,19 +552,19 @@ function App() {
 
     setOpenPDFs(current => [...current, asset]);
     setActivePDFId(id);
+    setActiveWorkspaceTab(`pdf:${id}`);
 
     notify(`${file.name} opened successfully`);
   };
 
   const closePDF = (id) => {
-    setOpenPDFs(current =>
-      current.filter(pdf => pdf.id !== id)
-    );
+    closeWorkspaceTab(`pdf:${id}`);
   };
 
   const deleteAsset = async (id) => {
     if (!window.confirm('Delete this imported file?')) return;
 
+    if (openPDFs.some(pdf => pdf.id === id)) closeWorkspaceTab(`pdf:${id}`);
     await db.assets.delete(id);
     notify('File deleted');
   };
@@ -667,7 +771,32 @@ function App() {
 
         </header>
 
-        <div className="page-content">
+        {(openDocuments.length > 0 || openPDFs.length > 0) && (
+          <div className="unified-tab-bar" role="tablist" aria-label="Open workspace files">
+            {[...openDocuments.map(item => ({ key: `doc:${item.id}`, type: 'doc', id: item.id, title: item.title, kind: item.kind })),
+              ...openPDFs.map(item => ({ key: `pdf:${item.id}`, type: 'pdf', id: item.id, title: item.name, kind: 'pdf' }))]
+              .map(tab => {
+                const minimized = minimizedTabKeys.includes(tab.key);
+                const activeTab = activeWorkspaceTab === tab.key;
+                return (
+                  <div key={tab.key} className={`unified-tab ${activeTab ? 'active' : ''} ${minimized ? 'minimized' : ''}`}>
+                    <button className="unified-tab-select" role="tab" aria-selected={activeTab} onClick={() => activateWorkspaceTab(tab.key)} title={tab.title}>
+                      {tab.type === 'pdf' ? <FileText size={14} /> : tab.kind === 'markdown' ? <FileText size={14} /> : <FileCode2 size={14} />}
+                      <span>{tab.title}</span>
+                    </button>
+                    <button className="unified-tab-action" onClick={() => minimized ? activateWorkspaceTab(tab.key) : minimizeWorkspaceTab(tab.key)} title={minimized ? 'Restore tab' : 'Minimize tab'}>
+                      {minimized ? <Eye size={13} /> : <span>−</span>}
+                    </button>
+                    <button className="unified-tab-action close" onClick={() => closeWorkspaceTab(tab.key)} title="Close tab" aria-label={`Close ${tab.title}`}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+
+        <div className="page-content" style={{ display: activeWorkspaceTab ? 'none' : undefined }}>
 
           <div className="page-heading">
 
@@ -1097,29 +1226,36 @@ function App() {
 
         </div>
 
+        {(openDocuments.length > 0 || openPDFs.length > 0) && (
+          <section className="unified-workspace-stage" aria-label="Open file workspace">
+            {openDocuments.map(doc => (
+              <div key={doc.id} className="unified-document-panel" style={{ display: activeWorkspaceTab === `doc:${doc.id}` ? 'flex' : 'none' }}>
+                <AdvancedEditor
+                  document={doc}
+                  collections={collections}
+                  onSave={saveDocument}
+                  onClose={() => closeWorkspaceTab(`doc:${doc.id}`)}
+                  embedded
+                />
+              </div>
+            ))}
+            {openPDFs.length > 0 && (
+              <div className="unified-pdf-panel" style={{ display: activeWorkspaceTab?.startsWith('pdf:') ? 'flex' : 'none' }}>
+                <PDFWorkspace
+                  workspaceId={activeWorkspaceId}
+                  files={openPDFs}
+                  requestedActiveId={activePDFId}
+                  onCloseFile={closePDF}
+                  onImportPDF={importPDFToWorkspace}
+                  onOpenExistingPDF={openPDF}
+                  unified
+                />
+              </div>
+            )}
+          </section>
+        )}
+
       </main>
-
-      {/* DOCUMENT EDITOR */}
-
-      {editorDoc && (
-        <AdvancedEditor
-          document={editorDoc}
-          collections={collections}
-          onSave={saveDocument}
-          onClose={closeEditor}
-        />
-      )}
-
-      {openPDFs.length > 0 && (
-        <PDFWorkspace
-          workspaceId={activeWorkspaceId}
-          files={openPDFs}
-          requestedActiveId={activePDFId}
-          onCloseFile={closePDF}
-          onImportPDF={importPDFToWorkspace}
-          onOpenExistingPDF={openPDF}
-        />
-      )}
 
 
       {notice && (

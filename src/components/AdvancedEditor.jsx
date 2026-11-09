@@ -40,7 +40,8 @@ export default function AdvancedEditor({
   document: initialDocument,
   collections = [],
   onSave,
-  onClose
+  onClose,
+  embedded = false
 }) {
   const [draft, setDraft] = useState(() => ({
     ...EMPTY_DOCUMENT,
@@ -137,7 +138,7 @@ export default function AdvancedEditor({
   }[draft.kind] ?? draft.kind;
 
   return (
-    <div className="advanced-editor-overlay">
+    <div className={`advanced-editor-overlay ${embedded ? 'embedded' : ''}`}>
       <section className="advanced-editor">
 
         <header className="advanced-editor-header">
