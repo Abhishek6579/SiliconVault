@@ -3,27 +3,29 @@
 Last updated: 2026-11-09
 
 ## Current milestone
-**SV-002 — Hierarchical Explorer UI**
+**SV-003A — Multiple local workspaces and Explorer modes**
 
-### Completed in this feature branch
-- Added a dedicated Explorer tree component for projects and folders.
-- Replaced the sidebar's flat Collections list with expandable project and personal-folder sections.
-- Added create-folder actions at the personal workspace and project levels.
-- Added create-project action and project root navigation.
-- Added folder-aware document filtering and assigns newly created/imported documents to the selected folder.
-- Preserved the existing PDF workspace and legacy collection UI/data paths.
-- Added compact Explorer styling consistent with the existing neutral dark theme.
+### Implemented in this feature branch
+- Added Dexie schema v3 with a workspaces table and workspace indexes on folders, projects, documents, and assets.
+- Migrates existing records into a default Personal workspace without deleting documents, folders, projects, collections, or imported PDF blobs.
+- Added a local workspace switcher and create-workspace action (examples: School, Projects, Personal).
+- Scopes the Explorer, document views, project list, asset library, and PDF library to the selected workspace.
+- Clears the active editor/PDF session and folder selection when switching workspaces; stored records remain intact.
+- Added descriptive and compact icon-only Explorer modes with a header toggle.
+- Added workspace-boundary validation when nesting folders.
 
 ### Not yet verified
 - Production build and browser-level interaction tests.
-- Explorer behavior against the user's populated IndexedDB vault.
-- Nested folder creation and selection in a real browser session.
+- Schema v3 migration against a copy of a populated IndexedDB database.
+- Workspace switching with pre-existing documents, nested folders, projects, and PDF blobs.
+- Confirm that no old records disappear from the Personal workspace after migration.
 
-### Next actions
-1. Run `npm run build` locally on the feature branch.
-2. Test personal folders, project roots, nested folders, and folder-specific document filtering.
-3. Verify PDF workspace behavior remains unchanged.
-4. Fix any runtime/build issues before merging.
+### Next milestone
+**SV-003B — Unified workspace shell**
+- One tab strip for PDF, Markdown, Verilog, and SystemVerilog files.
+- Preserve each editor's unsaved draft and PDF page/zoom state when switching tabs.
+- Close, minimize, and restore tabs without losing per-tab state.
+- Persist open tabs and active tab across reloads.
 
-## Important safety note
-Do not clear the browser's site data to troubleshoot a migration. That can permanently remove the local vault. Export or otherwise back up the existing data before testing schema changes.
+## Important data-safety note
+Do not clear browser site data to troubleshoot a migration. That can permanently remove the local vault. Export or otherwise back up the existing data before testing.
