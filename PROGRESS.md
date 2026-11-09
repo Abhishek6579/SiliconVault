@@ -3,28 +3,27 @@
 Last updated: 2026-11-09
 
 ## Current milestone
-**SV-001 — Folder and project storage foundation**
+**SV-002 — Hierarchical Explorer UI**
 
-### Completed in the feature branch
-- Added Dexie schema v2 with a folders table.
-- Added folderId indexes to documents and assets.
-- Added rootFolderId to projects.
-- Added a migration that converts legacy collections into general-workspace folders.
-- Added project root folders and backfilled existing document/asset folder references.
-- Retained legacy collection records and IDs for compatibility.
-- Added transactional createProject and validated createFolder helpers.
-- Added idempotent initialization repair for missing folders.
+### Completed in this feature branch
+- Added a dedicated Explorer tree component for projects and folders.
+- Replaced the sidebar's flat Collections list with expandable project and personal-folder sections.
+- Added create-folder actions at the personal workspace and project levels.
+- Added create-project action and project root navigation.
+- Added folder-aware document filtering and assigns newly created/imported documents to the selected folder.
+- Preserved the existing PDF workspace and legacy collection UI/data paths.
+- Added compact Explorer styling consistent with the existing neutral dark theme.
 
 ### Not yet verified
-- Migration against a populated browser database containing real PDFs.
-- Runtime behavior in the user's local working copy.
-- Production build and browser-level migration tests.
+- Production build and browser-level interaction tests.
+- Explorer behavior against the user's populated IndexedDB vault.
+- Nested folder creation and selection in a real browser session.
 
 ### Next actions
-1. Test against a backup/copy of the current IndexedDB database.
-2. Verify document counts, project counts, and PDF Blob sizes before and after migration.
-3. Add explorer UI for folders and projects.
-4. Only after the migration is verified, begin SV-002.
+1. Run `npm run build` locally on the feature branch.
+2. Test personal folders, project roots, nested folders, and folder-specific document filtering.
+3. Verify PDF workspace behavior remains unchanged.
+4. Fix any runtime/build issues before merging.
 
 ## Important safety note
 Do not clear the browser's site data to troubleshoot a migration. That can permanently remove the local vault. Export or otherwise back up the existing data before testing schema changes.

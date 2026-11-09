@@ -11,6 +11,8 @@ import {
 import PDFWorkspace from './components/PDFWorkspace.jsx';
 import { db, initializeVault } from './lib/db';
 import AdvancedEditor from './components/AdvancedEditor.jsx';
+import ExplorerTree from './components/ExplorerTree.jsx';
+import { createFolder, createProject } from './lib/db';
 
 const navigation = [
   {
@@ -65,6 +67,8 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [selectedCollection, setSelectedCollection] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   const [editorDoc, setEditorDoc] = useState(null);
   const [openPDFs, setOpenPDFs] = useState([]);
@@ -90,6 +94,10 @@ function App() {
 
   const projects = useLiveQuery(
     () => db.projects.toArray(), [], []
+  );
+
+  const folders = useLiveQuery(
+    () => db.folders.orderBy('name').toArray(), [], []
   );
 
   useEffect(() => {
@@ -120,6 +128,9 @@ function App() {
         !selectedCollection ||
         doc.collectionId === selectedCollection;
 
+      const matchesFolder =
+        !selectedFolderId || doc.folderId === selectedFolderId;
+
       const matchesSection =
         active === 'Code Studio'
           ? ['verilog', 'systemverilog'].includes(doc.kind)
@@ -127,9 +138,9 @@ function App() {
             ? Boolean(doc.bookmarked)
             : true;
 
-      return matchesSearch && matchesCollection && matchesSection;
+      return matchesSearch && matchesCollection && matchesFolder && matchesSection;
     });
-  }, [documents, collections, query, selectedCollection, active]);
+  }, [documents, collections, query, selectedCollection, selectedFolderId, active]);
 
   const totalBytes = assets.reduce(
     (sum, asset) => sum + (asset.size || 0),
@@ -168,6 +179,7 @@ function App() {
       title,
       kind,
       collectionId: defaultCollection,
+      folderId: selectedFolderId ?? null,
       content,
       tags: [],
       bookmarked: false,
@@ -222,6 +234,8 @@ function App() {
           title: file.name,
           kind,
           collectionId: collections[0]?.id,
+          folderId: selectedFolderId ?? null,
+          folderId: selectedFolderId ?? null,
           content,
           tags: [],
           bookmarked: false,
@@ -442,26 +456,44 @@ function App() {
             </div>
           ))}
 
-          <div className="nav-group">
-
-            <div className="nav-label">Collections</div>
-
-            {collections.map((collection) => (
-              <button
-                key={collection.id}
-                className={`nav-item folder-nav ${selectedCollection === collection.id ? 'active' : ''
-                  }`}
-                onClick={() => {
-                  setActive('Documents');
-                  setSelectedCollection(collection.id);
-                }}
-              >
-                <Folder size={15} />
-                <span>{collection.name}</span>
-              </button>
-            ))}
-
-          </div>
+          <ExplorerTree
+            folders={folders}
+            projects={projects}
+            selectedFolderId={selectedFolderId}
+            selectedProjectId={selectedProjectId}
+            onSelectFolder={(folder) => {
+              setActive('Documents');
+              setSelectedCollection(null);
+              setSelectedFolderId(folder.id);
+              setSelectedProjectId(folder.projectId ?? null);
+            }}
+            onSelectProject={(project) => {
+              setActive('Documents');
+              setSelectedCollection(null);
+              setSelectedProjectId(project.id);
+              setSelectedFolderId(project.rootFolderId ?? null);
+            }}
+            onCreateFolder={async (parentFolderId, projectId) => {
+              const name = window.prompt('Folder name');
+              if (!name?.trim()) return;
+              try {
+                await createFolder({ name, parentFolderId, projectId });
+                notify('Folder created');
+              } catch (error) {
+                notify(error.message || 'Could not create folder');
+              }
+            }}
+            onCreateProject={async () => {
+              const name = window.prompt('Project name');
+              if (!name?.trim()) return;
+              try {
+                await createProject({ name });
+                notify('Project created');
+              } catch (error) {
+                notify(error.message || 'Could not create project');
+              }
+            }}
+          />
 
         </div>
 
@@ -676,6 +708,8 @@ function App() {
                       onClick={() => {
                         setActive('Documents');
                         setSelectedCollection(collection.id);
+                        setSelectedFolderId(null);
+                        setSelectedProjectId(null);
                       }}
                     >
                       <div className={`folder-art ${collection.color}`}>
