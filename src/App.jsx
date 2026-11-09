@@ -1104,6 +1104,7 @@ function App() {
 
       {openPDFs.length > 0 && (
         <PDFWorkspace
+          workspaceId={activeWorkspaceId}
           files={openPDFs}
           requestedActiveId={activePDFId}
           onCloseFile={closePDF}
