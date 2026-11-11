@@ -467,6 +467,17 @@ export default function App() {
       void persistDraft(id, draft).catch(() => undefined);
     }, 1000));
   }, [persistDraft]);
+  
+  useEffect(() => {
+    const onSaveShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
+      if (!activeTab || !activeTab.dirty || !['code', 'text', 'markdown'].includes(activeTab.meta.kind)) return;
+      event.preventDefault();
+      void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined);
+    };
+    window.addEventListener('keydown', onSaveShortcut);
+    return () => window.removeEventListener('keydown', onSaveShortcut);
+  }, [activeTab, persistDraft]);
 
   function createWorkspace() {
     requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
