@@ -165,6 +165,7 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
   const normalizedFolders = backup.folders.map((folder) => ({ ...folder, workspaceId: folder.workspaceId ?? DEFAULT_WORKSPACE_ID }));
   const normalizedProjects = backup.projects.map((project) => ({ ...project, workspaceId: project.workspaceId ?? DEFAULT_WORKSPACE_ID }));
   const normalizedFileMeta = backup.files.map((file) => ({ ...file.meta, workspaceId: file.meta.workspaceId ?? DEFAULT_WORKSPACE_ID }));
+  const normalizedMetaById = new Map(normalizedFileMeta.map((meta) => [meta.id, meta]));
 
   const decoded: Array<{ meta: FileMeta; content: FileContent }> = [];
   for (const item of backup.files) {
@@ -179,7 +180,7 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     const data: Blob | string = item.content.encoding === 'text'
       ? item.content.value
       : new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: item.meta.mimeType });
-    const meta = normalizedFileMeta.find((record) => record.id === item.meta.id)!;
+    const meta = normalizedMetaById.get(item.meta.id)!;
     decoded.push({ meta, content: { fileId: item.meta.id, data } });
   }
 
