@@ -10,3 +10,138 @@
 .app-dialog{width:min(390px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid #e7e9ed;border-radius:10px;background:#fff;box-shadow:0 18px 55px #1e2e4926}.app-dialog .move-dialog-header{margin-bottom:0}.app-dialog .move-dialog-copy{margin:0 0 3px;line-height:1.55}.dialog-input{width:100%;height:36px;padding:0 10px;border:1px solid #dfe3e9;border-radius:6px;background:#fff;color:#39414c;font:inherit;font-size:11px;outline:none}.dialog-input:focus{border-color:#8398c2;box-shadow:0 0 0 3px #8398c21f}.app-dialog .move-dialog-footer{margin-top:4px;gap:8px}.app-dialog .primary-button,.app-dialog .danger-button{min-height:31px;padding:0 12px;border:0;border-radius:5px;font-size:10px}.danger-button{background:#a54e4b;color:#fff}.danger-button:hover{background:#91433f}.app-dialog button:disabled{opacity:.5;cursor:not-allowed}.folder-contents-heading{display:flex;align-items:center;gap:7px;padding:12px 8px 4px;color:#838b98;font-size:9px;font-weight:650}.folder-list-row .file-name-button .folder-icon{color:#ab8c55}.app-shell[data-theme="dark"] .app-dialog{background:#24272c;border-color:#3a3f47}.app-shell[data-theme="dark"] .app-dialog h2{color:#e0e3e8}.app-shell[data-theme="dark"] .dialog-input{background:#191c20;border-color:#3b4048;color:#e0e3e8}.app-shell[data-theme="dark"] .folder-contents-heading{color:#a8afb8}
 .app-shell.focus-mode .content-toolbar{display:none}.app-shell.focus-mode .right-panel{display:none}.app-shell.focus-mode .editor-workspace{height:100%;min-height:0}.app-shell.focus-mode .editor-titlebar{min-height:42px}.app-shell.focus-mode .pdf-shell{flex:1 1 auto;min-height:0}
 .workspace-switch-menu{max-height:min(70vh,520px);overflow-y:auto}.workspace-switch-menu .workspace-delete-option{color:#a54e4b}.workspace-switch-menu .workspace-delete-option:hover{background:#fbefee;color:#91433f}.app-shell[data-theme="dark"] .workspace-switch-menu .workspace-delete-option{color:#e0a19b}.app-shell[data-theme="dark"] .workspace-switch-menu .workspace-delete-option:hover{background:#3b2929;color:#f0b1aa}
+
+
+/* Near-black graphite theme: shared visual system for the entire workspace. */
+.app-shell[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e6e6e6;
+  --muted: #929292;
+  --line: #292929;
+  --panel: #191919;
+  --soft: #1d1d1d;
+  --sidebar: #141414;
+  background: #111111;
+  color: #e6e6e6;
+}
+.app-shell[data-theme="dark"] .sidebar { background: #141414; border-color: #252525; }
+.app-shell[data-theme="dark"] .main-area,
+.app-shell[data-theme="dark"] .workspace-body { background: #111111; }
+.app-shell[data-theme="dark"] .topbar,
+.app-shell[data-theme="dark"] .content-toolbar,
+.app-shell[data-theme="dark"] .editor-titlebar,
+.app-shell[data-theme="dark"] .right-panel,
+.app-shell[data-theme="dark"] .right-panel-header { background: #171717; border-color: #292929; }
+.app-shell[data-theme="dark"] .tab-strip,
+.app-shell[data-theme="dark"] .editor-footer,
+.app-shell[data-theme="dark"] .sidebar-bottom,
+.app-shell[data-theme="dark"] .background-tab-strip { background: #141414; border-color: #292929; }
+.app-shell[data-theme="dark"] .file-tab.active,
+.app-shell[data-theme="dark"] .background-tab.active { background: #202020; color: #f0f0f0; border-color: #353535; box-shadow: inset 0 2px #a0a0a0; }
+.app-shell[data-theme="dark"] .file-tab,
+.app-shell[data-theme="dark"] .background-tab { background: #171717; border-color: #292929; color: #a0a0a0; }
+.app-shell[data-theme="dark"] .nav-item { color: #b5b5b5; }
+.app-shell[data-theme="dark"] .nav-item:hover,
+.app-shell[data-theme="dark"] .tree-row:hover,
+.app-shell[data-theme="dark"] .icon-button:hover,
+.app-shell[data-theme="dark"] .mini-action:hover { background: #242424; }
+.app-shell[data-theme="dark"] .nav-item.active,
+.app-shell[data-theme="dark"] .tree-row.selected,
+.app-shell[data-theme="dark"] .text-button.selected { background: #292929; color: #f0f0f0; }
+.app-shell[data-theme="dark"] .tree-main,
+.app-shell[data-theme="dark"] .breadcrumbs,
+.app-shell[data-theme="dark"] .workspace-switch-button,
+.app-shell[data-theme="dark"] .file-name-button,
+.app-shell[data-theme="dark"] .file-name-button > span { color: #dedede; }
+.app-shell[data-theme="dark"] .workspace-switch-button:hover,
+.app-shell[data-theme="dark"] .workspace-switch-button[aria-expanded="true"],
+.app-shell[data-theme="dark"] .global-search { background: #1b1b1b; border-color: #363636; }
+.app-shell[data-theme="dark"] .global-search input { color: #ededed; }
+.app-shell[data-theme="dark"] .global-search kbd,
+.app-shell[data-theme="dark"] .page-input { background: #202020; border-color: #383838; color: #cfcfcf; }
+.app-shell[data-theme="dark"] .file-list-row,
+.app-shell[data-theme="dark"] .list-header,
+.app-shell[data-theme="dark"] .detail-row,
+.app-shell[data-theme="dark"] .search-result { border-color: #292929; }
+.app-shell[data-theme="dark"] .file-list-row:hover,
+.app-shell[data-theme="dark"] .search-result:hover { background: #1b1b1b; }
+.app-shell[data-theme="dark"] .kind-cell,
+.app-shell[data-theme="dark"] .size-cell,
+.app-shell[data-theme="dark"] .date-cell,
+.app-shell[data-theme="dark"] .toolbar-caption,
+.app-shell[data-theme="dark"] .muted,
+.app-shell[data-theme="dark"] .save-status { color: #969696; }
+.app-shell[data-theme="dark"] .welcome-page h1,
+.app-shell[data-theme="dark"] .feature-card b,
+.app-shell[data-theme="dark"] .empty-state h2,
+.app-shell[data-theme="dark"] .editor-file-title,
+.app-shell[data-theme="dark"] .editor-file-title b,
+.app-shell[data-theme="dark"] .workspace-overview-heading h1 { color: #ededed; }
+.app-shell[data-theme="dark"] .welcome-page > p,
+.app-shell[data-theme="dark"] .feature-card > span,
+.app-shell[data-theme="dark"] .privacy-note,
+.app-shell[data-theme="dark"] .title-location { color: #999999; }
+.app-shell[data-theme="dark"] .feature-card,
+.app-shell[data-theme="dark"] .overview-card { background: #191919; border-color: #303030; }
+.app-shell[data-theme="dark"] .feature-card:hover,
+.app-shell[data-theme="dark"] .overview-card:hover { background: #202020; border-color: #494949; box-shadow: 0 4px 12px #0005; }
+.app-shell[data-theme="dark"] .empty-icon,
+.app-shell[data-theme="dark"] .unsupported-icon { background: #202020; border-color: #333333; color: #b0b0b0; }
+.app-shell[data-theme="dark"] .empty-state p,
+.app-shell[data-theme="dark"] .unsupported-file,
+.app-shell[data-theme="dark"] .unsupported-file p { color: #a0a0a0; }
+.app-shell[data-theme="dark"] .markdown-preview,
+.app-shell[data-theme="dark"] .preview-label { background: #141414; border-color: #292929; color: #a0a0a0; }
+.app-shell[data-theme="dark"] .prose { color: #d0d0d0; }
+.app-shell[data-theme="dark"] .prose h1,
+.app-shell[data-theme="dark"] .prose h2,
+.app-shell[data-theme="dark"] .prose h3 { color: #f0f0f0; }
+.app-shell[data-theme="dark"] .prose h1,
+.app-shell[data-theme="dark"] .prose th,
+.app-shell[data-theme="dark"] .prose td { border-color: #353535; }
+.app-shell[data-theme="dark"] .prose pre,
+.app-shell[data-theme="dark"] .prose th { background: #1d1d1d; }
+.app-shell[data-theme="dark"] .prose pre { border-color: #353535; }
+.app-shell[data-theme="dark"] .prose code { background: #292929; color: #eeeeee; }
+.app-shell[data-theme="dark"] .pdf-shell,
+.app-shell[data-theme="dark"] .pdf-page-host { background: #111111; }
+.app-shell[data-theme="dark"] .pdf-toolbar,
+.app-shell[data-theme="dark"] .pdf-search-results { background: #171717; border-color: #292929; }
+.app-shell[data-theme="dark"] .pdf-find { background: #1b1b1b; border-color: #383838; }
+.app-shell[data-theme="dark"] .pdf-find input { color: #e0e0e0; }
+.app-shell[data-theme="dark"] .search-hit { color: #c5c5c5; }
+.app-shell[data-theme="dark"] .search-hit:hover,
+.app-shell[data-theme="dark"] .search-hit.active { background: #252525; }
+.app-shell[data-theme="dark"] .details-card { border-color: #353535; }
+.app-shell[data-theme="dark"] .details-card b,
+.app-shell[data-theme="dark"] .detail-row b,
+.app-shell[data-theme="dark"] .search-placeholder b { color: #e0e0e0; }
+.app-shell[data-theme="dark"] .details-card span,
+.app-shell[data-theme="dark"] .detail-row,
+.app-shell[data-theme="dark"] .search-result-snippet,
+.app-shell[data-theme="dark"] .search-result-location { color: #a0a0a0; }
+.app-shell[data-theme="dark"] .details-tip { background: #222222; color: #bdbdbd; }
+.app-shell[data-theme="dark"] .outline-button { background: #202020; border-color: #383838; color: #d0d0d0; }
+.app-shell[data-theme="dark"] .outline-button:hover { background: #292929; }
+.app-shell[data-theme="dark"] .workspace-switch-menu,
+.app-shell[data-theme="dark"] .item-context-menu,
+.app-shell[data-theme="dark"] .move-dialog,
+.app-shell[data-theme="dark"] .app-dialog { background: #1c1c1c; border-color: #383838; color: #dedede; box-shadow: 0 14px 38px #0009; }
+.app-shell[data-theme="dark"] .workspace-switch-menu button,
+.app-shell[data-theme="dark"] .item-context-menu button { color: #c8c8c8; }
+.app-shell[data-theme="dark"] .workspace-switch-menu button:hover,
+.app-shell[data-theme="dark"] .item-context-menu button:hover,
+.app-shell[data-theme="dark"] .workspace-switch-menu button.current,
+.app-shell[data-theme="dark"] .destination-option:hover { background: #292929; color: #ffffff; }
+.app-shell[data-theme="dark"] .move-dialog h2,
+.app-shell[data-theme="dark"] .destination-option b,
+.app-shell[data-theme="dark"] .app-dialog h2 { color: #eeeeee; }
+.app-shell[data-theme="dark"] .dialog-input { background: #141414; border-color: #383838; color: #ededed; }
+.app-shell[data-theme="dark"] .modal-backdrop { background: #000000b8; }
+.app-shell[data-theme="dark"] .busy-pill { background: #292929; }
+.app-shell[data-theme="dark"] .error-banner { background: #321f1f; border-color: #603737; color: #e7aaa4; }
+.app-shell[data-theme="dark"] .pdf-tabs-host,
+.app-shell[data-theme="dark"] .pdf-tab-host { background: #111111; }
+.pdf-tabs-host { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.pdf-tab-host { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; flex-direction: column; }
+.pdf-tab-host > .pdf-shell { flex: 1 1 auto; min-width: 0; min-height: 0; }
