@@ -17,25 +17,31 @@ export async function pickDesktopFiles(): Promise<File[]> {
   }));
 }
 
-export async function pickDesktopFolder(): Promise<File[]> {
+export async function* iterateDesktopFolder(): AsyncGenerator<File> {
   const root = await open({ directory: true, recursive: true, title: 'Import folder' });
-  if (!root) return [];
-  const files: File[] = [];
-  async function visit(directory: string, relative = ''): Promise<void> {
+  if (!root) return;
+  async function* visit(directory: string, relative = ''): AsyncGenerator<File> {
     for (const entry of await readDir(directory)) {
       if (entry.isSymlink) continue;
-      const path = `${directory.replace(/[\\/]$/, '')}/${entry.name}`;
+      const path = `${directory.replace(/[\\\\/]$/, '')}/${entry.name}`;
       const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory) await visit(path, childRelative);
-      else if (entry.isFile) {
+      if (entry.isDirectory) {
+        yield* visit(path, childRelative);
+      } else if (entry.isFile) {
         const bytes = await readFile(path);
         const file = new File([bytes], entry.name, { type: mimeType(entry.name) });
         Object.defineProperty(file, 'webkitRelativePath', { value: childRelative });
-        files.push(file);
+        yield file;
       }
     }
   }
-  await visit(root);
+  yield* visit(root);
+}
+
+/** Compatibility helper; prefer iterateDesktopFolder for bounded-memory imports. */
+export async function pickDesktopFolder(): Promise<File[]> {
+  const files: File[] = [];
+  for await (const file of iterateDesktopFolder()) files.push(file);
   return files;
 }
 
