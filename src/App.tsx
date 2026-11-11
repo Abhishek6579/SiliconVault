@@ -322,6 +322,7 @@ export default function App() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const allLiveFiles = files.filter((file) => file.deletedAt === null);
   const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
+  const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
   const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
   const trashedFiles = files.filter((file) => file.workspaceId === activeWorkspaceId && file.deletedAt !== null).sort((a, b) => b.deletedAt! - a.deletedAt!);
   const rootFiles = liveFiles.filter((file) => file.parentFolderId === null && file.projectId === activeProject);
@@ -916,6 +917,11 @@ export default function App() {
                 <span className="system-metric-value">{value == null ? '—' : `${Math.round(value)}%`}</span>
               </div>
             ))}
+            <div className="system-storage">
+              <div className="storage-line"><HardDrive size={14} /><span>Stored on this device</span></div>
+              <div className="storage-meter"><i style={{ width: `${Math.min(100, storedBytes / (250 * 1024 * 1024) * 100)}%` }} /></div>
+              <span className="storage-caption">{formatSize(storedBytes)} used</span>
+            </div>
           </div>
           <div className="sidebar-actions">
             <button onClick={() => void saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
@@ -1006,12 +1012,12 @@ export default function App() {
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           </div>
         </div>
-        {activeTab.meta.kind === 'pdf' && activeTab.data && (
+        {activeTab.meta.kind === 'pdf' && (
           <div className="pdf-tabs-host">
             <div className="pdf-tab-host" key={activeTab.id}>
-              <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
+              {activeTab.data ? <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
                 <PdfReader tabId={activeTab.id} data={activeTab.data} title={activeTab.meta.name} initialState={activeTab.pdfState} onStateChange={updatePdfView} />
-              </Suspense>
+              </Suspense> : <div className="loading-state">Preparing PDF…</div>}
             </div>
           </div>
         )}
