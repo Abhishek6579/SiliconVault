@@ -74,13 +74,13 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     setDocument(null);
     setPageSizes([]);
     setMeasuredThroughPage(0);
+    setSearching(false);
 
     const cleanup = () => {
       active = false;
       searchRequestRef.current += 1;
       searchControllerRef.current?.abort();
       searchControllerRef.current = null;
-      setSearching(false);
       disposePdfResources(renderTasks.current, loadingTask, loaded);
       renderedScales.current.clear();
       pendingScales.current.clear();
@@ -307,6 +307,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     const request = ++searchRequestRef.current;
     if (!document || !query.trim()) {
       setMatches([]);
+      searchControllerRef.current = null;
       setSearching(false);
       return;
     }
