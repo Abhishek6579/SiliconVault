@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WorkspaceDatabase } from '../src/storage/database';
 import { exportBackup, importBackup } from '../src/storage/backup';
 import { createFolder, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
+import { createTextFile, emptyTrash, restoreFile, saveFileText, softDeleteFile } from '../src/storage/files';
 
 const databases: WorkspaceDatabase[] = [];
 function createDatabase(): WorkspaceDatabase {
@@ -111,5 +112,21 @@ describe('workspace storage', () => {
     await softDeleteProject(database, 'p1');
     expect((await database.files.get('f1'))?.deletedAt).not.toBeNull();
     expect((await database.projects.get('p1'))?.archived).toBe(true);
+  });
+
+  it('creates, autosaves, restores, and permanently clears files', async () => {
+    const database = createDatabase();
+    await database.open();
+    const file = await createTextFile(database, 'draft.md', 'first draft', { kind: 'markdown' });
+    await saveFileText(database, file.id, 'saved after editing');
+    expect((await database.contents.get(file.id))?.data).toBe('saved after editing');
+    await softDeleteFile(database, file.id);
+    expect((await database.files.get(file.id))?.deletedAt).not.toBeNull();
+    await restoreFile(database, file.id);
+    expect((await database.files.get(file.id))?.deletedAt).toBeNull();
+    await softDeleteFile(database, file.id);
+    await emptyTrash(database);
+    expect(await database.files.get(file.id)).toBeUndefined();
+    expect(await database.contents.get(file.id)).toBeUndefined();
   });
 });
