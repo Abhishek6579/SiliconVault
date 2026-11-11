@@ -20,7 +20,7 @@ describe('read-only viewer UI', () => {
     }));
     expect(markup).toContain('Read-only table · first 200 rows / 30 columns');
     expect(markup).toContain('<table>');
-    expect(rowsFrom('time,value\\n0,1\\n1,2', ',')).toEqual([['time', 'value'], ['0', '1'], ['1', '2']]);
+    expect(rowsFrom('time,value\n0,1\n1,2', ',')).toEqual([['time', 'value'], ['0', '1'], ['1', '2']]);
   });
 
   it('renders the unsupported-format explanation instead of pretending to preview a binary format', () => {
