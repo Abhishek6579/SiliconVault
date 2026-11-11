@@ -32,15 +32,6 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   const [matchIndex, setMatchIndex] = useState(0);
   const [error, setError] = useState('');
   const source = useMemo(() => data instanceof Blob ? data : new Blob([data]), [data]);
-  const pageOffsets = useMemo(() => {
-    let offset = 0;
-    return pageSizes.map((size) => {
-      const current = offset;
-      offset += size.height * (fit ? Math.min(1.8, Math.max(.1, (hostWidth - 72) / size.width)) : zoom) + 18;
-      return current;
-    });
-  }, [fit, hostWidth, pageSizes, zoom]);
-
   useEffect(() => {
     let active = true;
     let loaded: PDFDocumentProxy | null = null;
@@ -188,21 +179,35 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
 
   function updateVisiblePage() {
     const host = hostRef.current;
-    if (!host || !pageCount || pageOffsets.length !== pageCount) return;
-    const targetTop = host.scrollTop + 30;
-    let low = 0;
-    let high = pageCount - 1;
-    let visible = 0;
+    if (!host || !pageCount) return;
+    const readingLine = host.getBoundingClientRect().top + 30;
+    let low = 1;
+    let high = pageCount;
+    let visible = 1;
+
+    // Track actual rendered page bounds to avoid cumulative offset drift.
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
-      const size = pageSizes[mid];
-      const pageBottom = pageOffsets[mid] + size.height * scaleFor(size);
-      if (targetTop < pageOffsets[mid]) high = mid - 1;
-      else if (targetTop >= pageBottom) low = mid + 1;
+      const element = pageRefs.current.get(mid);
+      if (!element) { low = mid + 1; continue; }
+      const rect = element.getBoundingClientRect();
+      if (readingLine < rect.top) high = mid - 1;
+      else if (readingLine > rect.bottom) { visible = mid; low = mid + 1; }
       else { visible = mid; break; }
     }
-    if (low > high) visible = Math.min(pageCount - 1, low);
-    const nextPage = visible + 1;
+
+    if (low > pageCount) visible = pageCount;
+    else if (low <= pageCount && low > high) {
+      const nextElement = pageRefs.current.get(low);
+      const previousElement = pageRefs.current.get(Math.max(1, low - 1));
+      if (nextElement && previousElement) {
+        const nextTop = nextElement.getBoundingClientRect().top;
+        const previousBottom = previousElement.getBoundingClientRect().bottom;
+        visible = readingLine - previousBottom < nextTop - readingLine ? low - 1 : low;
+      } else if (nextElement) visible = low;
+    }
+
+    const nextPage = Math.min(pageCount, Math.max(1, visible));
     if (nextPage !== pageNumber) {
       setPageNumber(nextPage);
       setPageInput(String(nextPage));
