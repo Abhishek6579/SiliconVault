@@ -27,7 +27,7 @@ describe('application import and backup size limits', () => {
     expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES + 1)).toThrow(/limited to 64 MiB/);
     expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 100 MiB/);
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES)).not.toThrow();
-    expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 24 MiB/);
+    expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 100 MiB/);
   });
 
   it('rejects an oversized browser backup before reading its text', async () => {
