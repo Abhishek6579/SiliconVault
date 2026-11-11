@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability reporting
+    url: https://github.com/Abhishek6579/SiliconVault/security/advisories/new
+    about: Do not report exploitable vulnerabilities in public issues. Use private reporting if enabled.
