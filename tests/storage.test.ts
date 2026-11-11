@@ -49,9 +49,9 @@ describe('application import and backup size limits', () => {
     await expect(importBackup(database, backup)).rejects.toThrow(/per-file restore limit/);
 
     const aggregate = structuredClone(backup);
-    aggregate.files = [0, 1, 2, 3].map((index) => ({
+    aggregate.files = [0, 1, 2, 3, 4, 5].map((index) => ({
       ...backup.files[0],
-      meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: MAX_BACKUP_TOTAL_CONTENT_BYTES / 4 },
+      meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: MAX_BACKUP_TOTAL_CONTENT_BYTES / 5 },
     }));
     await expect(importBackup(database, aggregate)).rejects.toThrow(/total restored-content limit/);
   });
