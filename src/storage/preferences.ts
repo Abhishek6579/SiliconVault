@@ -35,9 +35,11 @@ export async function migrateLegacyUiPreferences(
     editorFontSize: typeof storedFontSize?.value === 'number' && Number.isFinite(storedFontSize.value) && storedFontSize.value >= 11 && storedFontSize.value <= 24
       ? storedFontSize.value : editorFontSize,
   };
+  const validZoom = typeof storedZoom?.value === 'number' && Number.isFinite(storedZoom.value) && storedZoom.value >= 0.8 && storedZoom.value <= 1.4;
+  const validFontSize = typeof storedFontSize?.value === 'number' && Number.isFinite(storedFontSize.value) && storedFontSize.value >= 11 && storedFontSize.value <= 24;
   await database.transaction('rw', database.preferences, async () => {
-    if (!storedZoom) await database.preferences.put({ key: 'appZoom', value: result.appZoom, updatedAt: Date.now() });
-    if (!storedFontSize) await database.preferences.put({ key: 'editorFontSize', value: result.editorFontSize, updatedAt: Date.now() });
+    if (!validZoom) await database.preferences.put({ key: 'appZoom', value: result.appZoom, updatedAt: Date.now() });
+    if (!validFontSize) await database.preferences.put({ key: 'editorFontSize', value: result.editorFontSize, updatedAt: Date.now() });
   });
   // Remove legacy keys only after the Dexie transaction commits.
   storage.removeItem(LEGACY_UI_PREFERENCES.appZoom);
