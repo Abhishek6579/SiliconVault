@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="20" x2="232" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34476e"/>
+      <stop offset="1" stop-color="#1c263b"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="80" y1="72" x2="178" y2="184" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e1e9f5"/>
+      <stop offset="1" stop-color="#aebfda"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="56" fill="url(#bg)"/>
+  <path d="M91 65h74a15 15 0 0 1 15 15v96a15 15 0 0 1-15 15H91a15 15 0 0 1-15-15V80a15 15 0 0 1 15-15Z" fill="url(#chip)"/>
+  <path d="M103 91h50v74h-50z" rx="6" fill="#283653"/>
+  <path d="M106 52v20m22-20v20m22-20v20m22-20v20M106 184v20m22-20v20m22-20v20m22-20v20M53 91h20m-20 22h20m-20 22h20m-20 22h20m90-66h20m-20 22h20m-20 22h20m-20 22h20" stroke="#d9e4f3" stroke-width="8" stroke-linecap="round"/>
+  <path d="m112 137 11 11 22-27" fill="none" stroke="#89c5ad" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
