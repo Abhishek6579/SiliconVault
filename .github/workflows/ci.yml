@@ -56,7 +56,7 @@ jobs:
       - name: Build Tauri application
         run: npm run tauri:build
       - name: Upload Windows installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: siliconvault-windows-pr-${{ github.event.pull_request.number }}
           path: |
