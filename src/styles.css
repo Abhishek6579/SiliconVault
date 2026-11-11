@@ -425,3 +425,16 @@ html, body, #root {
 .viewer-stat-grid span { padding: 12px; border: 1px solid var(--border, #292929); border-radius: 8px; color: var(--muted, #aaa); font-size: 11px; }
 .viewer-stat-grid b { display: block; margin-bottom: 4px; color: var(--text, #eee); font-size: 15px; }
 .viewer-note { color: var(--muted, #999); font-size: 12px; }
+
+/* Per-viewer zoom controls; zoom applies to the rendered content, not the app chrome. */
+.viewer-zoom-controls { flex: 0 0 auto; min-height: 38px; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding: 3px 10px; border-bottom: 1px solid var(--border, #292929); background: var(--panel, #111); }
+.viewer-zoom-controls span { min-width: 42px; text-align: center; color: var(--muted, #aaa); font-size: 11px; font-variant-numeric: tabular-nums; }
+.viewer-zoom-controls .icon-button { width: 27px; height: 27px; }
+.viewer-zoom-controls .icon-button:disabled { opacity: .35; cursor: default; }
+.image-viewer { display: flex; flex-direction: column; padding: 0; }
+.image-viewer-viewport { min-height: 0; flex: 1; overflow: auto; display: block; padding: 16px; }
+.image-viewer-content { min-height: 100%; margin: 0 auto; display: flex; justify-content: center; align-items: flex-start; }
+.image-viewer-content img { display: block; width: 100%; height: auto; max-width: none; max-height: none; object-fit: contain; }
+.viewer-zoom-content { transform-origin: top left; width: max-content; min-width: 100%; }
+.engineering-viewer { padding: 0; }
+.engineering-viewer > .viewer-zoom-content { padding: 18px 20px; }
