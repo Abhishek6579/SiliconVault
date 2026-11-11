@@ -2,8 +2,8 @@ import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 
 const CODE_EXTENSIONS = new Set(['vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'sh', 's', 'asm']);
-const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml']);
-const VIEWER_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'svg', 'csv', 'tsv', 'doc', 'docx', 'pptx', 'xlsx', 'v', 'sv', 'vh', 'svh', 'vcd', 'fst', 'sp', 'cir', 'lib', 'gds', 'gdsii', 'kicad_sch', 'kicad_pcb']);
+const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml', 'csv', 'tsv']);
+const VIEWER_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'svg', 'doc', 'docx', 'pptx', 'xlsx', 'v', 'sv', 'vh', 'svh', 'vcd', 'fst', 'sp', 'cir', 'lib', 'gds', 'gdsii', 'kicad_sch', 'kicad_pcb']);
 
 export function kindForFile(name: string, mimeType = ''): FileKind {
   const extension = name.split('.').pop()?.toLowerCase() ?? '';

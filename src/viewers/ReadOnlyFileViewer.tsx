@@ -16,15 +16,18 @@ function rowsFrom(source: string, delimiter: string): string[][] {
 export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
+  const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
   const [text, setText] = useState(''); const [url, setUrl] = useState(''); const [error, setError] = useState('');
   useEffect(() => {
+    setError(''); setText(''); setUrl('');
     if (!(data instanceof Blob)) { setText(typeof data === 'string' ? data : ''); return; }
+    if (!isImage && !isTextPreview) return;
     if (isImage) { const objectUrl = URL.createObjectURL(data); setUrl(objectUrl); return () => URL.revokeObjectURL(objectUrl); }
     let active = true;
     if (data.size > 24 * 1024 * 1024) { setError('Text preview is limited to 24 MB to protect memory usage.'); return; }
     data.text().then((value) => { if (active) setText(value); }).catch(() => { if (active) setError('Could not decode this file as text.'); });
     return () => { active = false; };
-  }, [data, isImage]);
+  }, [data, isImage, isTextPreview]);
   const table = useMemo(() => ['csv', 'tsv'].includes(ext) ? rowsFrom(text, ext === 'tsv' ? '\t' : ',') : [], [ext, text]);
   const signals = useMemo(() => ext === 'vcd' ? [...text.matchAll(/^\s*\$var\s+\S+\s+(\d+)\s+(\S+)\s+(.+?)\s+\$end/gm)].slice(0, 500) : [], [ext, text]);
   if (isImage) return <div className="file-viewer image-viewer">{url ? <img src={url} alt={fileName} /> : <div className="loading-state">Loading image…</div>}</div>;
