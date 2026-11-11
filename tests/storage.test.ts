@@ -294,6 +294,13 @@ describe('workspace storage', () => {
     expect(preUpgradeBackup.files[0].meta.id).toBe('legacy-file');
     legacy.close();
 
+    const restored = createDatabase();
+    await restored.open();
+    await importBackup(restored, preUpgradeBackup);
+    expect(await restored.files.get('legacy-file')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID, name: 'legacy.md' });
+    expect(await restored.folders.get('legacy-folder')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await restored.projects.get('legacy-project')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
+
     const upgraded = new WorkspaceDatabase(name);
     databases.push(upgraded);
     await upgraded.open();
