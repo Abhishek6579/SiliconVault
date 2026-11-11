@@ -25,7 +25,7 @@ describe('application import and backup size limits', () => {
   it('accepts files at the configured import boundaries and rejects files above them', () => {
     expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES)).not.toThrow();
     expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES + 1)).toThrow(/limited to 64 MiB/);
-    expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 24 MiB/);
+    expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 100 MiB/);
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES)).not.toThrow();
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 24 MiB/);
   });
@@ -59,9 +59,9 @@ describe('application import and backup size limits', () => {
     await expect(importBackup(database, backup)).rejects.toThrow(/per-file restore limit/);
 
     const aggregate = structuredClone(backup);
-    aggregate.files = [0, 1, 2, 3, 4, 5].map((index) => ({
+    aggregate.files = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => ({
       ...backup.files[0],
-      meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: 13 * 1024 * 1024 },
+      meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: 12 * 1024 * 1024 },
     }));
     await expect(importBackup(database, aggregate)).rejects.toThrow(/total restored-content limit/);
   });
