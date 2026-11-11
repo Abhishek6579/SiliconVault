@@ -26,7 +26,7 @@ import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
 import { downloadBackup, downloadBackupFile, exportBackup, importBackup, serializeBackup } from './storage/backup';
-import { chooseBackupToRestore, isDesktopApp, pickDesktopFiles, pickDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -682,7 +682,7 @@ export default function App() {
 
   function startImportFolderInto(target: ImportTarget) {
     setImportTarget(target);
-    if (isDesktopApp()) { void pickDesktopFolder().then(async (files) => { if (!files.length) return; setImporting(true); try { await importFolderFiles(files, target); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.'); } finally { setImporting(false); setImportTarget(null); } }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the folder picker.')); return; }
+    if (isDesktopApp()) { setImporting(true); void (async () => { try { await importFolderFiles(iterateDesktopFolder(), target); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.'); } finally { setImporting(false); setImportTarget(null); } })(); return; }
     folderInput.current?.setAttribute('webkitdirectory', '');
     folderInput.current?.setAttribute('directory', '');
     folderInput.current?.click();
@@ -696,12 +696,11 @@ export default function App() {
     finally { setImporting(false); setImportTarget(null); if (folderInput.current) folderInput.current.value = ''; }
   }
 
-  async function importFolderFiles(selectedFiles: File[], target: ImportTarget) {
+  async function importFolderFiles(selectedFiles: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     const folderIds = new Map<string, string>();
     let imported = 0;
     {
-      selectedFiles.sort((a, b) => a.name.localeCompare(b.name));
-      for (const file of selectedFiles) {
+      for await (const file of selectedFiles) {
         const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.replaceAll('\\', '/') ?? file.name;
         const segments = relativePath.split('/').filter(Boolean);
         const directorySegments = segments.slice(0, -1);
