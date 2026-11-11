@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
@@ -45,7 +45,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const signals = useMemo(() => ext === 'vcd' ? [...text.matchAll(/^\s*\$var\s+\S+\s+(\d+)\s+(\S+)\s+(.+?)\s+\$end/gm)].slice(0, 500) : [], [ext, text]);
   const zoomIn = () => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 100) / 100));
   const zoomOut = () => setZoom((value) => Math.max(0.4, Math.round((value - 0.1) * 100) / 100));
-  const handleZoomKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleZoomKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
     else if (event.key === '-') { event.preventDefault(); zoomOut(); }
