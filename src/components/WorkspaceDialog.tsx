@@ -1,4 +1,5 @@
 import type { FormEvent, KeyboardEvent } from 'react';
+import { X } from 'lucide-react';
 
 export interface WorkspaceDialogState {
   mode: 'input' | 'confirm';
@@ -34,7 +35,7 @@ export default function WorkspaceDialog({ dialog, onClose, onSubmit, onChange }:
       <form className="app-dialog" role="dialog" aria-modal="true" onSubmit={handleSubmit}>
         <div className="move-dialog-header">
           <div><div className="modal-eyebrow">WORKSPACE</div><h2>{dialog.title}</h2></div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={17} /></button>
         </div>
         {dialog.message && <p className="move-dialog-copy">{dialog.message}</p>}
         {dialog.mode === 'input' && (
