@@ -25,7 +25,7 @@ import { flushPendingAutosaves } from './storage/autosave';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, downloadBackupFile, exportBackup, importBackup, serializeBackup } from './storage/backup';
+import { downloadBackup, downloadBackupFile, exportBackup, exportBackupStream, importBackup, serializeBackup } from './storage/backup';
 import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
@@ -669,7 +669,7 @@ export default function App() {
 
   async function saveWorkspaceBackup() {
     try {
-      if (isDesktopApp()) await saveBackupToDesktop(serializeBackup(await exportBackup(db)));
+      if (isDesktopApp()) await saveBackupToDesktop(exportBackupStream(db));
       else await downloadBackup(db);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create the workspace backup.'); }
   }
