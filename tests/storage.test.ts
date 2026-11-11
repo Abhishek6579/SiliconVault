@@ -204,6 +204,11 @@ describe('workspace storage', () => {
     await expect(importBackup(database, malformed)).rejects.toThrow('invalid file record');
     const dangling = { ...valid, folders: [{ id: 'child', workspaceId: DEFAULT_WORKSPACE_ID, name: 'Child', parentFolderId: 'missing', projectId: null, createdAt: now, updatedAt: now }] };
     await expect(importBackup(database, dangling)).rejects.toThrow('folder that does not exist');
+    const cyclic = { ...valid, folders: [
+      { id: 'a', workspaceId: DEFAULT_WORKSPACE_ID, name: 'A', parentFolderId: 'b', projectId: null, createdAt: now, updatedAt: now },
+      { id: 'b', workspaceId: DEFAULT_WORKSPACE_ID, name: 'B', parentFolderId: 'a', projectId: null, createdAt: now, updatedAt: now },
+    ] };
+    await expect(importBackup(database, cyclic)).rejects.toThrow('hierarchy cycle');
     expect(await database.projects.get('keep')).toBeDefined();
   });
 
