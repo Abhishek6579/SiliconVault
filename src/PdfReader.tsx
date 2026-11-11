@@ -41,37 +41,53 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     setPageSizes([]);
     source.arrayBuffer().then((bytes) => {
       if (!active) return null;
+      // A view over the Blob's buffer avoids allocating a second full-size PDF copy.
       loadingTask = getDocument({ data: new Uint8Array(bytes) });
       return loadingTask.promise;
     }).then(async (pdf) => {
       if (!pdf || !active) return;
       loaded = pdf;
-      const sizes: PageSize[] = new Array(pdf.numPages);
-      // Resolve dimensions in bounded parallel batches instead of awaiting every page serially.
-      const batchSize = 8;
-      for (let start = 1; start <= pdf.numPages; start += batchSize) {
-        if (!active) return;
-        const end = Math.min(pdf.numPages, start + batchSize - 1);
-        await Promise.all(Array.from({ length: end - start + 1 }, async (_, index) => {
-          const number = start + index;
-          const page = await pdf.getPage(number);
-          try {
-            const viewport = page.getViewport({ scale: 1 });
-            sizes[number - 1] = { width: viewport.width, height: viewport.height };
-          } finally {
-            page.cleanup();
-          }
-        }));
-      }
-      if (active) {
-        setDocument(pdf);
-        setPageCount(pdf.numPages);
-        setPageSizes(sizes);
-        const restored = Math.min(pdf.numPages, Math.max(1, initialState?.page ?? 1));
-        setPageNumber(restored);
-        setPageInput(String(restored));
-        setError('');
-      }
+      const firstPage = await pdf.getPage(1);
+      const firstViewport = firstPage.getViewport({ scale: 1 });
+      const firstSize = { width: firstViewport.width, height: firstViewport.height };
+      firstPage.cleanup();
+      if (!active) return;
+
+      // Show the reader after measuring one page. The rest of the page dimensions
+      // are filled in progressively so long PDFs don't delay their first render.
+      setDocument(pdf);
+      setPageCount(pdf.numPages);
+      setPageSizes(Array.from({ length: pdf.numPages }, () => firstSize));
+      const restored = Math.min(pdf.numPages, Math.max(1, initialState?.page ?? 1));
+      setPageNumber(restored);
+      setPageInput(String(restored));
+      setError('');
+
+      void (async () => {
+        const batchSize = 12;
+        for (let start = 2; start <= pdf.numPages; start += batchSize) {
+          if (!active) return;
+          const end = Math.min(pdf.numPages, start + batchSize - 1);
+          const measured = await Promise.all(Array.from({ length: end - start + 1 }, async (_, index) => {
+            const number = start + index;
+            const page = await pdf.getPage(number);
+            try {
+              const viewport = page.getViewport({ scale: 1 });
+              return { number, size: { width: viewport.width, height: viewport.height } };
+            } finally {
+              page.cleanup();
+            }
+          }));
+          if (!active) return;
+          setPageSizes((current) => {
+            const next = current.slice();
+            for (const item of measured) next[item.number - 1] = item.size;
+            return next;
+          });
+        }
+      })().catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : 'Unable to prepare PDF pages.');
+      });
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to open this PDF.'); });
     return () => {
       active = false;

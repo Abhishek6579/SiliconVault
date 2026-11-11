@@ -272,3 +272,55 @@ html, body, #root {
 .tree-row .tree-main > svg,
 .tree-row .tree-main > .twisty,
 .tree-row .tree-main > .project-dot { flex: 0 0 auto; }
+
+/* The active document is the only flex child allowed to occupy editor space. */
+.editor-workspace,
+.app-shell.focus-mode .editor-workspace {
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.code-editor {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel);
+}
+.code-editor .cm-editor {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.code-editor .cm-scroller {
+  height: 100%;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #737b8b transparent;
+}
+.code-editor .cm-scroller::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+.code-editor .cm-scroller::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #737b8b80;
+  background-clip: content-box;
+}
+.note-layout {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.note-layout > .code-editor,
+.note-layout > .markdown-preview {
+  min-height: 0;
+  min-width: 0;
+}

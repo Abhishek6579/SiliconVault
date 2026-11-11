@@ -26,7 +26,7 @@ import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, Wo
 const PdfReader = lazy(() => import('./PdfReader'));
 
 type View = 'workspace' | 'recent' | 'trash';
-interface Tab { id: string; meta: FileMeta; data: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
+interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
 interface TreeFolder { record: FolderRecord; children: TreeFolder[]; files: FileMeta[]; }
 interface MermaidDiagramProps { source: string; }
 interface PdfViewState { page: number; zoom: number; fit: boolean; }
@@ -367,7 +367,23 @@ export default function App() {
       await db.preferences.put({ key: 'activeWorkspace', value: meta.workspaceId, updatedAt: Date.now() });
     }
     const existing = tabs.find((tab) => tab.id === meta.id);
-    if (existing) { setActiveTabId(meta.id); return; }
+    if (existing) {
+      let data = existing.data;
+      if (meta.kind === 'pdf' && !data) {
+        const content = await db.contents.get(meta.id);
+        if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
+        data = content.data;
+      }
+      setTabs((current) => current.map((tab) => {
+        if (tab.id === meta.id) return data === undefined ? tab : { ...tab, data };
+        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        const { data: _released, ...withoutPdfData } = tab;
+        return withoutPdfData;
+      }));
+      setActiveTabId(meta.id);
+      setError('');
+      return;
+    }
     const content = await db.contents.get(meta.id);
     if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
     const data = (meta.kind === 'markdown' || meta.kind === 'code') && content.data instanceof Blob ? await content.data.text() : content.data;
@@ -378,7 +394,14 @@ export default function App() {
       zoom: Number.isFinite(savedPdfState?.zoom) ? Math.max(.5, Math.min(2, savedPdfState!.zoom!)) : 1,
       fit: typeof savedPdfState?.fit === 'boolean' ? savedPdfState.fit : true,
     } : undefined;
-    setTabs((current) => [...current, { id: meta.id, meta, data, draft, dirty: false, preview: meta.kind === 'markdown', pdfState }]);
+    setTabs((current) => [
+      ...current.map((tab) => {
+        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        const { data: _released, ...withoutPdfData } = tab;
+        return withoutPdfData;
+      }),
+      { id: meta.id, meta, data, draft, dirty: false, preview: meta.kind === 'markdown', pdfState },
+    ]);
     setActiveTabId(meta.id);
     setError('');
   }, [activeWorkspaceId, tabs]);
@@ -946,15 +969,13 @@ export default function App() {
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           </div>
         </div>
-        {tabs.some((tab) => tab.meta.kind === 'pdf') && (
+        {activeTab.meta.kind === 'pdf' && activeTab.data && (
           <div className="pdf-tabs-host">
-            {tabs.filter((tab) => tab.meta.kind === 'pdf').map((tab) => (
-              <div className="pdf-tab-host" key={tab.id} style={{ display: activeTabId === tab.id && activeTab.meta.kind === 'pdf' ? 'flex' : 'none' }}>
-                <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
-                  <PdfReader tabId={tab.id} data={tab.data} title={tab.meta.name} initialState={tab.pdfState} onStateChange={updatePdfView} />
-                </Suspense>
-              </div>
-            ))}
+            <div className="pdf-tab-host" key={activeTab.id}>
+              <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
+                <PdfReader tabId={activeTab.id} data={activeTab.data} title={activeTab.meta.name} initialState={activeTab.pdfState} onStateChange={updatePdfView} />
+              </Suspense>
+            </div>
           </div>
         )}
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
