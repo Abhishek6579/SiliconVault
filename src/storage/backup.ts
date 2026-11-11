@@ -80,7 +80,7 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
   if (arrays.some((records) => records.length > MAX_RECORDS)) throw new Error('This backup exceeds the supported record limit.');
   if (!value.files.every((item) => isRecord(item) && validateFileMeta(item.meta) && isRecord(item.content) &&
       (item.content.encoding === 'text' || item.content.encoding === 'base64') && typeof item.content.value === 'string' &&
-      typeof item.sha256 === 'string' && SHA256_PATTERN.test(item.sha256))) {
+      typeof item.sha256 === 'string')) {
     throw new Error('This backup contains an invalid file record.');
   }
   if (!value.folders.every(validateFolder) || !value.projects.every(validateProject) ||
@@ -262,7 +262,7 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
       throw new Error(`File content for ${item.meta.name} is not valid.`);
     }
     if (bytes.byteLength !== item.meta.size) throw new Error(`File size validation failed for ${item.meta.name}.`);
-    if (await checksum(bytes) !== item.sha256) throw new Error(`Checksum validation failed for ${item.meta.name}.`);
+    if (!SHA256_PATTERN.test(item.sha256) || await checksum(bytes) !== item.sha256) throw new Error(`Checksum validation failed for ${item.meta.name}.`);
     const data: Blob | string = item.content.encoding === 'text'
       ? item.content.value
       : new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: item.meta.mimeType });
