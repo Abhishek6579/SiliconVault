@@ -26,7 +26,7 @@ import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
-import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
+import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -668,11 +668,10 @@ export default function App() {
     finally { setImporting(false); if (fileInput.current) fileInput.current.value = ''; }
   }
 
-  async function handlePickedImport(files: File[], target: ImportTarget) {
-    if (!files.length) return;
+  async function handlePickedImport(files: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     setImporting(true);
     try {
-      for (const file of files) {
+      for await (const file of files) {
         const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
         if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
       }
@@ -716,7 +715,7 @@ export default function App() {
 
   function startImportInto(target: ImportTarget) {
     setImportTarget(target);
-    if (isDesktopApp()) { void pickDesktopFiles().then((files) => handlePickedImport(files, target)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
+    if (isDesktopApp()) { void handlePickedImport(iterateDesktopFiles(), target).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
     fileInput.current?.click();
   }
 
