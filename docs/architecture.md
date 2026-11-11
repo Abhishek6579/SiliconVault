@@ -35,6 +35,13 @@ Database name: `engineering-workspace`. Dexie tables separate file metadata (`fi
 
 Schema versions 1–3 and named migrations are recorded in [storage-audit.md](storage-audit.md). Read it before changing database behavior.
 
+## PDF tab lifecycle
+
+- The PDF reader is mounted for the active PDF tab. Inactive tabs retain their metadata and view state, but the application releases their Blob-backed document data; activating an inactive PDF tab reloads its content from Dexie.
+- Page, zoom, and fit mode are persisted in the `preferences` table under `pdf:<file-id>` whenever the reader reports a state change, and are restored when that file is opened again.
+- Unmounting the reader or replacing its source cancels outstanding render tasks and releases the active PDF.js loading task (or, if loading has completed, the loaded document). This cleanup is centralized in `src/pdf/lifecycle.ts` and covered by `tests/storage-reliability.test.ts`.
+- Keep PDF rendering, pagination, zoom, and lifecycle changes isolated from workspace/storage refactors. Revalidate the Windows desktop build and reader behavior before changing this contract.
+
 IndexedDB is scoped to a browser/WebView profile. Browser development data must not be assumed to be the same as packaged desktop data. The exact packaged Windows data path and update persistence require validation on an installed build.
 
 ## File format support
