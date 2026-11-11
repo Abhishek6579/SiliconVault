@@ -146,13 +146,13 @@ export default function App() {
     '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
   }, { dark: true }), []);
   const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
-    { tag: tags.comment, color: '#85877c', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#d4a45f' },
-    { tag: [tags.typeName, tags.className], color: '#8fb8ad' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#c5a4d6' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#a9c58b' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#d99a70' },
-    { tag: tags.operator, color: '#b7b4aa' },
+    { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#c586c0' },
+    { tag: [tags.typeName, tags.className], color: '#4ec9b0' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#dcdcaa' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#ce9178' },
+    { tag: [tags.number, tags.bool, tags.null], color: '#b5cea8' },
+    { tag: tags.operator, color: '#d4d4d4' },
   ])), []);
 
   const refresh = useCallback(async () => {
@@ -280,9 +280,6 @@ export default function App() {
   const activeProjects = projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId);
   const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-  const updateActivePdfView = useCallback((state: PdfViewState) => {
-    if (activeTabId) updatePdfView(activeTabId, state);
-  }, [activeTabId, updatePdfView]);
   const allLiveFiles = files.filter((file) => file.deletedAt === null);
   const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
   const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
@@ -931,17 +928,18 @@ export default function App() {
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           </div>
         </div>
-        {activeTab.meta.kind === 'pdf' ? (
+        {tabs.some((tab) => tab.meta.kind === 'pdf') && (
           <div className="pdf-tabs-host">
             {tabs.filter((tab) => tab.meta.kind === 'pdf').map((tab) => (
-              <div className="pdf-tab-host" key={tab.id} style={{ display: activeTabId === tab.id ? 'flex' : 'none' }}>
+              <div className="pdf-tab-host" key={tab.id} style={{ display: activeTabId === tab.id && activeTab.meta.kind === 'pdf' ? 'flex' : 'none' }}>
                 <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
                   <PdfReader tabId={tab.id} data={tab.data} title={tab.meta.name} initialState={tab.pdfState} onStateChange={updatePdfView} />
                 </Suspense>
               </div>
             ))}
           </div>
-        ) : activeTab.meta.kind === 'markdown' ? (
+        )}
+        {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
             {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{ code({ className, children, ...props }) {
