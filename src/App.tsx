@@ -886,7 +886,7 @@ export default function App() {
     })();
   }
 
-  function renderFolder(folder: TreeFolder, depth = 0) {
+  function renderFolder(folder: WorkspaceTreeFolder, depth = 0) {
     const isOpen = expanded.has(folder.record.id);
     const selected = selectedFolder === folder.record.id;
     return <div key={folder.record.id}>
@@ -962,8 +962,8 @@ export default function App() {
         </div>
         <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={() => void createProject()}><Plus size={15} /></button></div>
         <div className="project-tree">
-          {(buildTree(folders, liveFiles, null, null, activeWorkspaceId).length > 0 || liveFiles.some((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null)) && <div className="sidebar-section-heading workspace-tree-heading"><span>WORKSPACE FILES</span></div>}
-          {buildTree(folders, liveFiles, null, null, activeWorkspaceId).map((folder) => renderFolder(folder))}
+          {(buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).length > 0 || liveFiles.some((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null)) && <div className="sidebar-section-heading workspace-tree-heading"><span>WORKSPACE FILES</span></div>}
+          {buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).map((folder) => renderFolder(folder))}
           {liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null).map((file) => renderFileTree(file))}
           {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).map(renderProjectTree)}
           {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).length === 0 && <div className="sidebar-empty">Your projects<br /><span>show up here</span></div>}
