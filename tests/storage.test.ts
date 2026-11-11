@@ -56,14 +56,14 @@ describe('application import and backup size limits', () => {
       }],
       folders: [], projects: [], preferences: [], workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: 'Workspace', createdAt: now, updatedAt: now }],
     };
-    await expect(importBackup(database, backup)).rejects.toThrow(/per-file restore limit/);
+    await expect(importBackup(database, backup)).rejects.toThrow(/per-file restore limit of 100 MiB/);
 
     const aggregate = structuredClone(backup);
     aggregate.files = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => ({
       ...backup.files[0],
       meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: 12 * 1024 * 1024 },
     }));
-    await expect(importBackup(database, aggregate)).rejects.toThrow(/total restored-content limit/);
+    await expect(importBackup(database, aggregate)).rejects.toThrow(/total restored-content limit of 100 MiB/);
   });
 
   it('rejects oversized imports before writing metadata or content', async () => {
