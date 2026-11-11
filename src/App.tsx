@@ -24,6 +24,7 @@ import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingData
 import { flushPendingAutosaves } from './storage/autosave';
 import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
+import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
 import { buildWorkspaceTree } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
@@ -45,16 +46,6 @@ interface ContextMenuState { type: ContextItemType; id: string; x: number; y: nu
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
 interface SearchResult { file: FileMeta; text: string; }
-interface DialogState {
-  mode: 'input' | 'confirm';
-  title: string;
-  message?: string;
-  value?: string;
-  placeholder?: string;
-  confirmLabel: string;
-  destructive?: boolean;
-  onConfirm: (value: string) => void | Promise<void>;
-}
 
 export default function App() {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -89,7 +80,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
-  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [dialog, setDialog] = useState<WorkspaceDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -1194,14 +1185,7 @@ export default function App() {
       </section>
     </div>}
 
-    {dialog && <div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
-      <form className="app-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); void submitDialog(); }}>
-        <div className="move-dialog-header"><div><div className="modal-eyebrow">WORKSPACE</div><h2>{dialog.title}</h2></div><button type="button" className="icon-button" onClick={() => setDialog(null)} aria-label="Close"><X size={17} /></button></div>
-        {dialog.message && <p className="move-dialog-copy">{dialog.message}</p>}
-        {dialog.mode === 'input' && <input className="dialog-input" autoFocus value={dialog.value ?? ''} placeholder={dialog.placeholder} onChange={(event) => setDialog((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === 'Escape') setDialog(null); }} />}
-        <div className="move-dialog-footer"><button type="button" className="text-button" onClick={() => setDialog(null)}>Cancel</button><button type="submit" className={dialog.destructive ? 'danger-button' : 'primary-button'} disabled={dialog.mode === 'input' && !dialog.value?.trim()}>{dialog.confirmLabel}</button></div>
-      </form>
-    </div>}
+    <WorkspaceDialog dialog={dialog} onClose={() => setDialog(null)} onSubmit={() => void submitDialog()} onChange={(value) => setDialog((current) => current ? { ...current, value } : current)} />
 
     {migrationBackup && <div className="modal-backdrop upgrade-backdrop">
       <section className="move-dialog upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-title">
