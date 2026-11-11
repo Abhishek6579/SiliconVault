@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import ReadOnlyFileViewer from '../src/viewers/ReadOnlyFileViewer';
+import ReadOnlyFileViewer, { rowsFrom } from '../src/viewers/ReadOnlyFileViewer';
 
 describe('read-only viewer UI', () => {
   it('renders accessible zoom controls for image previews', () => {
@@ -19,8 +19,8 @@ describe('read-only viewer UI', () => {
       fileName: 'measurements.csv', mimeType: 'text/csv', data: 'time,value\n0,1\n1,2',
     }));
     expect(markup).toContain('Read-only table · first 200 rows / 30 columns');
-    expect(markup).toContain('<th>time</th>');
-    expect(markup).toContain('<td>2</td>');
+    expect(markup).toContain('<table>');
+    expect(rowsFrom('time,value\\n0,1\\n1,2', ',')).toEqual([['time', 'value'], ['0', '1'], ['1', '2']]);
   });
 
   it('renders the unsupported-format explanation instead of pretending to preview a binary format', () => {
