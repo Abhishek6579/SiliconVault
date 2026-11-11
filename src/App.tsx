@@ -490,7 +490,6 @@ export default function App() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    const currentWindow = getCurrentWindow();
     if (!isDesktopApp()) {
       const warnBeforeUnload = (event: BeforeUnloadEvent) => {
         if (pendingDrafts.current.size === 0) return;
@@ -500,6 +499,7 @@ export default function App() {
       window.addEventListener('beforeunload', warnBeforeUnload);
       return () => window.removeEventListener('beforeunload', warnBeforeUnload);
     }
+    const currentWindow = getCurrentWindow();
     void currentWindow.onCloseRequested(async (event) => {
       if (closeInProgress.current) return;
       event.preventDefault();
@@ -1217,7 +1217,7 @@ export default function App() {
         <h2 id="upgrade-title">Back up before we continue</h2>
         <p className="move-dialog-copy">This update adds separate workspaces and keeps your theme and PDF reading positions. Before the database changes, a full backup of your files, folders, projects, and settings will download.</p>
         {migrationError && <div className="inline-error">The update did not finish: {migrationError}. Your old database is left in place; you can retry after saving the downloaded backup.</div>}
-        <button className="primary-button upgrade-button" disabled={upgrading} onClick={() => void downloadMigrationBackupAndUpgrade()}>{upgrading ? <><span className="spinner" /> Updating…</> : <><Download size={15} /> Download backup &amp; continue</>}</button>
+        <button className="primary-button upgrade-button" disabled={upgrading} onClick={() => void downloadMigrationBackupAndUpgrade()}>{upgrading ? <><span className="spinner" /> Updating…</> : <><Download size={15} /> {isDesktopApp() ? 'Download backup & continue' : 'Download backup (desktop required)'}</>}</button>
       </section>
     </div>}
 
