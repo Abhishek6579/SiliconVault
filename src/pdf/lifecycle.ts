@@ -11,6 +11,15 @@ export function disposePdfResources(
     try { task.cancel(); } catch { /* A task may already have completed or been cancelled. */ }
   }
   renderTasks.clear();
-  if (loadingTask) void loadingTask.destroy();
-  else if (loadedDocument) void loadedDocument.destroy();
+  const resource = loadingTask ?? loadedDocument;
+  if (resource) {
+    // PDF.js destruction is asynchronous; never leak a rejected cleanup promise.
+    try {
+      void Promise.resolve(resource.destroy()).catch(() => {
+        // Cleanup is best-effort after the owning component has been disposed.
+      });
+    } catch {
+      // Some adapters may throw synchronously while beginning destruction.
+    }
+  }
 }
