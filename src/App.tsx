@@ -25,7 +25,7 @@ import { flushPendingAutosaves } from './storage/autosave';
 import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
-import { buildWorkspaceTree } from './storage/tree';
+import { buildWorkspaceTree, type WorkspaceWorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
@@ -914,7 +914,7 @@ export default function App() {
 
   function renderProjectTree(project: Project) {
     const open = activeProject === project.id;
-    const projectTree = buildTree(folders, liveFiles, null, project.id, project.workspaceId);
+    const projectTree = buildWorkspaceTree(folders, liveFiles, null, project.id, project.workspaceId);
     const filesAtRoot = liveFiles.filter((file) => file.projectId === project.id && file.parentFolderId === null);
     return <div key={project.id}>
       <div className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => showContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, null, project.id, project.workspaceId)}>
