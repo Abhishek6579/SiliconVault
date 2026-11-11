@@ -4,6 +4,8 @@ import { exportBackup, exportBackupStream, importBackup } from '../src/storage/b
 import { createFolder, deleteWorkspace, moveFile, moveFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
+import { assertBackupFileSize, assertImportFileSize, MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_TOTAL_CONTENT_BYTES, MAX_IMPORT_FILE_SIZE_BYTES, MAX_PDF_FILE_SIZE_BYTES } from '../src/storage/limits';
+import { parseBackupFile } from '../src/features/backup/parse';
 
 const databases: WorkspaceDatabase[] = [];
 function createDatabase(): WorkspaceDatabase {
@@ -17,6 +19,63 @@ afterEach(async () => {
     database.close();
     await database.delete();
   }));
+});
+
+describe('application import and backup size limits', () => {
+  it('accepts files at the configured import boundaries and rejects files above them', () => {
+    expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES)).not.toThrow();
+    expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES + 1)).toThrow(/limited to 64 MiB/);
+    expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 24 MiB/);
+    expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES)).not.toThrow();
+    expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 24 MiB/);
+  });
+
+  it('rejects an oversized browser backup before reading its text', async () => {
+    const file = new File(['{}'], 'oversized.json');
+    Object.defineProperty(file, 'size', { value: MAX_BACKUP_FILE_SIZE_BYTES + 1 });
+    const readText = vi.spyOn(file, 'text');
+    await expect(parseBackupFile(file)).rejects.toThrow(/maximum backup size is 128 MiB/);
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it('checks backup file size before parsing or desktop file allocation', () => {
+    expect(() => assertBackupFileSize(MAX_BACKUP_FILE_SIZE_BYTES)).not.toThrow();
+    expect(() => assertBackupFileSize(MAX_BACKUP_FILE_SIZE_BYTES + 1)).toThrow(/maximum backup size is 128 MiB/);
+  });
+
+  it('rejects backup metadata exceeding per-file and aggregate content limits', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    const backup = {
+      format: 'engineering-workspace-backup' as const, version: 1 as const, exportedAt: now,
+      files: [{
+        meta: { id: 'too-large', workspaceId: DEFAULT_WORKSPACE_ID, kind: 'pdf' as const, name: 'large.pdf', parentFolderId: null, projectId: null,
+          size: MAX_BACKUP_INDIVIDUAL_FILE_BYTES + 1, mimeType: 'application/pdf', createdAt: now, updatedAt: now, deletedAt: null },
+        content: { encoding: 'text' as const, value: '' }, sha256: '0'.repeat(64),
+      }],
+      folders: [], projects: [], preferences: [], workspaces: [{ id: DEFAULT_WORKSPACE_ID, name: 'Workspace', createdAt: now, updatedAt: now }],
+    };
+    await expect(importBackup(database, backup)).rejects.toThrow(/per-file restore limit/);
+
+    const aggregate = structuredClone(backup);
+    aggregate.files = [0, 1, 2, 3, 4, 5].map((index) => ({
+      ...backup.files[0],
+      meta: { ...backup.files[0].meta, id: `aggregate-${index}`, name: `file-${index}.bin`, size: 13 * 1024 * 1024 },
+    }));
+    await expect(importBackup(database, aggregate)).rejects.toThrow(/total restored-content limit/);
+  });
+
+  it('rejects oversized imports before writing metadata or content', async () => {
+    const database = createDatabase();
+    await database.open();
+    const file = new File(['small'], 'too-large.bin');
+    Object.defineProperty(file, 'size', { value: MAX_IMPORT_FILE_SIZE_BYTES + 1 });
+    const { importFile } = await import('../src/storage/files');
+    await expect(importFile(database, file)).rejects.toThrow(/limited to 64 MiB/);
+    expect(await database.files.count()).toBe(0);
+    expect(await database.contents.count()).toBe(0);
+  });
 });
 
 describe('file format classification', () => {

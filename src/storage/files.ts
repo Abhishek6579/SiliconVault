@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 import { collectDescendantIds } from './tree';
+import { assertImportFileSize } from './limits';
 
 const CODE_EXTENSIONS = new Set(['v', 'sv', 'vh', 'svh', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'sh', 's', 'asm']);
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml']);
@@ -37,6 +38,7 @@ export async function createTextFile(database: WorkspaceDatabase, name: string, 
 }
 
 export async function importFile(database: WorkspaceDatabase, file: File, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string } = {}) {
+  assertImportFileSize(file.name, file.size, file.type);
   const now = Date.now();
   const id = crypto.randomUUID();
   const meta = {
