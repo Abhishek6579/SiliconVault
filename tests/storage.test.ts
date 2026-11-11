@@ -34,13 +34,13 @@ describe('application import and backup size limits', () => {
     const file = new File(['{}'], 'oversized.json');
     Object.defineProperty(file, 'size', { value: MAX_BACKUP_FILE_SIZE_BYTES + 1 });
     const readText = vi.spyOn(file, 'text');
-    await expect(parseBackupFile(file)).rejects.toThrow(/maximum backup size is 128 MiB/);
+    await expect(parseBackupFile(file)).rejects.toThrow(/maximum backup size is 160 MiB/);
     expect(readText).not.toHaveBeenCalled();
   });
 
   it('checks backup file size before parsing or desktop file allocation', () => {
     expect(() => assertBackupFileSize(MAX_BACKUP_FILE_SIZE_BYTES)).not.toThrow();
-    expect(() => assertBackupFileSize(MAX_BACKUP_FILE_SIZE_BYTES + 1)).toThrow(/maximum backup size is 128 MiB/);
+    expect(() => assertBackupFileSize(MAX_BACKUP_FILE_SIZE_BYTES + 1)).toThrow(/maximum backup size is 160 MiB/);
   });
 
   it('rejects backup metadata exceeding per-file and aggregate content limits', async () => {
