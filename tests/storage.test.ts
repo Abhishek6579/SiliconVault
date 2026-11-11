@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
 import { exportBackup, exportBackupStream, importBackup } from '../src/storage/backup';
-import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
+import { createFolder, deleteWorkspace, moveFile, moveFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
 
@@ -242,6 +242,24 @@ describe('workspace storage', () => {
     await softDeleteProject(database, 'p1');
     expect((await database.files.get('f1'))?.deletedAt).not.toBeNull();
     expect((await database.projects.get('p1'))?.archived).toBe(true);
+  });
+
+  it('restores files hidden by project archival but preserves files already in Trash', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.projects.add({ id: 'p-restore', name: 'Restore me', workspaceId: DEFAULT_WORKSPACE_ID, archived: false, createdAt: now, updatedAt: now });
+    await database.files.bulkAdd([
+      { id: 'live-before-archive', kind: 'markdown', name: 'live.md', parentFolderId: null, projectId: 'p-restore', workspaceId: DEFAULT_WORKSPACE_ID, size: 0, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null },
+      { id: 'already-trashed', kind: 'markdown', name: 'trash.md', parentFolderId: null, projectId: 'p-restore', workspaceId: DEFAULT_WORKSPACE_ID, size: 0, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: now - 1000 },
+    ]);
+    await softDeleteProject(database, 'p-restore');
+    expect((await database.projects.get('p-restore'))?.archivedAt).toEqual(expect.any(Number));
+    expect((await database.files.get('already-trashed'))?.deletedAt).toBe(now - 1000);
+    await restoreProject(database, 'p-restore');
+    expect(await database.projects.get('p-restore')).toMatchObject({ archived: false, archivedAt: null });
+    expect((await database.files.get('live-before-archive'))?.deletedAt).toBeNull();
+    expect((await database.files.get('already-trashed'))?.deletedAt).toBe(now - 1000);
   });
 
   it('empties only the selected workspace trash and preserves other workspaces', async () => {

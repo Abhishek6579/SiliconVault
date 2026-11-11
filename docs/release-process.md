@@ -4,7 +4,7 @@ This is the release contract, not evidence that a release has been published.
 
 ## Versioning
 
-The current source version is `0.1.0`. Keep these identical:
+The next source version is `0.1.1-alpha.2`. Keep these identical:
 - `package.json` → `version`
 - `src-tauri/tauri.conf.json` → `version`
 - `src-tauri/Cargo.toml` → `[package].version`
@@ -36,7 +36,7 @@ git push origin v0.1.1
 
 The version is illustrative; use the actual synchronized version. Never tag an unmerged development commit.
 
-Pushing a `v*` tag triggers `.github/workflows/release.yml`. It verifies the tag against the three version fields, builds the Windows NSIS installer, generates `SHA256SUMS.txt`, and publishes a GitHub Release with both assets. Fix a failed workflow before announcing the release.
+Pushing a `v*` tag triggers `.github/workflows/release.yml`. It verifies the tag against the three version fields, builds both Windows NSIS and MSI installers, generates `SHA256SUMS.txt`, and fails if any installer asset is missing. The workflow can also be run manually from the release-ready branch with the exact version in all three files; this creates the matching version tag and release from that commit. Fix a failed workflow before announcing the release. Never rerun an old tag against different source; the existing `v0.1.1-alpha.1` release is assetless and predates this corrected version.
 
 ## Checksum verification
 

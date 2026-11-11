@@ -1,6 +1,6 @@
 [package]
 name = "silicon-vault"
-version = "0.1.0"
+version = "0.1.1-alpha.2"
 description = "Local-first engineering workspace"
 authors = ["SiliconVault"]
 edition = "2021"

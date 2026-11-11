@@ -2,7 +2,7 @@
 
 SiliconVault is a desktop-first, local-first engineering workspace built with React, TypeScript, Tauri 2, and Dexie/IndexedDB.
 
-> **Status:** early development. The source version is `0.1.0`; this is not a claim that a public release exists.
+> **Status:** early development. The next source version is `0.1.1-alpha.2`; a version declaration does not mean installers have been published.
 
 ## Implemented functionality
 
@@ -81,4 +81,4 @@ Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync
 
 ## License
 
-No license file is currently present. No license grant should be assumed. See [License status](docs/license-status.md); the maintainer must choose the intended terms before describing this repository as open source.
+No software license has been selected or granted. The root [LICENSE.md](LICENSE.md) is a status notice, not a license grant. See [License status](docs/license-status.md); do not assume that public repository access grants reuse or redistribution rights.

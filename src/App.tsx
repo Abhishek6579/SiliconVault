@@ -23,11 +23,11 @@ import {
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { flushPendingAutosaves } from './storage/autosave';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
+import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, downloadBackupFile, exportBackup, exportBackupStream, importBackup, serializeBackup } from './storage/backup';
+import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
 import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
-import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
+import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
@@ -70,9 +70,30 @@ function MermaidDiagram({ source }: MermaidDiagramProps) {
 }
 
 function buildTree(folders: FolderRecord[], files: FileMeta[], parentId: string | null, projectId: string | null, workspaceId: string | null): TreeFolder[] {
-  return folders.filter((folder) => folder.parentFolderId === parentId && folder.projectId === projectId && folder.workspaceId === workspaceId)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    .map((record) => ({ record, children: buildTree(folders, files, record.id, projectId, workspaceId), files: files.filter((file) => file.parentFolderId === record.id && file.projectId === projectId && file.workspaceId === workspaceId) }));
+  const foldersByParent = new Map<string | null, FolderRecord[]>();
+  const filesByParent = new Map<string | null, FileMeta[]>();
+  for (const folder of folders) {
+    if (folder.projectId !== projectId || folder.workspaceId !== workspaceId) continue;
+    const siblings = foldersByParent.get(folder.parentFolderId);
+    if (siblings) siblings.push(folder); else foldersByParent.set(folder.parentFolderId, [folder]);
+  }
+  for (const file of files) {
+    if (file.projectId !== projectId || file.workspaceId !== workspaceId) continue;
+    const siblings = filesByParent.get(file.parentFolderId);
+    if (siblings) siblings.push(file); else filesByParent.set(file.parentFolderId, [file]);
+  }
+  for (const siblings of foldersByParent.values()) siblings.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const visited = new Set<string>();
+  const build = (parent: string | null): TreeFolder[] => {
+    const children: TreeFolder[] = [];
+    for (const record of foldersByParent.get(parent) ?? []) {
+      if (visited.has(record.id)) continue;
+      visited.add(record.id);
+      children.push({ record, children: build(record.id), files: filesByParent.get(record.id) ?? [] });
+    }
+    return children;
+  };
+  return build(parentId);
 }
 
 function typeIcon(kind: FileKind, size = 16) {
@@ -100,7 +121,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [migrationBackup, setMigrationBackup] = useState<WorkspaceBackup | null>(null);
+  const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
   const [migrationError, setMigrationError] = useState('');
   const [upgrading, setUpgrading] = useState(false);
   const [view, setView] = useState<View>('workspace');
@@ -241,20 +262,23 @@ export default function App() {
   }
 
   async function downloadMigrationBackupAndUpgrade() {
-    if (!migrationBackup) return;
+    if (migrationBackup === null) return;
     setUpgrading(true);
     setMigrationError('');
+    const previous = migrationBackup === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
     try {
+      await previous.open();
       if (!isDesktopApp()) {
-        downloadBackupFile(migrationBackup);
-        setMigrationError('The browser cannot confirm that a backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
+        await downloadBackup(previous);
+        setMigrationError('The browser cannot confirm that the backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
         return;
       }
-      const backupSaved = await saveBackupToDesktop(serializeBackup(migrationBackup));
+      const backupSaved = await saveBackupToDesktop(exportBackupStream(previous));
       if (!backupSaved) {
         setMigrationError('Backup saving was cancelled. The database migration was not started; your existing database remains unchanged.');
         return;
       }
+      previous.close();
       await db.open();
       const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
       setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true);
@@ -267,11 +291,13 @@ export default function App() {
       setMigrationBackup(null);
       await refresh();
     } catch (reason) {
-      setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your downloaded backup is safe.');
+      setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your existing database remains unchanged unless the upgrade completed.');
       setLoading(false);
-    } finally { setUpgrading(false); }
+    } finally {
+      previous.close();
+      setUpgrading(false);
+    }
   }
-
   async function toggleTheme() {
     const next = !darkTheme;
     setDarkTheme(next);
@@ -292,12 +318,7 @@ export default function App() {
       try {
         const version = await existingDatabaseVersion(DATABASE_NAME);
         if (version > 0 && version < DATABASE_VERSION) {
-          const previous = version === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
-          await previous.open();
-          try {
-            const backup = await exportBackup(previous);
-            if (alive) { setMigrationBackup(backup); setLoading(false); }
-          } finally { previous.close(); }
+          if (alive) { setMigrationBackup(version); setLoading(false); }
           return;
         }
         await db.open();
@@ -854,7 +875,7 @@ export default function App() {
   }
 
   async function restoreProject(project: Project) {
-    await db.projects.update(project.id, { archived: false, updatedAt: Date.now() });
+    await unarchiveProject(db, project.id);
     setActiveProject(project.id);
     setSelectedFolder(null);
     setView('workspace');

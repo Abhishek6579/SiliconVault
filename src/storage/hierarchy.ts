@@ -76,8 +76,22 @@ export async function softDeleteProject(database: WorkspaceDatabase, projectId: 
     const project = await database.projects.get(projectId);
     if (!project) throw new Error('The project does not exist.');
     const now = Date.now();
-    await database.files.where('projectId').equals(projectId).modify({ deletedAt: now, updatedAt: now });
-    await database.projects.update(projectId, { archived: true, updatedAt: now });
+    await database.files.where('projectId').equals(projectId).filter((file) => file.deletedAt === null).modify({ deletedAt: now, updatedAt: now });
+    await database.projects.update(projectId, { archived: true, archivedAt: now, updatedAt: now });
+  });
+}
+
+/** Restore files hidden by project archival without reviving older Trash entries. */
+export async function restoreProject(database: WorkspaceDatabase, projectId: string): Promise<void> {
+  await database.transaction('rw', database.projects, database.files, async () => {
+    const project = await database.projects.get(projectId);
+    if (!project) throw new Error('The project does not exist.');
+    const now = Date.now();
+    const archivedAt = project.archivedAt;
+    await database.files.where('projectId').equals(projectId)
+      .filter((file) => file.deletedAt !== null && (archivedAt == null || file.deletedAt === archivedAt))
+      .modify({ deletedAt: null, updatedAt: now });
+    await database.projects.update(projectId, { archived: false, archivedAt: null, updatedAt: now });
   });
 }
 

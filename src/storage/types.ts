@@ -41,6 +41,8 @@ export interface Project {
   workspaceId: string;
   name: string;
   archived: boolean;
+  /** Timestamp used to identify files soft-deleted by this archive operation. */
+  archivedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }
