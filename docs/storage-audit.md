@@ -41,6 +41,8 @@ The main-window capability retains file read, directory read and file write oper
 - Project archival records its archive timestamp and only soft-deletes files that were live. Restoring a project revives files deleted by that archive operation while preserving files that were already in Trash. Legacy archived projects without an archive timestamp use a best-effort compatibility path that restores their deleted project files.
 - Workspace tree construction builds folder/file buckets once per render and traverses those indexes rather than filtering the complete metadata arrays at every recursive node.
 - Desktop folder import walks the selected directory incrementally and imports each file before reading the next. Browser folder import also processes the selected File objects sequentially.
+- Desktop multi-file import reads and persists one selected file before reading the next, avoiding the previous `Promise.all` allocation of every selected file at once.
+- Text/code/Markdown edits write a short-lived recovery shadow to IndexedDB preferences; opening a file restores that shadow as a dirty draft, and a successful content save removes it. The normal one-second autosave remains in place.
 - Folder subtree discovery now builds a parent-to-children index and traverses it in O(V + E), with cycle protection.
 - UI preference values previously stored under legacy localStorage keys are migrated to Dexie before the legacy keys are removed.
 - PDF render-task cancellation and PDF.js document destruction are centralized and covered by lifecycle tests.
