@@ -52,10 +52,10 @@ export async function chooseBackupToRestore(): Promise<File | null> {
   return new File([bytes], path.split(/[\\/]/).pop() || 'backup.json', { type: 'application/json' });
 }
 
-export async function saveBackupToDesktop(content: string): Promise<boolean> {
+export async function saveBackupToDesktop(content: string | ReadableStream<Uint8Array>): Promise<boolean> {
   const path = await save({ title: 'Save workspace backup', defaultPath: `silicon-vault-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'SiliconVault backup', extensions: ['json'] }] });
   if (!path) return false;
-  await writeFile(path, new TextEncoder().encode(content));
+  await writeFile(path, typeof content === 'string' ? new TextEncoder().encode(content) : content);
   return true;
 }
 
