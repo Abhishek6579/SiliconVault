@@ -66,6 +66,7 @@ describe('autosave shutdown flushing', () => {
     await flushPendingAutosaves(pending, timers, async (id, draft) => {
       await Promise.resolve();
       saved.push(`${id}:${draft}`);
+      pending.delete(id);
     });
     expect(saved.sort()).toEqual(['a:latest A', 'b:latest B']);
     expect(timers.size).toBe(0);
