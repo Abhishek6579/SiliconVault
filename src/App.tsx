@@ -4,10 +4,9 @@ import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
-import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -384,7 +383,9 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [liveFiles, query]);
 
-  const openFile = useCallback(async (meta: FileMeta) => {
+  const openFile = useCallback(async (fileMeta: FileMeta) => {
+    // Reclassify on open so legacy HDL records cannot remain editable.
+    const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
     if (meta.workspaceId !== activeWorkspaceId) {
       setActiveWorkspaceId(meta.workspaceId);
       setActiveProject(meta.projectId);
@@ -422,7 +423,7 @@ export default function App() {
     } : undefined;
     setTabs((current) => [
       ...current.map((tab) => {
-        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
@@ -513,7 +514,7 @@ export default function App() {
   }
 
   function createNewFile(kind: 'markdown' | 'code') {
-    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.sv';
+    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.ts';
     requestInput(kind === 'markdown' ? 'Create note' : 'Create code file', initial, 'File name', 'Create file', async (name) => {
       const text = kind === 'markdown' ? `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n` : '';
       const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID, kind });
@@ -1032,7 +1033,7 @@ export default function App() {
             } }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? javascript() : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={activeTab.meta.kind === 'code' ? [javascript(), editorSyntax] : [editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? (
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
