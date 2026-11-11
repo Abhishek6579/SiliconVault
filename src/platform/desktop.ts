@@ -38,12 +38,6 @@ export async function* iterateDesktopFolder(): AsyncGenerator<File> {
   yield* visit(root);
 }
 
-/** Compatibility helper; prefer iterateDesktopFolder for bounded-memory imports. */
-export async function pickDesktopFolder(): Promise<File[]> {
-  const files: File[] = [];
-  for await (const file of iterateDesktopFolder()) files.push(file);
-  return files;
-}
 
 export async function chooseBackupToRestore(): Promise<File | null> {
   const path = await open({ multiple: false, title: 'Restore workspace backup', filters: [{ name: 'SiliconVault backup', extensions: ['json'] }] });
