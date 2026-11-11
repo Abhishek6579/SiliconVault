@@ -175,7 +175,7 @@ export function exportBackupStream(database: BackupDatabase): ReadableStream<Uin
         controller.error(error);
       }
     },
-    cancel() { void iterator.return?.(); },
+    cancel() { void iterator.return?.(undefined); },
   });
   return stream;
 }
