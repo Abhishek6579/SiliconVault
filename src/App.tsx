@@ -153,6 +153,7 @@ export default function App() {
   const folderInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const draftRecoveryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveChains = useRef(new Map<string, Promise<void>>());
   const draftRevisions = useRef(new Map<string, number>());
   const pendingDrafts = useRef(new Map<string, string>());
@@ -461,7 +462,12 @@ export default function App() {
     const content = await db.contents.get(meta.id);
     if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
     const data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob ? await content.data.text() : content.data;
-    const draft = fileText(data);
+    const savedDraftValue = ['markdown', 'code', 'text'].includes(meta.kind)
+      ? (await db.preferences.get(`draft:${meta.id}`))?.value
+      : undefined;
+    const hasRecoveredDraft = typeof savedDraftValue === 'string';
+    const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
+    if (hasRecoveredDraft) pendingDrafts.current.set(meta.id, draft);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
     const pdfState = meta.kind === 'pdf' ? {
       page: Number.isFinite(savedPdfState?.page) ? Math.max(1, Math.floor(savedPdfState!.page!)) : 1,
@@ -474,9 +480,10 @@ export default function App() {
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
-      { id: meta.id, meta, data, draft, dirty: false, preview: meta.kind === 'markdown', pdfState },
+      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: meta.kind === 'markdown', pdfState },
     ]);
     setActiveTabId(meta.id);
+    if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
   }, [activeWorkspaceId, tabs]);
 
@@ -484,10 +491,14 @@ export default function App() {
     const pendingTimer = saveTimers.current.get(id);
     if (pendingTimer) clearTimeout(pendingTimer);
     saveTimers.current.delete(id);
+    const recoveryTimer = draftRecoveryTimers.current.get(id);
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    draftRecoveryTimers.current.delete(id);
     const revision = draftRevisions.current.get(id) ?? 0;
     const previousSave = saveChains.current.get(id) ?? Promise.resolve();
-    const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(() => {
+    const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(async () => {
       if (draftRevisions.current.get(id) === revision) {
+        await db.preferences.delete(`draft:${id}`);
         setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, dirty: false, meta: { ...tab.meta, size: new TextEncoder().encode(draft).byteLength, updatedAt: Date.now() } } : tab));
         pendingDrafts.current.delete(id);
         setStatus('Saved locally');
@@ -504,6 +515,14 @@ export default function App() {
   const updateDraft = useCallback((id: string, draft: string) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
     pendingDrafts.current.set(id, draft);
+    const recoveryTimer = draftRecoveryTimers.current.get(id);
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    draftRecoveryTimers.current.set(id, setTimeout(() => {
+      draftRecoveryTimers.current.delete(id);
+      void db.preferences.put({ key: `draft:${id}`, value: draft, updatedAt: Date.now() }).catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : 'Could not persist the crash-recovery draft.');
+      });
+    }, 150));
     const revision = (draftRevisions.current.get(id) ?? 0) + 1;
     draftRevisions.current.set(id, revision);
     setStatus('Unsaved changes · Auto-save in 1 second');
