@@ -827,7 +827,7 @@ export default function App() {
     return sortDesc ? -order : order;
   });
 
-  return <div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ zoom: appZoom }}>
+  return <div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ zoom: appZoom, width: `calc(100% / ${appZoom})`, height: `calc(100vh / ${appZoom})` }}>
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
       <div className="brand-row">
         <div className="brand-mark"><Command size={19} strokeWidth={2.2} /></div>
