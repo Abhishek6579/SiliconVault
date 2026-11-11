@@ -71,6 +71,17 @@ describe('autosave shutdown flushing', () => {
     expect(timers.size).toBe(0);
   });
 
+  it('flushes edits that arrive while an earlier save is in progress', async () => {
+    const pending = new Map([['a', 'first']]);
+    const saved: string[] = [];
+    await flushPendingAutosaves(pending, new Map(), async (id, draft) => {
+      saved.push(draft);
+      if (draft === 'first') pending.set(id, 'latest');
+      else pending.delete(id);
+    });
+    expect(saved).toEqual(['first', 'latest']);
+  });
+
   it('does not report a flush as successful when a save fails', async () => {
     const pending = new Map([['a', 'unsaved']]);
     await expect(flushPendingAutosaves(pending, new Map(), async () => {
