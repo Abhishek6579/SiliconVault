@@ -19,7 +19,8 @@ export async function* iterateDesktopFiles(): AsyncGenerator<File> {
     assertImportFileSize(name, info.size);
     const bytes = await readFile(path);
     yield new File([bytes], name, { type: mimeType(name) });
-  }}
+  }
+}
 
 export async function* iterateDesktopFolder(): AsyncGenerator<File> {
   const root = await open({ directory: true, recursive: true, title: 'Import folder' });
@@ -53,6 +54,7 @@ export async function chooseBackupToRestore(): Promise<File | null> {
   const bytes = await readFile(path);
   return new File([bytes], path.split(/[\\\\/]/).pop() || 'backup.json', { type: 'application/json' });
 }
+
 export async function saveBackupToDesktop(content: string | ReadableStream<Uint8Array>): Promise<boolean> {
   const path = await save({ title: 'Save workspace backup', defaultPath: `silicon-vault-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'SiliconVault backup', extensions: ['json'] }] });
   if (!path) return false;
