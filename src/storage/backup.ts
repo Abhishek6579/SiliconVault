@@ -138,9 +138,56 @@ export function downloadBackupFile(backup: WorkspaceBackup): void {
 
 export function serializeBackup(backup: WorkspaceBackup): string { return JSON.stringify(backup); }
 
+async function* backupJsonChunks(database: BackupDatabase): AsyncGenerator<string> {
+  const [files, folders, projects, preferences, workspaces] = await Promise.all([
+    database.files.toArray(), database.folders.toArray(), database.projects.toArray(),
+    database.preferences ? database.preferences.toArray() : [],
+    database.workspaces ? database.workspaces.toArray() : [],
+  ]);
+  const exportedAt = Date.now();
+  yield `{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${exportedAt},"files":[`;
+  let first = true;
+  for (const meta of files) {
+    const record = await database.contents.get(meta.id);
+    if (!record) throw new Error(`Missing content for file ${meta.id}`);
+    const isText = typeof record.data === 'string';
+    const bytes = await contentToBytes(record.data);
+    const item: BackupFile = {
+      meta,
+      content: { encoding: isText ? 'text' : 'base64', value: isText ? record.data as string : bytesToBase64(bytes) },
+      sha256: await checksum(bytes),
+    };
+    yield `${first ? '' : ','}${JSON.stringify(item)}`;
+    first = false;
+  }
+  yield `],"folders":${JSON.stringify(folders)},"projects":${JSON.stringify(projects)},"preferences":${JSON.stringify(preferences)},"workspaces":${JSON.stringify(workspaces)}}`;
+}
+
+async function createBackupBlob(database: BackupDatabase): Promise<Blob> {
+  const iterator = backupJsonChunks(database);
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await iterator.next();
+        if (next.done) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next.value));
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel() { void iterator.return?.(); },
+  });
+  return new Response(stream, { headers: { 'Content-Type': 'application/json' } }).blob();
+}
+
 export async function downloadBackup(database: BackupDatabase): Promise<void> {
-  const backup = await exportBackup(database);
-  downloadBackupFile(backup);
+  const blob = await createBackupBlob(database);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `engineering-workspace-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
 export async function importBackup(database: WorkspaceDatabase, value: unknown): Promise<void> {
