@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
 import { exportBackup, importBackup } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
-import { createTextFile, emptyTrash, kindForFile, restoreFile, saveFileText, softDeleteFile } from '../src/storage/files';
+import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
+import { flushPendingAutosaves } from '../src/storage/autosave';
 
 const databases: WorkspaceDatabase[] = [];
 function createDatabase(): WorkspaceDatabase {
@@ -31,6 +32,62 @@ describe('file format classification', () => {
     expect(kindForFile('notes.md')).toBe('markdown');
     expect(kindForFile('main.c')).toBe('code');
     expect(kindForFile('unknown.bin')).toBe('other');
+  });
+});
+
+describe('file rename validation', () => {
+  it('rejects unsafe names and extension changes that would misclassify stored content', () => {
+    for (const name of ['', ' note.md', 'note.md ', '../note.md', 'folder\\note.md', 'bad:name.md', 'CON.txt', 'trailing.']) {
+      expect(() => validateFileName(name, 'note.md')).toThrow();
+    }
+    expect(() => validateFileName('report.pdf', 'report.md')).toThrow(/does not convert/);
+    expect(() => validateFileName('note.txt', 'note.md')).toThrow(/does not convert/);
+    expect(() => validateFileName('note.md', 'note.md')).not.toThrow();
+    expect(() => validateFileName('NOTE.MD', 'note.md')).not.toThrow();
+  });
+
+  it('renames a file without changing its stored format classification', async () => {
+    const database = createDatabase();
+    await database.open();
+    const file = await createTextFile(database, 'notes.md', 'text', { kind: 'markdown' });
+    await expect(renameFile(database, file.id, 'notes.pdf')).rejects.toThrow(/does not convert/);
+    await renameFile(database, file.id, 'engineering-notes.md');
+    expect(await database.files.get(file.id)).toMatchObject({ name: 'engineering-notes.md', kind: 'markdown' });
+  });
+});
+
+describe('autosave shutdown flushing', () => {
+  it('cancels debounce timers and awaits every pending draft save', async () => {
+    const pending = new Map([['a', 'latest A'], ['b', 'latest B']]);
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    timers.set('a', setTimeout(() => undefined, 60_000));
+    timers.set('b', setTimeout(() => undefined, 60_000));
+    const saved: string[] = [];
+    await flushPendingAutosaves(pending, timers, async (id, draft) => {
+      await Promise.resolve();
+      saved.push(`${id}:${draft}`);
+      pending.delete(id);
+    });
+    expect(saved.sort()).toEqual(['a:latest A', 'b:latest B']);
+    expect(timers.size).toBe(0);
+  });
+
+  it('flushes edits that arrive while an earlier save is in progress', async () => {
+    const pending = new Map([['a', 'first']]);
+    const saved: string[] = [];
+    await flushPendingAutosaves(pending, new Map(), async (id, draft) => {
+      saved.push(draft);
+      if (draft === 'first') pending.set(id, 'latest');
+      else pending.delete(id);
+    });
+    expect(saved).toEqual(['first', 'latest']);
+  });
+
+  it('does not report a flush as successful when a save fails', async () => {
+    const pending = new Map([['a', 'unsaved']]);
+    await expect(flushPendingAutosaves(pending, new Map(), async () => {
+      throw new Error('disk write failed');
+    })).rejects.toThrow('disk write failed');
   });
 });
 
@@ -138,6 +195,25 @@ describe('workspace storage', () => {
     expect((await database.projects.get('p1'))?.archived).toBe(true);
   });
 
+  it('empties only the selected workspace trash and preserves other workspaces', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    const other = { id: 'workspace-other-trash', name: 'Other', createdAt: now, updatedAt: now };
+    await database.workspaces.add(other);
+    const activeFile = await createTextFile(database, 'active.md', 'active');
+    const otherFile = await createTextFile(database, 'other.md', 'other', { workspaceId: other.id });
+    await softDeleteFile(database, activeFile.id);
+    await softDeleteFile(database, otherFile.id);
+
+    await emptyTrash(database, DEFAULT_WORKSPACE_ID);
+
+    expect(await database.files.get(activeFile.id)).toBeUndefined();
+    expect(await database.contents.get(activeFile.id)).toBeUndefined();
+    expect(await database.files.get(otherFile.id)).toMatchObject({ deletedAt: expect.any(Number), workspaceId: other.id });
+    expect(await database.contents.get(otherFile.id)).toEqual({ fileId: otherFile.id, data: 'other' });
+  });
+
   it('deletes only the selected workspace and its saved PDF positions', async () => {
     const database = createDatabase();
     await database.open();
@@ -167,7 +243,7 @@ describe('workspace storage', () => {
     await restoreFile(database, file.id);
     expect((await database.files.get(file.id))?.deletedAt).toBeNull();
     await softDeleteFile(database, file.id);
-    await emptyTrash(database);
+    await emptyTrash(database, DEFAULT_WORKSPACE_ID);
     expect(await database.files.get(file.id)).toBeUndefined();
     expect(await database.contents.get(file.id)).toBeUndefined();
   });

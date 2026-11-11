@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -20,6 +21,7 @@ import {
   Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
+import { flushPendingAutosaves } from './storage/autosave';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
 import { downloadBackup, downloadBackupFile, exportBackup, importBackup, serializeBackup } from './storage/backup';
@@ -130,6 +132,8 @@ export default function App() {
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveChains = useRef(new Map<string, Promise<void>>());
   const draftRevisions = useRef(new Map<string, number>());
+  const pendingDrafts = useRef(new Map<string, string>());
+  const closeInProgress = useRef(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { localStorage.setItem('silicon-vault-app-zoom', String(appZoom)); }, [appZoom]);
@@ -233,8 +237,16 @@ export default function App() {
     setUpgrading(true);
     setMigrationError('');
     try {
-      if (isDesktopApp()) await saveBackupToDesktop(serializeBackup(migrationBackup));
-      else downloadBackupFile(migrationBackup);
+      if (!isDesktopApp()) {
+        downloadBackupFile(migrationBackup);
+        setMigrationError('The browser cannot confirm that a backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
+        return;
+      }
+      const backupSaved = await saveBackupToDesktop(serializeBackup(migrationBackup));
+      if (!backupSaved) {
+        setMigrationError('Backup saving was cancelled. The database migration was not started; your existing database remains unchanged.');
+        return;
+      }
       await db.open();
       const theme = await db.preferences.get('theme');
       setDarkTheme(theme ? theme.value === 'dark' : true);
@@ -293,7 +305,7 @@ export default function App() {
       }
     };
     void initialize();
-    return () => { alive = false; for (const timer of saveTimers.current.values()) clearTimeout(timer); };
+    return () => { alive = false; };
   }, [refresh]);
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -444,6 +456,7 @@ export default function App() {
     const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(() => {
       if (draftRevisions.current.get(id) === revision) {
         setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, dirty: false, meta: { ...tab.meta, size: new TextEncoder().encode(draft).byteLength, updatedAt: Date.now() } } : tab));
+        pendingDrafts.current.delete(id);
         setStatus('Saved locally');
       }
     }).catch((reason: unknown) => {
@@ -457,6 +470,7 @@ export default function App() {
 
   const updateDraft = useCallback((id: string, draft: string) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
+    pendingDrafts.current.set(id, draft);
     const revision = (draftRevisions.current.get(id) ?? 0) + 1;
     draftRevisions.current.set(id, revision);
     setStatus('Unsaved changes · Auto-save in 1 second');
@@ -467,6 +481,49 @@ export default function App() {
       void persistDraft(id, draft).catch(() => undefined);
     }, 1000));
   }, [persistDraft]);
+
+  const flushPendingSaves = useCallback(async () => {
+    await flushPendingAutosaves(pendingDrafts.current, saveTimers.current, persistDraft);
+    await Promise.all([...saveChains.current.values()]);
+  }, [persistDraft]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    if (!isDesktopApp()) {
+      const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+        if (pendingDrafts.current.size === 0) return;
+        event.preventDefault();
+        event.returnValue = '';
+      };
+      window.addEventListener('beforeunload', warnBeforeUnload);
+      return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+    }
+    const currentWindow = getCurrentWindow();
+    void currentWindow.onCloseRequested(async (event) => {
+      if (closeInProgress.current) return;
+      event.preventDefault();
+      closeInProgress.current = true;
+      try {
+        await flushPendingSaves();
+        await Promise.all([...saveChains.current.values()]);
+        await currentWindow.close();
+      } catch (reason) {
+        closeInProgress.current = false;
+        setStatus('Save failed · close cancelled');
+        setError(reason instanceof Error ? reason.message : 'Unsaved changes could not be saved. The application remains open.');
+      }
+    }).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    }).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : 'Could not register safe shutdown handling.');
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [flushPendingSaves]);
   
   useEffect(() => {
     const onSaveShortcut = (event: KeyboardEvent) => {
@@ -506,7 +563,7 @@ export default function App() {
     const projectCount = projects.filter((project) => project.workspaceId === target.id).length;
     requestConfirmation('Delete workspace?', `Permanently delete “${target.name}” and its ${projectCount} project${projectCount === 1 ? '' : 's'}, ${folderCount} folder${folderCount === 1 ? '' : 's'}, and ${fileCount} file${fileCount === 1 ? '' : 's'}? This cannot be undone.`, 'Delete workspace', async () => {
       const closingTabs = tabs.filter((tab) => tab.meta.workspaceId === target.id);
-      await Promise.all(closingTabs.map((tab) => saveChains.current.get(tab.id)));
+      await flushPendingSaves();
       const nextWorkspace = await removeWorkspace(db, target.id);
       setTabs((current) => current.filter((tab) => tab.meta.workspaceId !== target.id));
       if (activeTabId && closingTabs.some((tab) => tab.id === activeTabId)) setActiveTabId(null);
@@ -577,7 +634,7 @@ export default function App() {
     try {
       const backup = JSON.parse(await file.text()) as unknown;
       requestConfirmation('Restore workspace backup?', 'Restoring replaces the current workspaces, projects, folders, files, and preferences.', 'Restore backup', async () => {
-        await Promise.all(tabs.map((tab) => saveChains.current.get(tab.id)));
+        await flushPendingSaves();
         await importBackup(db, backup);
         setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
         const restoredWorkspaces = await db.workspaces.toArray();
@@ -797,9 +854,8 @@ export default function App() {
     if (!trashedFiles.length) return;
     requestConfirmation('Empty Trash?', `Permanently delete ${trashedFiles.length} trashed file${trashedFiles.length === 1 ? '' : 's'}? This cannot be undone.`, 'Empty Trash', async () => {
       const trashIds = new Set(trashedFiles.map((file) => file.id));
-      const closingTabs = tabs.filter((tab) => trashIds.has(tab.id));
-      await Promise.all(closingTabs.map((tab) => saveChains.current.get(tab.id)));
-      await emptyTrash(db);
+      await flushPendingSaves();
+      await emptyTrash(db, activeWorkspaceId ?? DEFAULT_WORKSPACE_ID);
       setTabs((current) => current.filter((tab) => !trashIds.has(tab.id)));
       if (activeTabId && trashIds.has(activeTabId)) setActiveTabId(tabs.find((tab) => !trashIds.has(tab.id))?.id ?? null);
       await refresh();
@@ -1161,7 +1217,7 @@ export default function App() {
         <h2 id="upgrade-title">Back up before we continue</h2>
         <p className="move-dialog-copy">This update adds separate workspaces and keeps your theme and PDF reading positions. Before the database changes, a full backup of your files, folders, projects, and settings will download.</p>
         {migrationError && <div className="inline-error">The update did not finish: {migrationError}. Your old database is left in place; you can retry after saving the downloaded backup.</div>}
-        <button className="primary-button upgrade-button" disabled={upgrading} onClick={() => void downloadMigrationBackupAndUpgrade()}>{upgrading ? <><span className="spinner" /> Updating…</> : <><Download size={15} /> Download backup &amp; continue</>}</button>
+        <button className="primary-button upgrade-button" disabled={upgrading} onClick={() => void downloadMigrationBackupAndUpgrade()}>{upgrading ? <><span className="spinner" /> Updating…</> : <><Download size={15} /> {isDesktopApp() ? 'Download backup & continue' : 'Download backup (desktop required)'}</>}</button>
       </section>
     </div>}
 
