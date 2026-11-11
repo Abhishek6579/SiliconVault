@@ -775,7 +775,7 @@ export default function App() {
           <button className="tree-main" onClick={() => { setSelectedFolder(folder.record.id); setActiveProject(folder.record.projectId); setView('workspace'); setActiveTabId(null); }} onDoubleClick={() => toggleFolder(folder.record.id)}>
           <span className="twisty" onClick={(event) => { event.stopPropagation(); toggleFolder(folder.record.id); }}>{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
           {isOpen ? <Folder size={16} className="folder-icon open" /> : <Folder size={16} className="folder-icon" />}
-          <span className="truncate">{folder.record.name}</span>
+          <span className="truncate" title={folder.record.name}>{folder.record.name}</span>
         </button>
         <button className="mini-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.record.id, event)}><Ellipsis size={15} /></button>
       </div>
@@ -788,7 +788,7 @@ export default function App() {
 
   function renderFileTree(file: FileMeta, depth = 0) {
     return <div key={file.id} className={`tree-row file-row ${activeTabId === file.id ? 'selected' : ''}`} style={{ paddingLeft: `${31 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-      <button className="tree-main" onClick={() => void openFile(file)}>{typeIcon(file.kind, 15)}<span className="truncate">{file.name}</span></button>
+      <button className="tree-main" onClick={() => void openFile(file)}>{typeIcon(file.kind, 15)}<span className="truncate" title={file.name}>{file.name}</span></button>
       <button className="mini-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={15} /></button>
     </div>;
   }
@@ -802,7 +802,7 @@ export default function App() {
         <button className="tree-main" onClick={() => { setActiveProject(project.id); setSelectedFolder(null); setView('workspace'); setActiveTabId(null); }}>
           <span className="twisty">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
           <span className="project-dot" />
-          <span className="truncate">{project.name}</span>
+          <span className="truncate" title={project.name}>{project.name}</span>
         </button>
         <button className="mini-action" title="Project actions" onClick={(event) => showContextMenu('project', project.id, event)}><Ellipsis size={15} /></button>
       </div>
@@ -827,7 +827,7 @@ export default function App() {
     return sortDesc ? -order : order;
   });
 
-  return <div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ zoom: appZoom, width: `calc(100% / ${appZoom})`, height: `calc(100vh / ${appZoom})` }}>
+  return <div className="app-viewport" data-theme={darkTheme ? 'dark' : 'light'}><div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ transform: `scale(${appZoom})`, width: `calc(100% / ${appZoom})`, height: `calc(100% / ${appZoom})` }}>
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
       <div className="brand-row">
         <div className="brand-mark"><Command size={19} strokeWidth={2.2} /></div>
@@ -1069,7 +1069,7 @@ export default function App() {
 
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
-  </div>;
+  </div></div>;
 }
 
 function EmptyState({ title, message, icon, action }: { title: string; message: string; icon: ReactNode; action?: ReactNode }) {
