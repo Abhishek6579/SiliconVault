@@ -155,3 +155,72 @@
 .zoom-reset-label{font-size:9px;font-weight:600}
 .editor-font-controls{margin-right:4px;padding-right:6px;border-right:1px solid var(--line)}
 .app-shell[data-theme="dark"] .editor-font-controls span{color:#b0b0b0}
+
+
+/* Keep zoomed workspace inside the window while allowing inner panels to scroll. */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+body { min-width: 0; min-height: 0; }
+.app-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar-primary,
+.sidebar-bottom,
+.brand-row {
+  flex: 0 0 auto;
+}
+.project-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.main-area,
+.workspace-body,
+.editor-workspace,
+.right-panel {
+  min-width: 0;
+  min-height: 0;
+}
+.workspace-body,
+.details-content,
+.search-results-panel,
+.destination-list,
+.workspace-switch-menu,
+.item-context-menu,
+.tab-list,
+.background-tab-strip,
+.code-editor,
+.code-editor .cm-scroller,
+.pdf-page-host,
+.pdf-search-results,
+.markdown-preview,
+.prose pre,
+.mermaid-diagram {
+  overscroll-behavior: contain;
+}
+
+/* Keep scrolling functional without drawing platform-native scrollbar tracks. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
