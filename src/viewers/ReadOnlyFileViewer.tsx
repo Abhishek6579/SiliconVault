@@ -3,7 +3,7 @@ import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
 
-function rowsFrom(source: string, delimiter: string): string[][] {
+export function rowsFrom(source: string, delimiter: string): string[][] {
   const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
   for (let i = 0; i < source.length && rows.length < 201; i++) {
     const c = source[i];
