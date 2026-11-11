@@ -3,7 +3,10 @@ export async function flushPendingAutosaves(
   saveTimers: Map<string, ReturnType<typeof setTimeout>>,
   persist: (id: string, draft: string) => Promise<void>,
 ): Promise<void> {
-  for (const timer of saveTimers.values()) clearTimeout(timer);
-  saveTimers.clear();
-  await Promise.all([...pendingDrafts.entries()].map(([id, draft]) => persist(id, draft)));
+  while (pendingDrafts.size > 0) {
+    for (const timer of saveTimers.values()) clearTimeout(timer);
+    saveTimers.clear();
+    const pending = [...pendingDrafts.entries()];
+    await Promise.all(pending.map(([id, draft]) => persist(id, draft)));
+  }
 }
