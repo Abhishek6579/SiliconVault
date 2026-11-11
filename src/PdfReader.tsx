@@ -8,10 +8,10 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 interface PdfReaderProps { data: Blob | string; title: string; }
 interface Match { page: number; snippet: string; }
 interface PdfViewState { page: number; zoom: number; fit: boolean; }
-interface Props extends PdfReaderProps { initialState?: PdfViewState; onStateChange?: (state: PdfViewState) => void; }
+interface Props extends PdfReaderProps { tabId: string; initialState?: PdfViewState; onStateChange?: (tabId: string, state: PdfViewState) => void; }
 interface PageSize { width: number; height: number; }
 
-export default function PdfReader({ data, title, initialState, onStateChange }: Props) {
+export default function PdfReader({ tabId, data, title, initialState, onStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef(new Map<number, HTMLCanvasElement>());
   const pageRefs = useRef(new Map<number, HTMLDivElement>());
@@ -55,13 +55,22 @@ export default function PdfReader({ data, title, initialState, onStateChange }: 
     }).then(async (pdf) => {
       if (!pdf || !active) return;
       loaded = pdf;
-      const sizes: PageSize[] = [];
-      for (let number = 1; number <= pdf.numPages; number += 1) {
+      const sizes: PageSize[] = new Array(pdf.numPages);
+      // Resolve dimensions in bounded parallel batches instead of awaiting every page serially.
+      const batchSize = 8;
+      for (let start = 1; start <= pdf.numPages; start += batchSize) {
         if (!active) return;
-        const page = await pdf.getPage(number);
-        const viewport = page.getViewport({ scale: 1 });
-        sizes.push({ width: viewport.width, height: viewport.height });
-        page.cleanup();
+        const end = Math.min(pdf.numPages, start + batchSize - 1);
+        await Promise.all(Array.from({ length: end - start + 1 }, async (_, index) => {
+          const number = start + index;
+          const page = await pdf.getPage(number);
+          try {
+            const viewport = page.getViewport({ scale: 1 });
+            sizes[number - 1] = { width: viewport.width, height: viewport.height };
+          } finally {
+            page.cleanup();
+          }
+        }));
       }
       if (active) {
         setDocument(pdf);
@@ -174,8 +183,8 @@ export default function PdfReader({ data, title, initialState, onStateChange }: 
   }, [document, pageCount, pageSizes, hostWidth, zoom, fit, pageNumber]);
 
   useEffect(() => {
-    onStateChange?.({ page: pageNumber, zoom, fit });
-  }, [pageNumber, zoom, fit, onStateChange]);
+    onStateChange?.(tabId, { page: pageNumber, zoom, fit });
+  }, [tabId, pageNumber, zoom, fit, onStateChange]);
 
   function updateVisiblePage() {
     const host = hostRef.current;
