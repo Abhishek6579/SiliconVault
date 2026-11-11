@@ -97,7 +97,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: SiliconVault v${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+          name: SiliconVault ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
