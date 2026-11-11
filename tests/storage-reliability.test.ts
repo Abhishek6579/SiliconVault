@@ -84,4 +84,14 @@ describe('PDF resource lifecycle', () => {
     disposePdfResources(new Map(), null, { destroy });
     expect(destroy).toHaveBeenCalledOnce();
   });
+
+  it('handles rejected and synchronously thrown destroy operations during cleanup', async () => {
+    const rejectedDestroy = vi.fn().mockRejectedValue(new Error('destroy failed'));
+    const throwingDestroy = vi.fn(() => { throw new Error('destroy threw'); });
+    expect(() => disposePdfResources(new Map(), { destroy: rejectedDestroy }, null)).not.toThrow();
+    expect(() => disposePdfResources(new Map(), null, { destroy: throwingDestroy })).not.toThrow();
+    await Promise.resolve();
+    expect(rejectedDestroy).toHaveBeenCalledOnce();
+    expect(throwingDestroy).toHaveBeenCalledOnce();
+  });
 });

@@ -95,11 +95,11 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
   let aggregateContentBytes = 0;
   for (const item of value.files as Array<{ meta: FileMeta; content: { encoding: 'text' | 'base64'; value: string } }>) {
     if (item.meta.size > MAX_BACKUP_INDIVIDUAL_FILE_BYTES) {
-      throw new Error(`Backup file "${item.meta.name}" exceeds the per-file restore limit of 64 MiB.`);
+      throw new Error(`Backup file "${item.meta.name}" exceeds the per-file restore limit of ${Math.floor(MAX_BACKUP_INDIVIDUAL_FILE_BYTES / (1024 * 1024))} MiB.`);
     }
     aggregateContentBytes += item.meta.size;
     if (aggregateContentBytes > MAX_BACKUP_TOTAL_CONTENT_BYTES) {
-      throw new Error('This backup exceeds the total restored-content limit of 72 MiB.');
+      throw new Error(`This backup exceeds the total restored-content limit of ${Math.floor(MAX_BACKUP_TOTAL_CONTENT_BYTES / (1024 * 1024))} MiB.`);
     }
     if (item.content.encoding === 'base64' && item.content.value.length !== Math.ceil(item.meta.size / 3) * 4) {
       throw new Error(`Backup file "${item.meta.name}" has an invalid encoded content length.`);

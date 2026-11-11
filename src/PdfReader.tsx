@@ -19,6 +19,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   const renderTasks = useRef(new Map<number, RenderTask>());
   const renderedScales = useRef(new Map<number, string>());
   const pendingScales = useRef(new Map<number, string>());
+  const searchRequestRef = useRef(0);
 
   // Single source of truth for the page the user is on. Updated only by
   // navigation or by scroll tracking that is trusted (see updateVisiblePage).
@@ -74,6 +75,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
 
     const cleanup = () => {
       active = false;
+      searchRequestRef.current += 1;
       disposePdfResources(renderTasks.current, loadingTask, loaded);
       renderedScales.current.clear();
       pendingScales.current.clear();
@@ -287,26 +289,46 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   }
 
   async function searchPdf() {
+    const request = ++searchRequestRef.current;
     if (!document || !query.trim()) { setMatches([]); return; }
+
+    setError('');
     const found: Match[] = [];
     const needle = query.toLocaleLowerCase();
-    for (let page = 1; page <= document.numPages; page += 1) {
-      const pdfPage = await document.getPage(page);
-      const content = await pdfPage.getTextContent();
-      const text = content.items.map((item) => 'str' in item ? item.str : '').join(' ');
-      pdfPage.cleanup();
-      const lower = text.toLocaleLowerCase();
-      let from = 0;
-      let hit = lower.indexOf(needle, from);
-      while (hit !== -1) {
-        found.push({ page, snippet: text.slice(Math.max(0, hit - 44), Math.min(text.length, hit + needle.length + 64)).trim() });
-        from = hit + needle.length;
-        hit = lower.indexOf(needle, from);
+    try {
+      for (let page = 1; page <= document.numPages; page += 1) {
+        if (request !== searchRequestRef.current) return;
+        const pdfPage = await document.getPage(page);
+        let text: string;
+        try {
+          const content = await pdfPage.getTextContent();
+          text = content.items.map((item) => 'str' in item ? item.str : '').join(' ');
+        } finally {
+          // Release PDF.js page resources even when text extraction rejects.
+          pdfPage.cleanup();
+        }
+        if (request !== searchRequestRef.current) return;
+
+        const lower = text.toLocaleLowerCase();
+        let from = 0;
+        let hit = lower.indexOf(needle, from);
+        while (hit !== -1) {
+          found.push({ page, snippet: text.slice(Math.max(0, hit - 44), Math.min(text.length, hit + needle.length + 64)).trim() });
+          from = hit + needle.length;
+          hit = lower.indexOf(needle, from);
+        }
+      }
+
+      if (request !== searchRequestRef.current) return;
+      setMatches(found);
+      setMatchIndex(0);
+      if (found[0]) goTo(found[0].page);
+    } catch (reason) {
+      if (request === searchRequestRef.current) {
+        setMatches([]);
+        setError(reason instanceof Error ? reason.message : 'Unable to search this PDF.');
       }
     }
-    setMatches(found);
-    setMatchIndex(0);
-    if (found[0]) goTo(found[0].page);
   }
 
   return <div className="pdf-shell">
