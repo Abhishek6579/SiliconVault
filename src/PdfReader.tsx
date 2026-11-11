@@ -20,6 +20,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   const renderedScales = useRef(new Map<number, string>());
   const pendingScales = useRef(new Map<number, string>());
   const searchRequestRef = useRef(0);
+  const searchControllerRef = useRef<AbortController | null>(null);
 
   // Single source of truth for the page the user is on. Updated only by
   // navigation or by scroll tracking that is trusted (see updateVisiblePage).
@@ -44,6 +45,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
+  const [searching, setSearching] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
   const [error, setError] = useState('');
 
@@ -76,6 +78,9 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     const cleanup = () => {
       active = false;
       searchRequestRef.current += 1;
+      searchControllerRef.current?.abort();
+      searchControllerRef.current = null;
+      setSearching(false);
       disposePdfResources(renderTasks.current, loadingTask, loaded);
       renderedScales.current.clear();
       pendingScales.current.clear();
@@ -288,26 +293,42 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     }
   }
 
-  async function searchPdf() {
-    const request = ++searchRequestRef.current;
-    if (!document || !query.trim()) { setMatches([]); return; }
+  function cancelSearch() {
+    searchRequestRef.current += 1;
+    searchControllerRef.current?.abort();
+    searchControllerRef.current = null;
+    setSearching(false);
+  }
 
+  async function searchPdf() {
+    searchControllerRef.current?.abort();
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+    const request = ++searchRequestRef.current;
+    if (!document || !query.trim()) {
+      setMatches([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
     setError('');
     const found: Match[] = [];
     const needle = query.toLocaleLowerCase();
     try {
       for (let page = 1; page <= document.numPages; page += 1) {
-        if (request !== searchRequestRef.current) return;
+        if (controller.signal.aborted || request !== searchRequestRef.current) return;
         const pdfPage = await document.getPage(page);
         let text: string;
         try {
+          // PDF.js does not expose AbortSignal for getTextContent. Cancellation
+          // is cooperative: finish the current page, then stop before next page.
           const content = await pdfPage.getTextContent();
           text = content.items.map((item) => 'str' in item ? item.str : '').join(' ');
         } finally {
-          // Release PDF.js page resources even when text extraction rejects.
           pdfPage.cleanup();
         }
-        if (request !== searchRequestRef.current) return;
+        if (controller.signal.aborted || request !== searchRequestRef.current) return;
 
         const lower = text.toLocaleLowerCase();
         let from = 0;
@@ -319,14 +340,19 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
         }
       }
 
-      if (request !== searchRequestRef.current) return;
+      if (controller.signal.aborted || request !== searchRequestRef.current) return;
       setMatches(found);
       setMatchIndex(0);
       if (found[0]) goTo(found[0].page);
     } catch (reason) {
-      if (request === searchRequestRef.current) {
+      if (!controller.signal.aborted && request === searchRequestRef.current) {
         setMatches([]);
         setError(reason instanceof Error ? reason.message : 'Unable to search this PDF.');
+      }
+    } finally {
+      if (request === searchRequestRef.current) {
+        searchControllerRef.current = null;
+        setSearching(false);
       }
     }
   }
@@ -360,8 +386,8 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       </div>
       <div className="pdf-find">
         <Search size={15} />
-        <input aria-label="Search PDF" placeholder="Find in document" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchPdf(); }} />
-        <button onClick={() => void searchPdf()}>Find</button>
+        <input aria-label="Search PDF" placeholder="Find in document" value={query} onChange={(event) => { cancelSearch(); setQuery(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter') void searchPdf(); }} />
+        <button onClick={() => searching ? cancelSearch() : void searchPdf()}>{searching ? 'Cancel' : 'Find'}</button>
         {matches.length > 0 && <span className="muted">{matches.length} hits</span>}
       </div>
       <div className="pdf-zoom">
