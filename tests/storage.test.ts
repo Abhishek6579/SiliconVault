@@ -388,7 +388,8 @@ describe('workspace storage', () => {
     ] as never);
     await legacy.contents.bulkAdd([{ fileId: 'legacy-file', data: 'legacy' }, { fileId: 'legacy-deleted', data: 'old' }]);
     const preUpgradeBackup = await exportBackup(legacy);
-    expect(preUpgradeBackup.files[0].meta.id).toBe('legacy-file');
+    expect(preUpgradeBackup.files).toHaveLength(2);
+    expect(preUpgradeBackup.files.some((file) => file.meta.id === 'legacy-file')).toBe(true);
     legacy.close();
 
     const restored = createDatabase();
