@@ -18,7 +18,7 @@ describe('UI preference persistence', () => {
   it('migrates validated legacy values into Dexie and removes old keys only after commit', async () => {
     const db = database();
     await db.open();
-    const values = new Map([
+    const values = new Map<string, string>([
       [LEGACY_UI_PREFERENCES.appZoom, '1.2'],
       [LEGACY_UI_PREFERENCES.editorFontSize, '18'],
     ]);
@@ -36,7 +36,7 @@ describe('UI preference persistence', () => {
     const db = database();
     await db.open();
     await db.preferences.put({ key: 'appZoom', value: 1.1, updatedAt: Date.now() });
-    const values = new Map([[LEGACY_UI_PREFERENCES.appZoom, '99'], [LEGACY_UI_PREFERENCES.editorFontSize, '8']]);
+    const values = new Map<string, string>([[LEGACY_UI_PREFERENCES.appZoom, '99'], [LEGACY_UI_PREFERENCES.editorFontSize, '8']]);
     const storage = { getItem: (key: string) => values.get(key) ?? null, removeItem: (key: string) => { values.delete(key); } };
     await expect(migrateLegacyUiPreferences(db, storage)).resolves.toEqual({ appZoom: 1.1, editorFontSize: 14 });
   });
