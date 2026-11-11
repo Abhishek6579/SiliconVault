@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "benchmark:backup-memory": "node --expose-gc scripts/benchmarks/backup-memory.mjs"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
