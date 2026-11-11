@@ -446,3 +446,14 @@ html, body, #root {
 .editor-file-title b { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .title-location { flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-tools { flex: 0 0 auto; }
+
+
+/* Open-file tabs: constrain each tab and scroll only along the horizontal axis. */
+.tab-strip { min-width: 0; min-height: 0; overflow: hidden; }
+.tab-list { min-width: 0; min-height: 0; height: 39px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tab-list::-webkit-scrollbar { display: none; }
+.file-tab { box-sizing: border-box; flex: 0 0 clamp(120px, 18vw, 190px); width: clamp(120px, 18vw, 190px); min-width: 0; max-width: 190px; height: 39px; min-height: 0; overflow: hidden; }
+.file-tab > svg { flex: 0 0 auto; }
+.file-tab .truncate { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-tab .dirty-dot, .file-tab .tab-close { flex: 0 0 auto; }
+.tab-plus { flex: 0 0 30px; }

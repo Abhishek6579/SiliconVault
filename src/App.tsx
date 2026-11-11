@@ -1027,7 +1027,7 @@ export default function App() {
         <div className="tab-strip">
           <div className="tab-list">
             {tabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
-              {typeIcon(tab.meta.kind, 15)}<span className="truncate">{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
+              {typeIcon(tab.meta.kind, 15)}<span className="truncate" title={tab.meta.name}>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
               <span role="button" tabIndex={0} className="tab-close" aria-label={`Close ${tab.meta.name}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); closeTab(tab.id); } }}><X size={14} /></span>
             </button>)}
           </div>
