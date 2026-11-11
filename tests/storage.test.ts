@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
 import { exportBackup, importBackup } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
@@ -144,6 +144,19 @@ describe('workspace storage', () => {
     expect(await database.projects.toArray()).toEqual(expected.projects);
     expect(await database.preferences.toArray()).toEqual(expected.preferences);
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
+  });
+
+  it('exports file contents one record at a time instead of materializing the contents table', async () => {
+    const database = createDatabase();
+    await database.open();
+    await createTextFile(database, 'one.txt', 'one');
+    await createTextFile(database, 'two.txt', 'two');
+    const contentsArray = vi.spyOn(database.contents, 'toArray');
+    const contentsGet = vi.spyOn(database.contents, 'get');
+    const backup = await exportBackup(database);
+    expect(backup.files).toHaveLength(2);
+    expect(contentsArray).not.toHaveBeenCalled();
+    expect(contentsGet).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an invalid version and checksum before changing stored data', async () => {
