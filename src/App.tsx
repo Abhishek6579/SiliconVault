@@ -15,7 +15,7 @@ import {
   Archive, ArrowDownUp, BookOpen, Check, ChevronDown, ChevronRight, Code2, Command, Download,
   Ellipsis, File, FileCode2, FilePlus2, FileText, Folder, FolderPlus, FolderTree, HardDrive,
   Import, LayoutGrid, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2,
-  Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2,
+  Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
@@ -109,6 +109,8 @@ export default function App() {
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkTheme, setDarkTheme] = useState(true);
+  const [appZoom, setAppZoom] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-app-zoom')); return Number.isFinite(saved) && saved >= 0.8 && saved <= 1.4 ? saved : 1; });
+  const [editorFontSize, setEditorFontSize] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-editor-font-size')); return Number.isFinite(saved) && saved >= 11 && saved <= 24 ? saved : 14; });
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -125,14 +127,28 @@ export default function App() {
   const draftRevisions = useRef(new Map<string, number>());
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { localStorage.setItem('silicon-vault-app-zoom', String(appZoom)); }, [appZoom]);
+  useEffect(() => { localStorage.setItem('silicon-vault-editor-font-size', String(editorFontSize)); }, [editorFontSize]);
+
+  useEffect(() => {
+    const onGlobalZoom = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.key === '=' || event.key === '+') { event.preventDefault(); setAppZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100)); }
+      else if (event.key === '-' || event.key === '_') { event.preventDefault(); setAppZoom((value) => Math.max(0.8, Math.round((value - 0.1) * 100) / 100)); }
+      else if (event.key === '0') { event.preventDefault(); setAppZoom(1); }
+    };
+    window.addEventListener('keydown', onGlobalZoom);
+    return () => window.removeEventListener('keydown', onGlobalZoom);
+  }, []);
+
   // Fixed near-black editor theme inspired by the supplied reference.
   const editorTheme = useMemo(() => EditorView.theme({
     '&': { height: '100%', backgroundColor: '#111111', color: '#e6e6e6' },
     '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
-    '.cm-content': { caretColor: '#f2f2f2' },
+    '.cm-content': { caretColor: '#f2f2f2', fontSize: `${editorFontSize}px` },
     '.cm-line': { padding: '0 4px' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#f2f2f2' },
-    '.cm-gutters': { backgroundColor: '#111111', color: '#777777', border: 'none', borderRight: '1px solid #242424' },
+    '.cm-gutters': { backgroundColor: '#111111', color: '#777777', border: 'none', borderRight: '1px solid #242424', fontSize: `${editorFontSize}px` },
     '.cm-lineNumbers .cm-gutterElement': { minWidth: '3.5em', padding: '0 12px 0 10px' },
     '.cm-activeLine': { backgroundColor: '#191919' },
     '.cm-activeLineGutter': { backgroundColor: '#191919', color: '#d8d8d8' },
@@ -144,7 +160,7 @@ export default function App() {
     '.cm-tooltip': { backgroundColor: '#1b1b1b', color: '#e6e6e6', border: '1px solid #383838' },
     '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30343d', color: '#ffffff' },
     '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
-  }, { dark: true }), []);
+  }, { dark: true }), [editorFontSize]);
   const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
     { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
     { tag: tags.keyword, color: '#c586c0' },
@@ -811,7 +827,7 @@ export default function App() {
     return sortDesc ? -order : order;
   });
 
-  return <div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'}>
+  return <div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ zoom: appZoom }}>
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
       <div className="brand-row">
         <div className="brand-mark"><Command size={19} strokeWidth={2.2} /></div>
@@ -879,6 +895,7 @@ export default function App() {
         </div>
         <div className="topbar-actions">
           <label className="global-search"><Search size={16} /><input placeholder="Search files and notes" value={query} onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} /><kbd>⌘ K</kbd></label>
+          <div className="app-zoom-controls" title="App zoom: Ctrl+= to increase, Ctrl+- to decrease, Ctrl+0 to reset"><button className="icon-button" aria-label="Decrease app size" title="Decrease app size (Ctrl+-)" onClick={() => setAppZoom((value) => Math.max(0.8, Math.round((value - 0.1) * 100) / 100))}><ZoomOut size={15} /></button><span>{Math.round(appZoom * 100)}%</span><button className="icon-button" aria-label="Increase app size" title="Increase app size (Ctrl+=)" onClick={() => setAppZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100))}><ZoomIn size={15} /></button><button className="icon-button" aria-label="Reset app size" title="Reset app size (Ctrl+0)" onClick={() => setAppZoom(1)}><span className="zoom-reset-label">100</span></button></div>
           <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
           <span className={`save-status ${status === 'Saved locally' ? 'saved' : ''}`}><span className="status-dot" />{status}</span>
           <button className="icon-button" title="Details" onClick={() => setRightPanel((value) => value === 'details' ? null : 'details')}><Settings2 size={17} /></button>
@@ -922,6 +939,7 @@ export default function App() {
         <div className="editor-titlebar">
           <div className="editor-file-title">{typeIcon(activeTab.meta.kind, 16)}<b>{activeTab.meta.name}</b><span className="title-location">{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
           <div className="editor-tools">
+            {(activeTab.meta.kind === 'code' || (activeTab.meta.kind === 'markdown' && !activeTab.preview)) && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
             {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview: !tab.preview } : tab))}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
             <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
             <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
