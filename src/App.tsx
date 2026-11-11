@@ -22,10 +22,11 @@ import {
 } from 'lucide-react';
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { flushPendingAutosaves } from './storage/autosave';
+import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, downloadBackupFile, exportBackup, importBackup, serializeBackup } from './storage/backup';
-import { chooseBackupToRestore, isDesktopApp, pickDesktopFiles, pickDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import { downloadBackup, downloadBackupFile, exportBackup, exportBackupStream, importBackup, serializeBackup } from './storage/backup';
+import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -115,8 +116,9 @@ export default function App() {
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkTheme, setDarkTheme] = useState(true);
-  const [appZoom, setAppZoom] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-app-zoom')); return Number.isFinite(saved) && saved >= 0.8 && saved <= 1.4 ? saved : 1; });
-  const [editorFontSize, setEditorFontSize] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-editor-font-size')); return Number.isFinite(saved) && saved >= 11 && saved <= 24 ? saved : 14; });
+  const [appZoom, setAppZoom] = useState(1);
+  const [editorFontSize, setEditorFontSize] = useState(14);
+  const [uiPreferencesReady, setUiPreferencesReady] = useState(false);
   const [systemStats, setSystemStats] = useState<SystemStats>({ cpu: null, ram: null, gpu: null });
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -136,8 +138,14 @@ export default function App() {
   const closeInProgress = useRef(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { localStorage.setItem('silicon-vault-app-zoom', String(appZoom)); }, [appZoom]);
-  useEffect(() => { localStorage.setItem('silicon-vault-editor-font-size', String(editorFontSize)); }, [editorFontSize]);
+  useEffect(() => {
+    if (!uiPreferencesReady) return;
+    void db.preferences.put({ key: 'appZoom', value: appZoom, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save application zoom.'));
+  }, [appZoom, uiPreferencesReady]);
+  useEffect(() => {
+    if (!uiPreferencesReady) return;
+    void db.preferences.put({ key: 'editorFontSize', value: editorFontSize, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor font size.'));
+  }, [editorFontSize, uiPreferencesReady]);
   // Poll native counters sequentially; no renderer-side hardware polling or extra process.
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -248,6 +256,8 @@ export default function App() {
         return;
       }
       await db.open();
+      const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
+      setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true);
       const theme = await db.preferences.get('theme');
       setDarkTheme(theme ? theme.value === 'dark' : true);
       const selectedPreference = await db.preferences.get('activeWorkspace');
@@ -291,6 +301,8 @@ export default function App() {
           return;
         }
         await db.open();
+        const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
+        if (alive) { setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true); }
         const theme = await db.preferences.get('theme');
         if (theme?.value === 'dark') setDarkTheme(true);
         const storedWorkspace = await db.preferences.get('activeWorkspace');
@@ -657,7 +669,7 @@ export default function App() {
 
   async function saveWorkspaceBackup() {
     try {
-      if (isDesktopApp()) await saveBackupToDesktop(serializeBackup(await exportBackup(db)));
+      if (isDesktopApp()) await saveBackupToDesktop(exportBackupStream(db));
       else await downloadBackup(db);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create the workspace backup.'); }
   }
@@ -670,7 +682,7 @@ export default function App() {
 
   function startImportFolderInto(target: ImportTarget) {
     setImportTarget(target);
-    if (isDesktopApp()) { void pickDesktopFolder().then(async (files) => { if (!files.length) return; setImporting(true); try { await importFolderFiles(files, target); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.'); } finally { setImporting(false); setImportTarget(null); } }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the folder picker.')); return; }
+    if (isDesktopApp()) { setImporting(true); void (async () => { try { await importFolderFiles(iterateDesktopFolder(), target); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.'); } finally { setImporting(false); setImportTarget(null); } })(); return; }
     folderInput.current?.setAttribute('webkitdirectory', '');
     folderInput.current?.setAttribute('directory', '');
     folderInput.current?.click();
@@ -684,12 +696,11 @@ export default function App() {
     finally { setImporting(false); setImportTarget(null); if (folderInput.current) folderInput.current.value = ''; }
   }
 
-  async function importFolderFiles(selectedFiles: File[], target: ImportTarget) {
+  async function importFolderFiles(selectedFiles: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     const folderIds = new Map<string, string>();
     let imported = 0;
     {
-      selectedFiles.sort((a, b) => a.name.localeCompare(b.name));
-      for (const file of selectedFiles) {
+      for await (const file of selectedFiles) {
         const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.replaceAll('\\', '/') ?? file.name;
         const segments = relativePath.split('/').filter(Boolean);
         const directorySegments = segments.slice(0, -1);

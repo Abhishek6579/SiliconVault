@@ -25,3 +25,20 @@ This audit records the existing Dexie schema before adding storage features. The
 - Exercise migration against representative real user backups before any future schema change.
 - Confirm the persistent WebView data location and restart/update behavior from a packaged Windows build.
 - Collect the seven startup, workspace, document and tab memory measurements listed in `AGENTS.md` using repeatable Windows measurements. No memory measurements are claimed by this audit.
+
+## Confidentiality boundary
+
+Dexie/IndexedDB provides local persistence, not encryption. Workspace records and exported JSON backups are not encrypted by the application. Access is governed by the operating-system account, browser/WebView profile and device protections. Users should enable full-disk encryption where appropriate and protect exported backups as plaintext sensitive data.
+
+## Filesystem capability review
+
+The main-window capability retains file read, directory read and file write operations because the current product imports user-selected files, recursively imports a user-selected directory, and writes a backup to a user-selected destination. The unused text-specific read/write permissions were removed; the application uses byte-oriented operations. No recursive home-directory or whole-disk filesystem scope was added. Keep filesystem access behind the native file/directory/save dialogs, and re-audit this capability whenever a new filesystem operation is introduced.
+
+## Reliability and scalability changes
+
+- Backup validation checks record shape, field types, duplicate identifiers, content size, SHA-256 integrity and workspace/folder/project references before the replacement transaction begins. Pre-workspace version-1 backups remain importable and are assigned to the default workspace.
+- Backup export reads one content record at a time instead of materializing the entire contents table. Regular browser downloads and native desktop backup saves serialize file records incrementally; only the pre-migration safety backup still uses the existing in-memory serialized payload.
+- Desktop folder import walks the selected directory incrementally and imports each file before reading the next. Browser folder import also processes the selected File objects sequentially.
+- Folder subtree discovery now builds a parent-to-children index and traverses it in O(V + E), with cycle protection.
+- UI preference values previously stored under legacy localStorage keys are migrated to Dexie before the legacy keys are removed.
+- PDF render-task cancellation and PDF.js document destruction are centralized and covered by lifecycle tests.

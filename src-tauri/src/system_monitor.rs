@@ -257,3 +257,31 @@ mod windows_monitor {
         (cpu, ram)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn samples_only_bounded_percentages_or_unavailable_values() {
+        let mut monitor = SystemMonitor::new();
+        for _ in 0..2 {
+            let stats = monitor.sample();
+            for value in [stats.cpu, stats.ram, stats.gpu].into_iter().flatten() {
+                assert!(value.is_finite(), "system metric must be finite");
+                assert!((0.0..=100.0).contains(&value), "system metric must be a percentage");
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn unsupported_platform_reports_metrics_as_unavailable() {
+        let mut monitor = SystemMonitor::new();
+        let stats = monitor.sample();
+        assert!(stats.cpu.is_none());
+        assert!(stats.ram.is_none());
+        assert!(stats.gpu.is_none());
+    }
+}

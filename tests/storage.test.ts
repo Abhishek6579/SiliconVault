@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
-import { exportBackup, importBackup } from '../src/storage/backup';
+import { exportBackup, exportBackupStream, importBackup } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
@@ -146,6 +146,30 @@ describe('workspace storage', () => {
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
   });
 
+  it('exports file contents one record at a time instead of materializing the contents table', async () => {
+    const database = createDatabase();
+    await database.open();
+    await createTextFile(database, 'one.txt', 'one');
+    await createTextFile(database, 'two.txt', 'two');
+    const contentsArray = vi.spyOn(database.contents, 'toArray');
+    const contentsGet = vi.spyOn(database.contents, 'get');
+    const backup = await exportBackup(database);
+    expect(backup.files).toHaveLength(2);
+    expect(contentsArray).not.toHaveBeenCalled();
+    expect(contentsGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('produces a valid streamed backup without retaining a complete backup object', async () => {
+    const database = createDatabase();
+    await database.open();
+    await createTextFile(database, 'streamed.md', 'stream payload', { kind: 'markdown' });
+    const stream = exportBackupStream(database);
+    const streamed = JSON.parse(await new Response(stream).text()) as Awaited<ReturnType<typeof exportBackup>>;
+    expect(streamed.format).toBe('engineering-workspace-backup');
+    expect(streamed.files).toHaveLength(1);
+    expect(streamed.files[0].content).toMatchObject({ encoding: 'text', value: 'stream payload' });
+  });
+
   it('rejects an invalid version and checksum before changing stored data', async () => {
     const database = createDatabase();
     await database.open();
@@ -161,6 +185,31 @@ describe('workspace storage', () => {
     await expect(importBackup(database, corrupt)).rejects.toThrow('Checksum validation failed');
     expect(await database.projects.toArray()).toEqual([{ id: 'keep', name: 'Keep', workspaceId: DEFAULT_WORKSPACE_ID, archived: false, createdAt: now, updatedAt: now }]);
     expect(await database.contents.get('f1')).toEqual({ fileId: 'f1', data: 'text' });
+  });
+
+  it('rejects malformed backup metadata and broken references before replacing existing data', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.projects.add({ id: 'keep', name: 'Keep', workspaceId: DEFAULT_WORKSPACE_ID, archived: false, createdAt: now, updatedAt: now });
+    const valid = await exportBackup(database);
+    const malformed = {
+      ...valid,
+      files: [{
+        meta: { id: 'bad', workspaceId: DEFAULT_WORKSPACE_ID, name: 'bad.txt', kind: 'text', parentFolderId: null, projectId: null,
+          size: -1, mimeType: 'text/plain', createdAt: now, updatedAt: now, deletedAt: null },
+        content: { encoding: 'text', value: '' }, sha256: '0'.repeat(64),
+      }],
+    };
+    await expect(importBackup(database, malformed)).rejects.toThrow('invalid file record');
+    const dangling = { ...valid, folders: [{ id: 'child', workspaceId: DEFAULT_WORKSPACE_ID, name: 'Child', parentFolderId: 'missing', projectId: null, createdAt: now, updatedAt: now }] };
+    await expect(importBackup(database, dangling)).rejects.toThrow('folder that does not exist');
+    const cyclic = { ...valid, folders: [
+      { id: 'a', workspaceId: DEFAULT_WORKSPACE_ID, name: 'A', parentFolderId: 'b', projectId: null, createdAt: now, updatedAt: now },
+      { id: 'b', workspaceId: DEFAULT_WORKSPACE_ID, name: 'B', parentFolderId: 'a', projectId: null, createdAt: now, updatedAt: now },
+    ] };
+    await expect(importBackup(database, cyclic)).rejects.toThrow('hierarchy cycle');
+    expect(await database.projects.get('keep')).toBeDefined();
   });
 
   it('moves a folder subtree atomically and rejects cycles and project mismatches', async () => {
@@ -260,6 +309,13 @@ describe('workspace storage', () => {
     const preUpgradeBackup = await exportBackup(legacy);
     expect(preUpgradeBackup.files[0].meta.id).toBe('legacy-file');
     legacy.close();
+
+    const restored = createDatabase();
+    await restored.open();
+    await importBackup(restored, preUpgradeBackup);
+    expect(await restored.files.get('legacy-file')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID, name: 'legacy.md' });
+    expect(await restored.folders.get('legacy-folder')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await restored.projects.get('legacy-project')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
 
     const upgraded = new WorkspaceDatabase(name);
     databases.push(upgraded);
