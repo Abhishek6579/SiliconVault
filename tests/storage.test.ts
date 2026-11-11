@@ -21,9 +21,10 @@ afterEach(async () => {
 describe('file format classification', () => {
   it('keeps ordinary text and structured text files editable', () => {
     for (const name of ['notes.txt', 'build.log', 'settings.ini', 'config.conf', '.env', 'data.json', 'layout.xml', 'params.yaml', 'params.yml', 'settings.toml']) expect(kindForFile(name)).toBe('text');
+    for (const name of ['design.v', 'design.sv', 'header.vh', 'header.svh']) expect(kindForFile(name)).toBe('code');
   });
-  it('routes image, tabular, office, and engineering formats to read-only viewers', () => {
-    for (const name of ['plot.png', 'photo.jpeg', 'vector.svg', 'table.csv', 'table.tsv', 'report.docx', 'slides.pptx', 'book.xlsx', 'design.v', 'design.sv', 'header.vh', 'header.svh', 'trace.vcd', 'trace.fst', 'amp.sp', 'amp.cir', 'models.lib', 'chip.gds', 'chip.gdsii', 'board.kicad_pcb', 'sheet.kicad_sch']) expect(kindForFile(name)).toBe('viewer');
+  it('routes image, tabular, office, and non-editable engineering formats to read-only viewers', () => {
+    for (const name of ['plot.png', 'photo.jpeg', 'vector.svg', 'table.csv', 'table.tsv', 'report.docx', 'slides.pptx', 'book.xlsx', 'trace.vcd', 'trace.fst', 'amp.sp', 'amp.cir', 'models.lib', 'chip.gds', 'chip.gdsii', 'board.kicad_pcb', 'sheet.kicad_sch']) expect(kindForFile(name)).toBe('viewer');
   });
   it('preserves PDF, Markdown, and general code classifications', () => {
     expect(kindForFile('manual.pdf')).toBe('pdf');

@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
+import { StreamLanguage } from '@codemirror/language';
+import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
@@ -433,11 +435,11 @@ export default function App() {
     setError('');
   }, [activeWorkspaceId, tabs]);
 
-  const updateDraft = useCallback((id: string, draft: string) => {
-    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
-    setStatus('Saving…');
-    const revision = (draftRevisions.current.get(id) ?? 0) + 1;
-    draftRevisions.current.set(id, revision);
+  const persistDraft = useCallback(async (id: string, draft: string) => {
+    const pendingTimer = saveTimers.current.get(id);
+    if (pendingTimer) clearTimeout(pendingTimer);
+    saveTimers.current.delete(id);
+    const revision = draftRevisions.current.get(id) ?? 0;
     const previousSave = saveChains.current.get(id) ?? Promise.resolve();
     const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(() => {
       if (draftRevisions.current.get(id) === revision) {
@@ -446,15 +448,25 @@ export default function App() {
       }
     }).catch((reason: unknown) => {
       if (draftRevisions.current.get(id) === revision) { setStatus('Could not save'); setError(reason instanceof Error ? reason.message : 'Unable to save changes.'); }
+      throw reason;
     });
     saveChains.current.set(id, save);
+    await save;
+    await refresh();
+  }, [refresh]);
+
+  const updateDraft = useCallback((id: string, draft: string) => {
+    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
+    const revision = (draftRevisions.current.get(id) ?? 0) + 1;
+    draftRevisions.current.set(id, revision);
+    setStatus('Unsaved changes · Auto-save in 1 second');
     const previous = saveTimers.current.get(id);
     if (previous) clearTimeout(previous);
     saveTimers.current.set(id, setTimeout(() => {
       saveTimers.current.delete(id);
-      void refresh();
-    }, 350));
-  }, [refresh]);
+      void persistDraft(id, draft).catch(() => undefined);
+    }, 1000));
+  }, [persistDraft]);
 
   function createWorkspace() {
     requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
@@ -790,7 +802,13 @@ export default function App() {
       setTabs(remaining);
       if (activeTabId === id) setActiveTabId(remaining.at(-1)?.id ?? null);
     };
-    if (tab?.dirty) { requestConfirmation('Close while saving?', `“${tab.meta.name}” is still saving. It will finish saving in the background.`, 'Close tab', close, true); return; }
+    if (tab?.dirty) {
+      requestConfirmation('Save before closing?', `“${tab.meta.name}” has unsaved changes. Save them before closing this tab?`, 'Save & close', async () => {
+        await persistDraft(id, tab.draft);
+        close();
+      });
+      return;
+    }
     close();
   }
 
@@ -1009,6 +1027,7 @@ export default function App() {
           <div className="editor-tools">
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
             {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview: !tab.preview } : tab))}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
+            {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
             <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
             <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
@@ -1033,7 +1052,7 @@ export default function App() {
             } }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? javascript() : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? (
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
