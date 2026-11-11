@@ -1,9 +1,9 @@
 /** Application-level limits. Values are byte counts (not character counts). */
 export const MAX_IMPORT_FILE_SIZE_BYTES = 64 * 1024 * 1024;
-export const MAX_PDF_FILE_SIZE_BYTES = 24 * 1024 * 1024;
-export const MAX_BACKUP_FILE_SIZE_BYTES = 128 * 1024 * 1024;
-export const MAX_BACKUP_INDIVIDUAL_FILE_BYTES = 64 * 1024 * 1024;
-export const MAX_BACKUP_TOTAL_CONTENT_BYTES = 72 * 1024 * 1024;
+export const MAX_PDF_FILE_SIZE_BYTES = 100 * 1024 * 1024;
+export const MAX_BACKUP_FILE_SIZE_BYTES = 160 * 1024 * 1024;
+export const MAX_BACKUP_INDIVIDUAL_FILE_BYTES = 100 * 1024 * 1024;
+export const MAX_BACKUP_TOTAL_CONTENT_BYTES = 100 * 1024 * 1024;
 export const MAX_BACKUP_RECORDS = 100_000;
 
 function formatMiB(bytes: number): string {
