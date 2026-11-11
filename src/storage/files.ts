@@ -1,14 +1,17 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 
-const CODE_EXTENSIONS = new Set(['sv', 'v', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'json', 'sh', 's', 'asm']);
-const TEXT_EXTENSIONS = new Set(['md', 'markdown', 'txt', ...CODE_EXTENSIONS]);
+const CODE_EXTENSIONS = new Set(['vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'sh', 's', 'asm']);
+const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml', 'csv', 'tsv']);
+const VIEWER_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'svg', 'doc', 'docx', 'pptx', 'xlsx', 'v', 'sv', 'vh', 'svh', 'vcd', 'fst', 'sp', 'cir', 'lib', 'gds', 'gdsii', 'kicad_sch', 'kicad_pcb']);
 
 export function kindForFile(name: string, mimeType = ''): FileKind {
   const extension = name.split('.').pop()?.toLowerCase() ?? '';
   if (extension === 'pdf' || mimeType === 'application/pdf') return 'pdf';
   if (['md', 'markdown'].includes(extension)) return 'markdown';
   if (CODE_EXTENSIONS.has(extension)) return 'code';
+  if (TEXT_EXTENSIONS.has(extension)) return 'text';
+  if (VIEWER_EXTENSIONS.has(extension) || mimeType.startsWith('image/')) return 'viewer';
   return 'other';
 }
 

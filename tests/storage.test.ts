@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
 import { exportBackup, importBackup } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
-import { createTextFile, emptyTrash, restoreFile, saveFileText, softDeleteFile } from '../src/storage/files';
+import { createTextFile, emptyTrash, kindForFile, restoreFile, saveFileText, softDeleteFile } from '../src/storage/files';
 
 const databases: WorkspaceDatabase[] = [];
 function createDatabase(): WorkspaceDatabase {
@@ -16,6 +16,21 @@ afterEach(async () => {
     database.close();
     await database.delete();
   }));
+});
+
+describe('file format classification', () => {
+  it('keeps ordinary text and structured text files editable', () => {
+    for (const name of ['notes.txt', 'build.log', 'settings.ini', 'config.conf', '.env', 'data.json', 'layout.xml', 'params.yaml', 'params.yml', 'settings.toml']) expect(kindForFile(name)).toBe('text');
+  });
+  it('routes image, tabular, office, and engineering formats to read-only viewers', () => {
+    for (const name of ['plot.png', 'photo.jpeg', 'vector.svg', 'table.csv', 'table.tsv', 'report.docx', 'slides.pptx', 'book.xlsx', 'design.v', 'design.sv', 'header.vh', 'header.svh', 'trace.vcd', 'trace.fst', 'amp.sp', 'amp.cir', 'models.lib', 'chip.gds', 'chip.gdsii', 'board.kicad_pcb', 'sheet.kicad_sch']) expect(kindForFile(name)).toBe('viewer');
+  });
+  it('preserves PDF, Markdown, and general code classifications', () => {
+    expect(kindForFile('manual.pdf')).toBe('pdf');
+    expect(kindForFile('notes.md')).toBe('markdown');
+    expect(kindForFile('main.c')).toBe('code');
+    expect(kindForFile('unknown.bin')).toBe('other');
+  });
 });
 
 describe('workspace storage', () => {

@@ -4,10 +4,9 @@ import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
-import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -25,6 +24,7 @@ import { downloadBackup, downloadBackupFile, exportBackup, importBackup, seriali
 import { chooseBackupToRestore, isDesktopApp, pickDesktopFiles, pickDesktopFolder, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
+const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
 type View = 'workspace' | 'recent' | 'trash';
 interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
@@ -362,7 +362,7 @@ export default function App() {
         for (const file of liveFiles) {
           const titleMatch = file.name.toLocaleLowerCase().includes(needle);
           let text = '';
-          if (file.kind === 'markdown' || file.kind === 'code') {
+          if (file.kind === 'markdown' || file.kind === 'code' || file.kind === 'text') {
             const content = await db.contents.get(file.id);
             if (typeof content?.data === 'string') text = content.data;
             else if (content?.data instanceof Blob) text = await content.data.text();
@@ -383,7 +383,9 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [liveFiles, query]);
 
-  const openFile = useCallback(async (meta: FileMeta) => {
+  const openFile = useCallback(async (fileMeta: FileMeta) => {
+    // Reclassify on open so legacy HDL records cannot remain editable.
+    const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
     if (meta.workspaceId !== activeWorkspaceId) {
       setActiveWorkspaceId(meta.workspaceId);
       setActiveProject(meta.projectId);
@@ -394,14 +396,14 @@ export default function App() {
     const existing = tabs.find((tab) => tab.id === meta.id);
     if (existing) {
       let data = existing.data;
-      if (meta.kind === 'pdf' && !data) {
+      if ((meta.kind === 'pdf' || meta.kind === 'viewer') && !data) {
         const content = await db.contents.get(meta.id);
         if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
         data = content.data;
       }
       setTabs((current) => current.map((tab) => {
         if (tab.id === meta.id) return data === undefined ? tab : { ...tab, data };
-        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }));
@@ -411,7 +413,7 @@ export default function App() {
     }
     const content = await db.contents.get(meta.id);
     if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-    const data = (meta.kind === 'markdown' || meta.kind === 'code') && content.data instanceof Blob ? await content.data.text() : content.data;
+    const data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob ? await content.data.text() : content.data;
     const draft = fileText(data);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
     const pdfState = meta.kind === 'pdf' ? {
@@ -421,7 +423,7 @@ export default function App() {
     } : undefined;
     setTabs((current) => [
       ...current.map((tab) => {
-        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
@@ -512,7 +514,7 @@ export default function App() {
   }
 
   function createNewFile(kind: 'markdown' | 'code') {
-    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.sv';
+    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.ts';
     requestInput(kind === 'markdown' ? 'Create note' : 'Create code file', initial, 'File name', 'Create file', async (name) => {
       const text = kind === 'markdown' ? `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n` : '';
       const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID, kind });
@@ -527,7 +529,7 @@ export default function App() {
     try {
       for (const file of Array.from(fileList)) {
         const meta = await importFile(db, file, { parentFolderId: destinationFolderId, projectId: destinationProjectId, workspaceId: destinationWorkspaceId });
-        if (kindForFile(file.name, file.type) === 'pdf' || kindForFile(file.name, file.type) === 'markdown' || kindForFile(file.name, file.type) === 'code') await openFile(meta);
+        if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
       }
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected file.'); }
@@ -540,7 +542,7 @@ export default function App() {
     try {
       for (const file of files) {
         const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
-        if (['pdf', 'markdown', 'code'].includes(meta.kind)) await openFile(meta);
+        if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
       }
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected files.'); }
@@ -1030,10 +1032,12 @@ export default function App() {
               return <code className={className} {...props}>{children}</code>;
             } }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
-        ) : activeTab.meta.kind === 'code' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.name.match(/\.(sv|v)$/i) ? StreamLanguage.define(verilog) : javascript(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+        ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? javascript() : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+        ) : activeTab.meta.kind === 'viewer' ? (
+          <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
-        <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
+        <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body">
         {tabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{tabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{typeIcon(tab.meta.kind, 14)}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <div className="welcome-page">
