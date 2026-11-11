@@ -166,6 +166,28 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
   const normalizedProjects = backup.projects.map((project) => ({ ...project, workspaceId: project.workspaceId ?? DEFAULT_WORKSPACE_ID }));
   const normalizedFileMeta = backup.files.map((file) => ({ ...file.meta, workspaceId: file.meta.workspaceId ?? DEFAULT_WORKSPACE_ID }));
   const normalizedMetaById = new Map(normalizedFileMeta.map((meta) => [meta.id, meta]));
+  const foldersById = new Map(normalizedFolders.map((folder) => [folder.id, folder]));
+  const projectsById = new Map(normalizedProjects.map((project) => [project.id, project]));
+  for (const folder of normalizedFolders) {
+    const parent = folder.parentFolderId ? foldersById.get(folder.parentFolderId) : undefined;
+    const project = folder.projectId ? projectsById.get(folder.projectId) : undefined;
+    if (folder.parentFolderId && (!parent || parent.workspaceId !== folder.workspaceId || parent.projectId !== folder.projectId)) {
+      throw new Error('This backup contains an inconsistent folder hierarchy.');
+    }
+    if (folder.projectId && (!project || project.workspaceId !== folder.workspaceId)) {
+      throw new Error('This backup contains a folder assigned to an inconsistent project.');
+    }
+  }
+  for (const meta of normalizedFileMeta) {
+    const parent = meta.parentFolderId ? foldersById.get(meta.parentFolderId) : undefined;
+    const project = meta.projectId ? projectsById.get(meta.projectId) : undefined;
+    if (meta.parentFolderId && (!parent || parent.workspaceId !== meta.workspaceId || parent.projectId !== meta.projectId)) {
+      throw new Error('This backup contains a file assigned to an inconsistent folder.');
+    }
+    if (meta.projectId && (!project || project.workspaceId !== meta.workspaceId)) {
+      throw new Error('This backup contains a file assigned to an inconsistent project.');
+    }
+  }
 
   const decoded: Array<{ meta: FileMeta; content: FileContent }> = [];
   for (const item of backup.files) {
