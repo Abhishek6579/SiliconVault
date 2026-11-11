@@ -128,7 +128,7 @@ mod windows_monitor {
         pub fn new() -> Self {
             let mut query = 0;
             let mut counter = 0;
-            let path: Vec<u16> = "\\\\GPU Engine(*)\\Utilization Percentage\0".encode_utf16().collect();
+            let path: Vec<u16> = "\\GPU Engine(*)\\Utilization Percentage\0".encode_utf16().collect();
             unsafe {
                 if PdhOpenQueryW(ptr::null(), 0, &mut query) != 0 {
                     return Self { query: 0, counter: 0 };
@@ -223,7 +223,7 @@ mod windows_monitor {
                 let total = kernel.as_u64().saturating_add(user.as_u64());
                 let idle = idle.as_u64();
                 let current = (total, idle);
-                let usage = previous_cpu.and_then(|(old_total, old_idle)| {
+                let usage = (*previous_cpu).and_then(|(old_total, old_idle)| {
                     let total_delta = total.saturating_sub(old_total);
                     let idle_delta = idle.saturating_sub(old_idle);
                     (total_delta > 0).then(|| {
