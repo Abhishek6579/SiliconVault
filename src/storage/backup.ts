@@ -219,6 +219,19 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
   const normalizedMetaById = new Map(normalizedFileMeta.map((meta) => [meta.id, meta]));
   const foldersById = new Map(normalizedFolders.map((folder) => [folder.id, folder]));
   const projectsById = new Map(normalizedProjects.map((project) => [project.id, project]));
+  const parentById = new Map(normalizedFolders.map((folder) => [folder.id, folder.parentFolderId]));
+  const visitState = new Map<string, 1 | 2>();
+  for (const folder of normalizedFolders) {
+    const path: string[] = [];
+    let current: string | null | undefined = folder.id;
+    while (current && visitState.get(current) !== 2) {
+      if (visitState.get(current) === 1) throw new Error('This backup contains a folder hierarchy cycle.');
+      visitState.set(current, 1);
+      path.push(current);
+      current = parentById.get(current);
+    }
+    for (const id of path) visitState.set(id, 2);
+  }
   for (const folder of normalizedFolders) {
     const parent = folder.parentFolderId ? foldersById.get(folder.parentFolderId) : undefined;
     const project = folder.projectId ? projectsById.get(folder.projectId) : undefined;
