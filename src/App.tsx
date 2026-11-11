@@ -108,7 +108,7 @@ export default function App() {
   const [sortDesc, setSortDesc] = useState(false);
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkTheme, setDarkTheme] = useState(false);
+  const [darkTheme, setDarkTheme] = useState(true);
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -125,34 +125,34 @@ export default function App() {
   const draftRevisions = useRef(new Map<string, number>());
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  // The code editor has its own fixed dark theme; it does not follow the workspace light/dark toggle.
+  // Fixed near-black editor theme inspired by the supplied reference.
   const editorTheme = useMemo(() => EditorView.theme({
-    '&': { height: '100%', backgroundColor: '#11110f', color: '#ded7ca' },
-    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.65', overflow: 'auto' },
-    '.cm-content': { caretColor: '#e0ad61' },
+    '&': { height: '100%', backgroundColor: '#111111', color: '#e6e6e6' },
+    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
+    '.cm-content': { caretColor: '#f2f2f2' },
     '.cm-line': { padding: '0 4px' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#d6a45b' },
-    '.cm-gutters': { backgroundColor: '#141310', color: '#82796b', border: 'none', borderRight: '1px solid #29251f' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#f2f2f2' },
+    '.cm-gutters': { backgroundColor: '#111111', color: '#777777', border: 'none', borderRight: '1px solid #242424' },
     '.cm-lineNumbers .cm-gutterElement': { minWidth: '3.5em', padding: '0 12px 0 10px' },
-    '.cm-activeLine': { backgroundColor: '#211d16' },
-    '.cm-activeLineGutter': { backgroundColor: '#292218', color: '#e0b36f' },
-    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#44351f' },
-    '.cm-selectionMatch': { backgroundColor: '#3a3324' },
-    '.cm-focused .cm-matchingBracket': { backgroundColor: '#3a3324', outline: '1px solid #8c6a3b' },
-    '.cm-searchMatch': { backgroundColor: '#5a4526', outline: '1px solid #8c6a3b' },
-    '.cm-searchMatch-selected': { backgroundColor: '#6b512b' },
-    '.cm-tooltip': { backgroundColor: '#1d1a16', color: '#ded7ca', border: '1px solid #3b3328' },
-    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30271b', color: '#f0e5d3' },
-    '.cm-foldPlaceholder': { backgroundColor: '#30271b', color: '#c9bda9', border: 'none' },
+    '.cm-activeLine': { backgroundColor: '#191919' },
+    '.cm-activeLineGutter': { backgroundColor: '#191919', color: '#d8d8d8' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#343b4a' },
+    '.cm-selectionMatch': { backgroundColor: '#292f3a' },
+    '.cm-focused .cm-matchingBracket': { backgroundColor: '#292f3a', outline: '1px solid #59677f' },
+    '.cm-searchMatch': { backgroundColor: '#51421f', outline: '1px solid #8a7134' },
+    '.cm-searchMatch-selected': { backgroundColor: '#6a5526' },
+    '.cm-tooltip': { backgroundColor: '#1b1b1b', color: '#e6e6e6', border: '1px solid #383838' },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30343d', color: '#ffffff' },
+    '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
   }, { dark: true }), []);
   const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
-    { tag: tags.comment, color: '#85877c', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#d4a45f' },
-    { tag: [tags.typeName, tags.className], color: '#8fb8ad' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#c5a4d6' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#a9c58b' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#d99a70' },
-    { tag: tags.operator, color: '#b7b4aa' },
+    { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#c586c0' },
+    { tag: [tags.typeName, tags.className], color: '#4ec9b0' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#dcdcaa' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#ce9178' },
+    { tag: [tags.number, tags.bool, tags.null], color: '#b5cea8' },
+    { tag: tags.operator, color: '#d4d4d4' },
   ])), []);
 
   const refresh = useCallback(async () => {
@@ -195,7 +195,7 @@ export default function App() {
       else downloadBackupFile(migrationBackup);
       await db.open();
       const theme = await db.preferences.get('theme');
-      if (theme?.value === 'dark') setDarkTheme(true);
+      setDarkTheme(theme ? theme.value === 'dark' : true);
       const selectedPreference = await db.preferences.get('activeWorkspace');
       const nextWorkspaces = await db.workspaces.toArray();
       setWorkspaces(nextWorkspaces);
@@ -280,9 +280,6 @@ export default function App() {
   const activeProjects = projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId);
   const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-  const updateActivePdfView = useCallback((state: PdfViewState) => {
-    if (activeTabId) updatePdfView(activeTabId, state);
-  }, [activeTabId, updatePdfView]);
   const allLiveFiles = files.filter((file) => file.deletedAt === null);
   const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
   const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
@@ -931,7 +928,18 @@ export default function App() {
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           </div>
         </div>
-        {activeTab.meta.kind === 'pdf' ? <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}><PdfReader key={activeTab.id} data={activeTab.data} title={activeTab.meta.name} initialState={activeTab.pdfState} onStateChange={updateActivePdfView} /></Suspense> : activeTab.meta.kind === 'markdown' ? (
+        {tabs.some((tab) => tab.meta.kind === 'pdf') && (
+          <div className="pdf-tabs-host">
+            {tabs.filter((tab) => tab.meta.kind === 'pdf').map((tab) => (
+              <div className="pdf-tab-host" key={tab.id} style={{ display: activeTabId === tab.id && activeTab.meta.kind === 'pdf' ? 'flex' : 'none' }}>
+                <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
+                  <PdfReader tabId={tab.id} data={tab.data} title={tab.meta.name} initialState={tab.pdfState} onStateChange={updatePdfView} />
+                </Suspense>
+              </div>
+            ))}
+          </div>
+        )}
+        {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
             {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{ code({ className, children, ...props }) {
