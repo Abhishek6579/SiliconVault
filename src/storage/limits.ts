@@ -2,7 +2,7 @@
 export const MAX_IMPORT_FILE_SIZE_BYTES = 64 * 1024 * 1024;
 export const MAX_PDF_FILE_SIZE_BYTES = 24 * 1024 * 1024;
 export const MAX_BACKUP_FILE_SIZE_BYTES = 128 * 1024 * 1024;
-export const MAX_BACKUP_INDIVIDUAL_FILE_BYTES = 32 * 1024 * 1024;
+export const MAX_BACKUP_INDIVIDUAL_FILE_BYTES = 64 * 1024 * 1024;
 export const MAX_BACKUP_TOTAL_CONTENT_BYTES = 72 * 1024 * 1024;
 export const MAX_BACKUP_RECORDS = 100_000;
 
@@ -17,9 +17,9 @@ export function assertBackupFileSize(size: number): void {
   }
 }
 
-export function assertImportFileSize(name: string, size: number): void {
+export function assertImportFileSize(name: string, size: number, mimeType = ''): void {
   if (!Number.isFinite(size) || size < 0) throw new Error(`The file ${name} has an invalid file size.`);
-  const isPdf = name.toLowerCase().endsWith('.pdf');
+  const isPdf = name.toLowerCase().endsWith('.pdf') || mimeType === 'application/pdf';
   const limit = isPdf ? MAX_PDF_FILE_SIZE_BYTES : MAX_IMPORT_FILE_SIZE_BYTES;
   if (size > limit) {
     throw new Error(`${name} is too large to import. ${isPdf ? 'PDF files' : 'Files'} are limited to ${formatMiB(limit)}.`);

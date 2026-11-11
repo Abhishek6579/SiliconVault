@@ -38,7 +38,7 @@ export async function createTextFile(database: WorkspaceDatabase, name: string, 
 }
 
 export async function importFile(database: WorkspaceDatabase, file: File, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string } = {}) {
-  assertImportFileSize(file.name, file.size);
+  assertImportFileSize(file.name, file.size, file.type);
   const now = Date.now();
   const id = crypto.randomUUID();
   const meta = {

@@ -16,7 +16,7 @@ export async function* iterateDesktopFiles(): AsyncGenerator<File> {
   for (const path of selected) {
     const name = path.split(/[\\\\/]/).pop() || 'Imported file';
     const info = await stat(path);
-    assertImportFileSize(name, info.size);
+    assertImportFileSize(name, info.size, mimeType(name));
     const bytes = await readFile(path);
     yield new File([bytes], name, { type: mimeType(name) });
   }
@@ -34,7 +34,7 @@ export async function* iterateDesktopFolder(): AsyncGenerator<File> {
         yield* visit(path, childRelative);
       } else if (entry.isFile) {
         const info = await stat(path);
-        assertImportFileSize(entry.name, info.size);
+        assertImportFileSize(entry.name, info.size, mimeType(entry.name));
         const bytes = await readFile(path);
         const file = new File([bytes], entry.name, { type: mimeType(entry.name) });
         Object.defineProperty(file, 'webkitRelativePath', { value: childRelative });

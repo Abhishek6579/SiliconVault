@@ -5,6 +5,7 @@ import { createFolder, deleteWorkspace, moveFile, moveFolder, restoreProject, so
 import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
 import { assertBackupFileSize, assertImportFileSize, MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_TOTAL_CONTENT_BYTES, MAX_IMPORT_FILE_SIZE_BYTES, MAX_PDF_FILE_SIZE_BYTES } from '../src/storage/limits';
+import { parseBackupFile } from '../src/features/backup/parse';
 
 const databases: WorkspaceDatabase[] = [];
 function createDatabase(): WorkspaceDatabase {
@@ -24,8 +25,17 @@ describe('application import and backup size limits', () => {
   it('accepts files at the configured import boundaries and rejects files above them', () => {
     expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES)).not.toThrow();
     expect(() => assertImportFileSize('large.bin', MAX_IMPORT_FILE_SIZE_BYTES + 1)).toThrow(/limited to 64 MiB/);
+    expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 24 MiB/);
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES)).not.toThrow();
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 24 MiB/);
+  });
+
+  it('rejects an oversized browser backup before reading its text', async () => {
+    const file = new File(['{}'], 'oversized.json');
+    Object.defineProperty(file, 'size', { value: MAX_BACKUP_FILE_SIZE_BYTES + 1 });
+    const readText = vi.spyOn(file, 'text');
+    await expect(parseBackupFile(file)).rejects.toThrow(/maximum backup size is 128 MiB/);
+    expect(readText).not.toHaveBeenCalled();
   });
 
   it('checks backup file size before parsing or desktop file allocation', () => {

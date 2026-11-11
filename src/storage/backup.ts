@@ -95,7 +95,7 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
   let aggregateContentBytes = 0;
   for (const item of value.files as Array<{ meta: FileMeta; content: { encoding: 'text' | 'base64'; value: string } }>) {
     if (item.meta.size > MAX_BACKUP_INDIVIDUAL_FILE_BYTES) {
-      throw new Error(`Backup file "${item.meta.name}" exceeds the per-file restore limit of 32 MiB.`);
+      throw new Error(`Backup file "${item.meta.name}" exceeds the per-file restore limit of 64 MiB.`);
     }
     aggregateContentBytes += item.meta.size;
     if (aggregateContentBytes > MAX_BACKUP_TOTAL_CONTENT_BYTES) {
