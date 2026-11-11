@@ -4,10 +4,9 @@ import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
-import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -384,7 +383,9 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [liveFiles, query]);
 
-  const openFile = useCallback(async (meta: FileMeta) => {
+  const openFile = useCallback(async (fileMeta: FileMeta) => {
+    // Reclassify on open so legacy HDL records cannot remain editable.
+    const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
     if (meta.workspaceId !== activeWorkspaceId) {
       setActiveWorkspaceId(meta.workspaceId);
       setActiveProject(meta.projectId);
@@ -422,7 +423,7 @@ export default function App() {
     } : undefined;
     setTabs((current) => [
       ...current.map((tab) => {
-        if (tab.meta.kind !== 'pdf' || tab.data === undefined) return tab;
+        if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
@@ -513,7 +514,7 @@ export default function App() {
   }
 
   function createNewFile(kind: 'markdown' | 'code') {
-    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.sv';
+    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.ts';
     requestInput(kind === 'markdown' ? 'Create note' : 'Create code file', initial, 'File name', 'Create file', async (name) => {
       const text = kind === 'markdown' ? `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n` : '';
       const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID, kind });
