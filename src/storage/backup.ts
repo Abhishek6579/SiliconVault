@@ -163,7 +163,7 @@ async function* backupJsonChunks(database: BackupDatabase): AsyncGenerator<strin
   yield `],"folders":${JSON.stringify(folders)},"projects":${JSON.stringify(projects)},"preferences":${JSON.stringify(preferences)},"workspaces":${JSON.stringify(workspaces)}}`;
 }
 
-async function createBackupBlob(database: BackupDatabase): Promise<Blob> {
+export function exportBackupStream(database: BackupDatabase): ReadableStream<Uint8Array> {
   const iterator = backupJsonChunks(database);
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -177,7 +177,11 @@ async function createBackupBlob(database: BackupDatabase): Promise<Blob> {
     },
     cancel() { void iterator.return?.(); },
   });
-  return new Response(stream, { headers: { 'Content-Type': 'application/json' } }).blob();
+  return stream;
+}
+
+async function createBackupBlob(database: BackupDatabase): Promise<Blob> {
+  return new Response(exportBackupStream(database), { headers: { 'Content-Type': 'application/json' } }).blob();
 }
 
 export async function downloadBackup(database: BackupDatabase): Promise<void> {
