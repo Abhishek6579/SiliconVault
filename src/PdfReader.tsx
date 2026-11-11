@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { disposePdfResources } from './pdf/lifecycle';
+import { MAX_PDF_FILE_SIZE_BYTES } from './storage/limits';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -71,6 +72,17 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     setPageSizes([]);
     setMeasuredThroughPage(0);
 
+    const cleanup = () => {
+      active = false;
+      disposePdfResources(renderTasks.current, loadingTask, loaded);
+      renderedScales.current.clear();
+      pendingScales.current.clear();
+    };
+    if (source.size > MAX_PDF_FILE_SIZE_BYTES) {
+      setError(`This PDF is too large to open. PDF files are limited to ${Math.floor(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+      return cleanup;
+    }
+
     source.arrayBuffer().then((bytes) => {
       if (!active) return null;
       loadingTask = getDocument({ data: new Uint8Array(bytes) });
@@ -124,12 +136,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       if (active) setError(reason instanceof Error ? reason.message : 'Unable to open this PDF.');
     });
 
-    return () => {
-      active = false;
-      disposePdfResources(renderTasks.current, loadingTask, loaded);
-      renderedScales.current.clear();
-      pendingScales.current.clear();
-    };
+    return cleanup;
   }, [source]);
 
   // Track container width. A zero width means the tab is hidden; remember that

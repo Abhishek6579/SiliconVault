@@ -1,10 +1,10 @@
 import type { Table } from 'dexie';
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { BackupFile, FileMeta, Workspace, WorkspaceBackup, WorkspacePreference } from './types';
+import { MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_RECORDS, MAX_BACKUP_TOTAL_CONTENT_BYTES } from './limits';
 
 const FORMAT = 'engineering-workspace-backup';
 const VERSION = 1;
-const MAX_RECORDS = 1_000_000;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
 
 type BackupDatabase = Pick<WorkspaceDatabase, 'files' | 'contents' | 'folders' | 'projects'> & {
@@ -79,7 +79,9 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
     throw new Error('This backup is invalid or uses an unsupported version.');
   }
   const arrays = [value.files, value.folders, value.projects, value.preferences ?? [], value.workspaces ?? []];
-  if (arrays.some((records) => records.length > MAX_RECORDS)) throw new Error('This backup exceeds the supported record limit.');
+  if (arrays.some((records) => records.length > MAX_BACKUP_RECORDS) || arrays.reduce((total, records) => total + records.length, 0) > MAX_BACKUP_RECORDS) {
+    throw new Error(`This backup exceeds the supported record limit of ${MAX_BACKUP_RECORDS.toLocaleString()} records.`);
+  }
   if (!value.files.every((item) => isRecord(item) && validateFileMeta(item.meta) && isRecord(item.content) &&
       (item.content.encoding === 'text' || item.content.encoding === 'base64') && typeof item.content.value === 'string' &&
       typeof item.sha256 === 'string')) {
@@ -88,6 +90,23 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
   if (!value.folders.every(validateFolder) || !value.projects.every(validateProject) ||
       !(value.preferences ?? []).every(validatePreference) || !(value.workspaces ?? []).every(validateWorkspace)) {
     throw new Error('This backup contains invalid metadata records.');
+  }
+
+  let aggregateContentBytes = 0;
+  for (const item of value.files as Array<{ meta: FileMeta; content: { encoding: 'text' | 'base64'; value: string } }>) {
+    if (item.meta.size > MAX_BACKUP_INDIVIDUAL_FILE_BYTES) {
+      throw new Error(`Backup file "${item.meta.name}" exceeds the per-file restore limit of 32 MiB.`);
+    }
+    aggregateContentBytes += item.meta.size;
+    if (aggregateContentBytes > MAX_BACKUP_TOTAL_CONTENT_BYTES) {
+      throw new Error('This backup exceeds the total restored-content limit of 72 MiB.');
+    }
+    if (item.content.encoding === 'base64' && item.content.value.length !== Math.ceil(item.meta.size / 3) * 4) {
+      throw new Error(`Backup file "${item.meta.name}" has an invalid encoded content length.`);
+    }
+    if (item.content.encoding === 'text' && item.content.value.length > item.meta.size) {
+      throw new Error(`Backup file "${item.meta.name}" has an invalid text content length.`);
+    }
   }
 
   const unique = (records: unknown[], key: (record: any) => string) => {

@@ -26,6 +26,7 @@ import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
+import { assertBackupFileSize } from './storage/limits';
 import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
 import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
@@ -683,6 +684,7 @@ export default function App() {
   async function openBackup(file: File | undefined) {
     if (!file) return;
     try {
+      assertBackupFileSize(file.size);
       const backup = JSON.parse(await file.text()) as unknown;
       requestConfirmation('Restore workspace backup?', 'Restoring replaces the current workspaces, projects, folders, files, and preferences.', 'Restore backup', async () => {
         await flushPendingSaves();
