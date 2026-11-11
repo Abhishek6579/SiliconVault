@@ -1,7 +1,15 @@
 export type FileKind = 'pdf' | 'markdown' | 'code' | 'other';
 
+export interface Workspace {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface FileMeta {
   id: string;
+  workspaceId: string;
   kind: FileKind;
   name: string;
   parentFolderId: string | null;
@@ -20,6 +28,7 @@ export interface FileContent {
 
 export interface Folder {
   id: string;
+  workspaceId: string;
   name: string;
   parentFolderId: string | null;
   projectId: string | null;
@@ -29,9 +38,16 @@ export interface Folder {
 
 export interface Project {
   id: string;
+  workspaceId: string;
   name: string;
   archived: boolean;
   createdAt: number;
+  updatedAt: number;
+}
+
+export interface WorkspacePreference {
+  key: string;
+  value: unknown;
   updatedAt: number;
 }
 
@@ -48,4 +64,6 @@ export interface WorkspaceBackup {
   files: BackupFile[];
   folders: Folder[];
   projects: Project[];
+  workspaces?: Workspace[];
+  preferences?: WorkspacePreference[];
 }

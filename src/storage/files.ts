@@ -1,4 +1,4 @@
-import type { WorkspaceDatabase } from './database';
+import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 
 const CODE_EXTENSIONS = new Set(['sv', 'v', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'json', 'sh', 's', 'asm']);
@@ -12,12 +12,13 @@ export function kindForFile(name: string, mimeType = ''): FileKind {
   return 'other';
 }
 
-export async function createTextFile(database: WorkspaceDatabase, name: string, text: string, options: { parentFolderId?: string | null; projectId?: string | null; kind?: FileKind } = {}) {
+export async function createTextFile(database: WorkspaceDatabase, name: string, text: string, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string; kind?: FileKind } = {}) {
   const now = Date.now();
   const id = crypto.randomUUID();
   const kind = options.kind ?? kindForFile(name, 'text/plain');
   const meta = {
     id, kind, name,
+    workspaceId: options.workspaceId ?? DEFAULT_WORKSPACE_ID,
     parentFolderId: options.parentFolderId ?? null,
     projectId: options.projectId ?? null,
     size: new TextEncoder().encode(text).byteLength,
@@ -31,11 +32,12 @@ export async function createTextFile(database: WorkspaceDatabase, name: string, 
   return meta;
 }
 
-export async function importFile(database: WorkspaceDatabase, file: File, options: { parentFolderId?: string | null; projectId?: string | null } = {}) {
+export async function importFile(database: WorkspaceDatabase, file: File, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string } = {}) {
   const now = Date.now();
   const id = crypto.randomUUID();
   const meta = {
     id, kind: kindForFile(file.name, file.type), name: file.name,
+    workspaceId: options.workspaceId ?? DEFAULT_WORKSPACE_ID,
     parentFolderId: options.parentFolderId ?? null,
     projectId: options.projectId ?? null,
     size: file.size, mimeType: file.type || 'application/octet-stream',
