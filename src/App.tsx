@@ -125,36 +125,35 @@ export default function App() {
   const draftRevisions = useRef(new Map<string, number>());
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  // The code editor has its own fixed dark theme; it does not follow the workspace light/dark toggle.
   const editorTheme = useMemo(() => EditorView.theme({
-    '&': { height: '100%', backgroundColor: darkTheme ? '#1b1e22' : '#ffffff', color: darkTheme ? '#d9dde3' : '#3f4650' },
-    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
-    '.cm-content': { caretColor: darkTheme ? '#c6d2ec' : '#4867aa' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: darkTheme ? '#c6d2ec' : '#4867aa' },
-    '.cm-gutters': { backgroundColor: darkTheme ? '#1b1e22' : '#f8f9fb', color: darkTheme ? '#707782' : '#a2a8b1', border: 'none', borderRight: `1px solid ${darkTheme ? '#30343a' : '#eceef1'}` },
-    '.cm-activeLine': { backgroundColor: darkTheme ? '#24282e' : '#f7f8fa' },
-    '.cm-activeLineGutter': { backgroundColor: darkTheme ? '#24282e' : '#f1f3f6', color: darkTheme ? '#b2bac7' : '#657084' },
-    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: darkTheme ? '#39465e' : '#dce6fa' },
-    '.cm-selectionMatch': { backgroundColor: darkTheme ? '#34403d' : '#e4eee8' },
-    '.cm-tooltip': { backgroundColor: darkTheme ? '#25292f' : '#ffffff', color: darkTheme ? '#d9dde3' : '#3f4650', border: `1px solid ${darkTheme ? '#3a4048' : '#dfe3e9'}` },
-    '.cm-foldPlaceholder': { backgroundColor: darkTheme ? '#30343a' : '#eef0f3', color: darkTheme ? '#c1c7d0' : '#68717d', border: 'none' },
-  }, { dark: darkTheme }), [darkTheme]);
-  const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define(darkTheme ? [
-    { tag: tags.comment, color: '#8f99a5', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#aebfe5' },
-    { tag: [tags.typeName, tags.className], color: '#9bc8c1' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#c6b0e4' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#c4d6a4' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#d8b58c' },
-    { tag: tags.operator, color: '#c0c8d6' },
-  ] : [
-    { tag: tags.comment, color: '#858c96', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#405e9d' },
-    { tag: [tags.typeName, tags.className], color: '#286c68' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#725398' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#4f7c49' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#9b6330' },
-    { tag: tags.operator, color: '#555f70' },
-  ])), [darkTheme]);
+    '&': { height: '100%', backgroundColor: '#11110f', color: '#ded7ca' },
+    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.65', overflow: 'auto' },
+    '.cm-content': { caretColor: '#e0ad61' },
+    '.cm-line': { padding: '0 4px' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#d6a45b' },
+    '.cm-gutters': { backgroundColor: '#141310', color: '#82796b', border: 'none', borderRight: '1px solid #29251f' },
+    '.cm-lineNumbers .cm-gutterElement': { minWidth: '3.5em', padding: '0 12px 0 10px' },
+    '.cm-activeLine': { backgroundColor: '#211d16' },
+    '.cm-activeLineGutter': { backgroundColor: '#292218', color: '#e0b36f' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#44351f' },
+    '.cm-selectionMatch': { backgroundColor: '#3a3324' },
+    '.cm-focused .cm-matchingBracket': { backgroundColor: '#3a3324', outline: '1px solid #8c6a3b' },
+    '.cm-searchMatch': { backgroundColor: '#5a4526', outline: '1px solid #8c6a3b' },
+    '.cm-searchMatch-selected': { backgroundColor: '#6b512b' },
+    '.cm-tooltip': { backgroundColor: '#1d1a16', color: '#ded7ca', border: '1px solid #3b3328' },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30271b', color: '#f0e5d3' },
+    '.cm-foldPlaceholder': { backgroundColor: '#30271b', color: '#c9bda9', border: 'none' },
+  }, { dark: true }), []);
+  const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
+    { tag: tags.comment, color: '#85877c', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#d4a45f' },
+    { tag: [tags.typeName, tags.className], color: '#8fb8ad' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#c5a4d6' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#a9c58b' },
+    { tag: [tags.number, tags.bool, tags.null], color: '#d99a70' },
+    { tag: tags.operator, color: '#b7b4aa' },
+  ])), []);
 
   const refresh = useCallback(async () => {
     try {
