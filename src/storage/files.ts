@@ -63,10 +63,10 @@ export function validateFileName(name: string, currentName?: string): void {
     throw new Error('Enter a valid file name without leading or trailing whitespace.');
   }
   if (name.length > 255) throw new Error('File names cannot exceed 255 characters.');
-  if (/[<>:"/\\|?*\\u0000-\\u001f]/.test(name) || /[. ]$/.test(name)) {
+  if (/[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name)) {
     throw new Error('The file name contains characters or trailing punctuation that Windows does not support.');
   }
-  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i.test(name)) {
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) {
     throw new Error('This file name is reserved by Windows.');
   }
   if (currentName !== undefined && fileExtension(name) !== fileExtension(currentName)) {
