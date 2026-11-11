@@ -457,3 +457,21 @@ html, body, #root {
 .file-tab .truncate { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-tab .dirty-dot, .file-tab .tab-close { flex: 0 0 auto; }
 .tab-plus { flex: 0 0 30px; }
+
+/* The PDF reading pane is the only workspace area with a visible scrollbar. */
+.pdf-page-host {
+  scrollbar-width: thin;
+  scrollbar-color: #737b8b transparent;
+}
+.pdf-page-host::-webkit-scrollbar {
+  display: block !important;
+  width: 9px !important;
+  height: 9px !important;
+}
+.pdf-page-host::-webkit-scrollbar-track { background: transparent; }
+.pdf-page-host::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: #737b8b80;
+  background-clip: content-box;
+}

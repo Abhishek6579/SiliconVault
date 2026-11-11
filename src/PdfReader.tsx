@@ -15,34 +15,64 @@ interface PageSize { width: number; height: number; }
 export default function PdfReader({ tabId, data, title, initialState, onStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef(new Map<number, HTMLCanvasElement>());
-  const pageRefs = useRef(new Map<number, HTMLDivElement>());
   const renderTasks = useRef(new Map<number, RenderTask>());
   const renderedScales = useRef(new Map<number, string>());
   const pendingScales = useRef(new Map<number, string>());
-  const initialScrollPending = useRef(true);
+
+  // Single source of truth for the page the user is on. Updated only by
+  // navigation or by scroll tracking that is trusted (see updateVisiblePage).
+  const anchorRef = useRef(initialState?.page ?? 1);
+  // Ignore scroll events caused by our own scrolling for a short window.
+  const navigatingUntilRef = useRef(0);
+  // Set when the host is hidden (display: none) so we know to re-anchor on show.
+  const hiddenRef = useRef(false);
+  const cancelPageEditRef = useRef(false);
+  const onStateChangeRef = useRef(onStateChange);
+  const viewRef = useRef({ tabId, zoom: initialState?.zoom ?? 1, fit: initialState?.fit ?? true });
+
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [pageNumber, setPageNumber] = useState(initialState?.page ?? 1);
   const [pageInput, setPageInput] = useState(String(initialState?.page ?? 1));
   const [pageCount, setPageCount] = useState(0);
+  const [measuredThroughPage, setMeasuredThroughPage] = useState(0);
   const [pageSizes, setPageSizes] = useState<PageSize[]>([]);
   const [zoom, setZoom] = useState(initialState?.zoom ?? 1);
   const [fit, setFit] = useState(initialState?.fit ?? true);
   const [hostWidth, setHostWidth] = useState(0);
+  const [layoutVersion, setLayoutVersion] = useState(0);
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const [error, setError] = useState('');
+
   const source = useMemo(() => data instanceof Blob ? data : new Blob([data]), [data]);
+
+  // Scale per page, and the exact top offset of every page, computed from
+  // known sizes. No DOM measurement, so navigation is deterministic.
+  const pageScales = useMemo(
+    () => pageSizes.map((size) => fit ? Math.min(1.8, Math.max(.1, (hostWidth - 72) / size.width)) : zoom),
+    [pageSizes, fit, zoom, hostWidth],
+  );
+  const pageOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let top = 0;
+    pageSizes.forEach((size, index) => {
+      offsets.push(top);
+      top += size.height * pageScales[index];
+    });
+    return offsets;
+  }, [pageSizes, pageScales]);
+
   useEffect(() => {
     let active = true;
     let loaded: PDFDocumentProxy | null = null;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
-    initialScrollPending.current = true;
     setDocument(null);
     setPageSizes([]);
+    setMeasuredThroughPage(0);
+
     source.arrayBuffer().then((bytes) => {
       if (!active) return null;
-      // A view over the Blob's buffer avoids allocating a second full-size PDF copy.
       loadingTask = getDocument({ data: new Uint8Array(bytes) });
       return loadingTask.promise;
     }).then(async (pdf) => {
@@ -54,12 +84,12 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       firstPage.cleanup();
       if (!active) return;
 
-      // Show the reader after measuring one page. The rest of the page dimensions
-      // are filled in progressively so long PDFs don't delay their first render.
+      const restored = Math.min(pdf.numPages, Math.max(1, initialState?.page ?? 1));
+      anchorRef.current = restored;
       setDocument(pdf);
       setPageCount(pdf.numPages);
       setPageSizes(Array.from({ length: pdf.numPages }, () => firstSize));
-      const restored = Math.min(pdf.numPages, Math.max(1, initialState?.page ?? 1));
+      setMeasuredThroughPage(1);
       setPageNumber(restored);
       setPageInput(String(restored));
       setError('');
@@ -85,11 +115,15 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
             for (const item of measured) next[item.number - 1] = item.size;
             return next;
           });
+          setMeasuredThroughPage(end);
         }
       })().catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : 'Unable to prepare PDF pages.');
       });
-    }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to open this PDF.'); });
+    }).catch((reason: unknown) => {
+      if (active) setError(reason instanceof Error ? reason.message : 'Unable to open this PDF.');
+    });
+
     return () => {
       active = false;
       disposePdfResources(renderTasks.current, loadingTask, loaded);
@@ -98,36 +132,56 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     };
   }, [source]);
 
+  // Track container width. A zero width means the tab is hidden; remember that
+  // so we re-anchor when it becomes visible again.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const observer = new ResizeObserver(() => setHostWidth(host.clientWidth));
+    const observer = new ResizeObserver(() => {
+      const width = host.clientWidth;
+      if (width === 0) { hiddenRef.current = true; return; }
+      if (hiddenRef.current) {
+        hiddenRef.current = false;
+        setLayoutVersion((version) => version + 1);
+      }
+      setHostWidth(width);
+    });
     observer.observe(host);
-    setHostWidth(host.clientWidth);
+    if (host.clientWidth > 0) setHostWidth(host.clientWidth);
     return () => observer.disconnect();
   }, []);
 
-  function scaleFor(size: PageSize) {
-    return fit ? Math.min(1.8, Math.max(.1, (hostWidth - 72) / size.width)) : zoom;
+  function scrollToPageTop(page: number, behavior: ScrollBehavior) {
+    const host = hostRef.current;
+    const top = pageOffsets[page - 1];
+    if (!host || top === undefined) return;
+    navigatingUntilRef.current = performance.now() + (behavior === 'smooth' ? 700 : 250);
+    host.scrollTo({ top, behavior });
   }
 
-  function scrollToPage(page: number, behavior: ScrollBehavior = 'smooth') {
-    const host = hostRef.current;
-    const target = pageRefs.current.get(page);
-    if (!host || !target) return;
-    const top = target.getBoundingClientRect().top - host.getBoundingClientRect().top + host.scrollTop - 10;
-    host.scrollTo({ top: Math.max(0, top), behavior });
+  function goTo(page: number, behavior: ScrollBehavior = 'smooth') {
+    anchorRef.current = page;
     setPageNumber(page);
     setPageInput(String(page));
+    // If the target isn't measured yet, the anchor effect below scrolls once it is.
+    if (measuredThroughPage >= page) scrollToPageTop(page, behavior);
   }
 
+  function goToEnteredPage() {
+    const page = Number(pageInput);
+    if (!Number.isInteger(page) || page < 1 || page > pageCount) {
+      setPageInput(String(pageNumber));
+      return;
+    }
+    goTo(page, 'auto');
+  }
+
+  // Re-land on the anchored page whenever anything that changes layout happens:
+  // initial load, measurement progress, width, zoom/fit, or tab re-show.
   useLayoutEffect(() => {
-    if (!document || !hostWidth || pageSizes.length !== pageCount || !initialScrollPending.current) return;
-    const restored = Math.min(pageCount, Math.max(1, initialState?.page ?? 1));
-    if (!pageRefs.current.has(restored)) return;
-    initialScrollPending.current = false;
-    scrollToPage(restored, 'auto');
-  }, [document, hostWidth, initialState?.page, pageCount, pageSizes]);
+    if (!document || !hostWidth || measuredThroughPage < anchorRef.current) return;
+    scrollToPageTop(anchorRef.current, 'auto');
+  }, [document, hostWidth, zoom, fit, measuredThroughPage, layoutVersion]);
 
   useEffect(() => {
     if (!document || !hostWidth || pageSizes.length !== pageCount) return;
@@ -136,8 +190,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     const last = Math.min(pageCount, pageNumber + 2);
     for (const [number, canvas] of canvasRefs.current) {
       if (number < first || number > last) {
-        const task = renderTasks.current.get(number);
-        task?.cancel();
+        renderTasks.current.get(number)?.cancel();
         renderTasks.current.delete(number);
         renderedScales.current.delete(number);
         pendingScales.current.delete(number);
@@ -147,9 +200,8 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     }
     const renderPage = async (number: number) => {
       const canvas = canvasRefs.current.get(number);
-      const size = pageSizes[number - 1];
-      if (!canvas || !size) return;
-      const scale = scaleFor(size);
+      const scale = pageScales[number - 1];
+      if (!canvas || scale === undefined) return;
       const scaleKey = `${scale.toFixed(4)}:${ratio}`;
       if (renderedScales.current.get(number) === scaleKey || pendingScales.current.get(number) === scaleKey) return;
       renderTasks.current.get(number)?.cancel();
@@ -173,58 +225,57 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       try {
         await task.promise;
         if (pendingScales.current.get(number) === scaleKey) renderedScales.current.set(number, scaleKey);
-      }
-      catch (reason) {
+      } catch (reason) {
         if ((reason as { name?: string })?.name !== 'RenderingCancelledException') throw reason;
-      }
-      finally {
+      } finally {
         if (renderTasks.current.get(number) === task) renderTasks.current.delete(number);
         if (pendingScales.current.get(number) === scaleKey) pendingScales.current.delete(number);
         page.cleanup();
       }
     };
     void Promise.all(Array.from({ length: last - first + 1 }, (_, index) => renderPage(first + index)))
-      .catch((reason: unknown) => { if ((reason as { name?: string })?.name !== 'RenderingCancelledException') setError(reason instanceof Error ? reason.message : 'Unable to render this PDF.'); });
-  }, [document, pageCount, pageSizes, hostWidth, zoom, fit, pageNumber]);
+      .catch((reason: unknown) => {
+        if ((reason as { name?: string })?.name !== 'RenderingCancelledException') {
+          setError(reason instanceof Error ? reason.message : 'Unable to render this PDF.');
+        }
+      });
+  }, [document, pageCount, pageSizes, pageScales, hostWidth, pageNumber]);
 
+  // Persist view state. Also saves on unmount, so switching tabs (which may
+  // unmount this reader) keeps the current page.
+  useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
+  useEffect(() => { viewRef.current = { tabId, zoom, fit }; }, [tabId, zoom, fit]);
   useEffect(() => {
-    onStateChange?.(tabId, { page: pageNumber, zoom, fit });
-  }, [tabId, pageNumber, zoom, fit, onStateChange]);
+    onStateChangeRef.current?.(tabId, { page: anchorRef.current, zoom, fit });
+  }, [tabId, pageNumber, zoom, fit]);
+  useEffect(() => () => {
+    const view = viewRef.current;
+    onStateChangeRef.current?.(view.tabId, { page: anchorRef.current, zoom: view.zoom, fit: view.fit });
+  }, []);
 
   function updateVisiblePage() {
     const host = hostRef.current;
-    if (!host || !pageCount) return;
-    const readingLine = host.getBoundingClientRect().top + 30;
-    let low = 1;
-    let high = pageCount;
-    let visible = 1;
+    if (!host || !pageCount || host.clientWidth === 0 || host.clientHeight === 0) return;
+    if (performance.now() < navigatingUntilRef.current) return;
+    if (measuredThroughPage < anchorRef.current) return;
 
-    // Track actual rendered page bounds to avoid cumulative offset drift.
-    while (low <= high) {
-      const mid = Math.floor((low + high) / 2);
-      const element = pageRefs.current.get(mid);
-      if (!element) { low = mid + 1; continue; }
-      const rect = element.getBoundingClientRect();
-      if (readingLine < rect.top) high = mid - 1;
-      else if (readingLine > rect.bottom) { visible = mid; low = mid + 1; }
-      else { visible = mid; break; }
+    // Largest page whose top is at or above the current scroll position.
+    const y = host.scrollTop + 1;
+    let low = 0;
+    let high = pageOffsets.length - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (pageOffsets[mid] <= y) low = mid;
+      else high = mid - 1;
     }
+    const next = low + 1;
+    // Offsets are only exact for measured pages (plus the first unmeasured one).
+    if (next > measuredThroughPage + 1) return;
 
-    if (low > pageCount) visible = pageCount;
-    else if (low <= pageCount && low > high) {
-      const nextElement = pageRefs.current.get(low);
-      const previousElement = pageRefs.current.get(Math.max(1, low - 1));
-      if (nextElement && previousElement) {
-        const nextTop = nextElement.getBoundingClientRect().top;
-        const previousBottom = previousElement.getBoundingClientRect().bottom;
-        visible = readingLine - previousBottom < nextTop - readingLine ? low - 1 : low;
-      } else if (nextElement) visible = low;
-    }
-
-    const nextPage = Math.min(pageCount, Math.max(1, visible));
-    if (nextPage !== pageNumber) {
-      setPageNumber(nextPage);
-      setPageInput(String(nextPage));
+    anchorRef.current = next;
+    if (next !== pageNumber) {
+      setPageNumber(next);
+      setPageInput(String(next));
     }
   }
 
@@ -248,19 +299,35 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     }
     setMatches(found);
     setMatchIndex(0);
-    if (found[0]) scrollToPage(found[0].page);
+    if (found[0]) goTo(found[0].page);
   }
 
   return <div className="pdf-shell">
     <div className="pdf-toolbar">
       <div className="pdf-page-controls">
-        <button className="icon-button" title="Previous page" disabled={pageNumber <= 1} onClick={() => scrollToPage(Math.max(1, pageNumber - 1))}><ArrowLeft size={16} /></button>
-        <input aria-label="Page number" className="page-input" value={pageInput} onChange={(event) => {
-          setPageInput(event.target.value);
-          const page = Number(event.target.value); if (Number.isInteger(page) && page >= 1 && page <= pageCount) scrollToPage(page);
-        }} />
+        <button className="icon-button" title="Previous page" disabled={pageNumber <= 1} onClick={() => goTo(Math.max(1, pageNumber - 1))}><ArrowLeft size={16} /></button>
+        <input
+          aria-label="Page number"
+          className="page-input"
+          type="text"
+          inputMode="numeric"
+          value={pageInput}
+          onChange={(event) => setPageInput(event.target.value.replace(/[^0-9]/g, ''))}
+          onBlur={() => {
+            if (cancelPageEditRef.current) { cancelPageEditRef.current = false; return; }
+            goToEnteredPage();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur();
+            if (event.key === 'Escape') {
+              cancelPageEditRef.current = true;
+              setPageInput(String(pageNumber));
+              event.currentTarget.blur();
+            }
+          }}
+        />
         <span className="muted">of {pageCount || '—'}</span>
-        <button className="icon-button" title="Next page" disabled={pageNumber >= pageCount} onClick={() => scrollToPage(Math.min(pageCount, pageNumber + 1))}><ArrowRight size={16} /></button>
+        <button className="icon-button" title="Next page" disabled={pageNumber >= pageCount} onClick={() => goTo(Math.min(pageCount, pageNumber + 1))}><ArrowRight size={16} /></button>
       </div>
       <div className="pdf-find">
         <Search size={15} />
@@ -276,19 +343,36 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       </div>
     </div>
     {error && <div className="inline-error">Could not open {title}: {error}</div>}
-    <div className="pdf-page-host" ref={hostRef} onScroll={updateVisiblePage}>
+    <div
+      className="pdf-page-host"
+      ref={hostRef}
+      onScroll={updateVisiblePage}
+      style={{ overflowAnchor: 'none' }}
+    >
       {!document && !error && <div className="loading-state">Loading PDF…</div>}
-      {document && <div className="pdf-document-pages">{pageSizes.map((size, index) => {
+      {document && <div
+        className="pdf-document-pages"
+        style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, margin: 0 }}
+      >{pageSizes.map((size, index) => {
         const page = index + 1;
-        const scale = scaleFor(size);
-        return <div className="pdf-page-wrap" key={page} data-page={page} ref={(element) => { if (element) pageRefs.current.set(page, element); else pageRefs.current.delete(page); }} style={{ height: `${size.height * scale}px` }}>
-          <canvas ref={(element) => { if (element) canvasRefs.current.set(page, element); else canvasRefs.current.delete(page); }} aria-label={`${title}, page ${page}`} />
+        const scale = pageScales[index];
+        return <div
+          className="pdf-page-wrap"
+          key={page}
+          data-page={page}
+          style={{ height: `${size.height * scale}px`, margin: 0 }}
+        >
+          <canvas
+            style={{ display: 'block' }}
+            ref={(element) => { if (element) canvasRefs.current.set(page, element); else canvasRefs.current.delete(page); }}
+            aria-label={`${title}, page ${page}`}
+          />
         </div>;
       })}</div>}
     </div>
     {matches.length > 0 && <div className="pdf-search-results">
       <div className="section-label">Search matches</div>
-      {matches.slice(0, 30).map((match, index) => <button key={`${match.page}-${index}`} className={`search-hit ${matchIndex === index ? 'active' : ''}`} onClick={() => { setMatchIndex(index); scrollToPage(match.page); }}><b>Page {match.page}</b><span>{match.snippet}</span></button>)}
+      {matches.slice(0, 30).map((match, index) => <button key={`${match.page}-${index}`} className={`search-hit ${matchIndex === index ? 'active' : ''}`} onClick={() => { setMatchIndex(index); goTo(match.page); }}><b>Page {match.page}</b><span>{match.snippet}</span></button>)}
       {matches.length > 30 && <span className="muted">Showing the first 30 of {matches.length} matches</span>}
     </div>}
   </div>;
