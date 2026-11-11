@@ -1,0 +1,38 @@
+{
+  "name": "engineering-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@uiw/react-codemirror": "^4.23.10",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/legacy-modes": "^6.4.0",
+    "dexie": "^4.0.11",
+    "katex": "^0.16.22",
+    "lucide-react": "^0.468.0",
+    "mermaid": "^11.4.1",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}
