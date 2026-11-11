@@ -273,20 +273,54 @@ html, body, #root {
 .tree-row .tree-main > .twisty,
 .tree-row .tree-main > .project-dot { flex: 0 0 auto; }
 
-
-/* Compact native system monitor in place of the storage meter. */
-.system-monitor { display:flex; flex-direction:column; gap:5px; padding:0 1px 1px; }
-.system-monitor-heading { height:14px; display:flex; align-items:center; gap:6px; color:#858b95; font-size:9px; font-weight:650; letter-spacing:.65px; text-transform:uppercase; }
-.system-monitor-heading svg { color:#9298a2; }
-.system-monitor-live { margin-left:auto; color:#719b80; font-size:8px; font-weight:700; letter-spacing:.7px; }
-.system-metric { height:12px; display:grid; grid-template-columns:29px minmax(0,1fr) 30px; align-items:center; gap:7px; }
-.system-metric-label { color:#858b95; font-size:9px; font-weight:550; }
-.system-metric-track { height:3px; overflow:hidden; border-radius:4px; background:#e5e7eb; }
-.system-metric-track i { display:block; height:100%; border-radius:inherit; background:#9299a5; transition:width .25s ease; }
-.system-metric-value { color:#737a85; text-align:right; font-size:9px; font-variant-numeric:tabular-nums; }
-.app-shell[data-theme="dark"] .system-monitor-heading,
-.app-shell[data-theme="dark"] .system-metric-label { color:#a0a0a0; }
-.app-shell[data-theme="dark"] .system-monitor-heading svg { color:#929292; }
-.app-shell[data-theme="dark"] .system-metric-track { background:#303030; }
-.app-shell[data-theme="dark"] .system-metric-track i { background:#b0b0b0; }
-.app-shell[data-theme="dark"] .system-metric-value { color:#b5b5b5; }
+/* The active document is the only flex child allowed to occupy editor space. */
+.editor-workspace,
+.app-shell.focus-mode .editor-workspace {
+  height: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.code-editor {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel);
+}
+.code-editor .cm-editor {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.code-editor .cm-scroller {
+  height: 100%;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #737b8b transparent;
+}
+.code-editor .cm-scroller::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+.code-editor .cm-scroller::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: #737b8b80;
+  background-clip: content-box;
+}
+.note-layout {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.note-layout > .code-editor,
+.note-layout > .markdown-preview {
+  min-height: 0;
+  min-width: 0;
+}
