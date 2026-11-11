@@ -163,6 +163,26 @@ describe('workspace storage', () => {
     expect(await database.contents.get('f1')).toEqual({ fileId: 'f1', data: 'text' });
   });
 
+  it('rejects malformed backup metadata and broken references before replacing existing data', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.projects.add({ id: 'keep', name: 'Keep', workspaceId: DEFAULT_WORKSPACE_ID, archived: false, createdAt: now, updatedAt: now });
+    const valid = await exportBackup(database);
+    const malformed = {
+      ...valid,
+      files: [{
+        meta: { id: 'bad', workspaceId: DEFAULT_WORKSPACE_ID, name: 'bad.txt', kind: 'text', parentFolderId: null, projectId: null,
+          size: -1, mimeType: 'text/plain', createdAt: now, updatedAt: now, deletedAt: null },
+        content: { encoding: 'text', value: '' }, sha256: '0'.repeat(64),
+      }],
+    };
+    await expect(importBackup(database, malformed)).rejects.toThrow('invalid file record');
+    const dangling = { ...valid, folders: [{ id: 'child', workspaceId: DEFAULT_WORKSPACE_ID, name: 'Child', parentFolderId: 'missing', projectId: null, createdAt: now, updatedAt: now }] };
+    await expect(importBackup(database, dangling)).rejects.toThrow('folder that does not exist');
+    expect(await database.projects.get('keep')).toBeDefined();
+  });
+
   it('moves a folder subtree atomically and rejects cycles and project mismatches', async () => {
     const database = createDatabase();
     await database.open();
