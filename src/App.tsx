@@ -25,7 +25,7 @@ import { flushPendingAutosaves } from './storage/autosave';
 import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
-import { buildWorkspaceTree, type WorkspaceWorkspaceTreeFolder } from './storage/tree';
+import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
