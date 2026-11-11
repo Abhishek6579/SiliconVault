@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
-import { exportBackup, importBackup } from '../src/storage/backup';
+import { exportBackup, exportBackupStream, importBackup } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, moveFile, moveFolder, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
@@ -157,6 +157,17 @@ describe('workspace storage', () => {
     expect(backup.files).toHaveLength(2);
     expect(contentsArray).not.toHaveBeenCalled();
     expect(contentsGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('produces a valid streamed backup without retaining a complete backup object', async () => {
+    const database = createDatabase();
+    await database.open();
+    await createTextFile(database, 'streamed.md', 'stream payload', { kind: 'markdown' });
+    const stream = exportBackupStream(database);
+    const streamed = JSON.parse(await new Response(stream).text()) as Awaited<ReturnType<typeof exportBackup>>;
+    expect(streamed.format).toBe('engineering-workspace-backup');
+    expect(streamed.files).toHaveLength(1);
+    expect(streamed.files[0].content).toMatchObject({ encoding: 'text', value: 'stream payload' });
   });
 
   it('rejects an invalid version and checksum before changing stored data', async () => {
