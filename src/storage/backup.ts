@@ -48,16 +48,16 @@ function validateWorkspace(value: unknown): value is Workspace {
   return isRecord(value) && nonEmptyString(value.id) && nonEmptyString(value.name) && finiteTime(value.createdAt) && finiteTime(value.updatedAt);
 }
 function validateProject(value: unknown): boolean {
-  return isRecord(value) && nonEmptyString(value.id) && nonEmptyString(value.workspaceId) && nonEmptyString(value.name) &&
+  return isRecord(value) && nonEmptyString(value.id) && (value.workspaceId === undefined || nonEmptyString(value.workspaceId)) && nonEmptyString(value.name) &&
     typeof value.archived === 'boolean' && finiteTime(value.createdAt) && finiteTime(value.updatedAt);
 }
 function validateFolder(value: unknown): boolean {
-  return isRecord(value) && nonEmptyString(value.id) && nonEmptyString(value.workspaceId) && nonEmptyString(value.name) &&
+  return isRecord(value) && nonEmptyString(value.id) && (value.workspaceId === undefined || nonEmptyString(value.workspaceId)) && nonEmptyString(value.name) &&
     (value.parentFolderId === null || nonEmptyString(value.parentFolderId)) &&
     (value.projectId === null || nonEmptyString(value.projectId)) && finiteTime(value.createdAt) && finiteTime(value.updatedAt);
 }
 function validateFileMeta(value: unknown): value is FileMeta {
-  return isRecord(value) && nonEmptyString(value.id) && nonEmptyString(value.workspaceId) && nonEmptyString(value.name) &&
+  return isRecord(value) && nonEmptyString(value.id) && (value.workspaceId === undefined || nonEmptyString(value.workspaceId)) && nonEmptyString(value.name) &&
     ['pdf', 'markdown', 'code', 'text', 'viewer', 'other'].includes(String(value.kind)) &&
     (value.parentFolderId === null || nonEmptyString(value.parentFolderId)) &&
     (value.projectId === null || nonEmptyString(value.projectId)) &&
@@ -66,7 +66,7 @@ function validateFileMeta(value: unknown): value is FileMeta {
     (value.deletedAt === null || finiteTime(value.deletedAt));
 }
 function validatePreference(value: unknown): boolean {
-  return isRecord(value) && nonEmptyString(value.key) && finiteTime(value.updatedAt) && Object.hasOwn(value, 'value');
+  return isRecord(value) && nonEmptyString(value.key) && finiteTime(value.updatedAt) && Object.prototype.hasOwnProperty.call(value, 'value');
 }
 
 function validateBackup(value: unknown): asserts value is WorkspaceBackup {
@@ -154,7 +154,7 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
   const projectIds = new Set(backup.projects.map((project) => project.id));
   const validateRelations = (records: Array<{ workspaceId: string; parentFolderId?: string | null; projectId?: string | null }>) => {
     for (const record of records) {
-      if (!knownWorkspaceIds.has(record.workspaceId)) throw new Error('This backup references a workspace that does not exist.');
+      if (record.workspaceId && !knownWorkspaceIds.has(record.workspaceId)) throw new Error('This backup references a workspace that does not exist.');
       if (record.parentFolderId && !folderIds.has(record.parentFolderId)) throw new Error('This backup references a folder that does not exist.');
       if (record.projectId && !projectIds.has(record.projectId)) throw new Error('This backup references a project that does not exist.');
     }
@@ -162,6 +162,9 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
   validateRelations(backup.folders);
   validateRelations(backup.files.map((file) => file.meta));
   validateRelations(backup.projects);
+  const normalizedFolders = backup.folders.map((folder) => ({ ...folder, workspaceId: folder.workspaceId ?? DEFAULT_WORKSPACE_ID }));
+  const normalizedProjects = backup.projects.map((project) => ({ ...project, workspaceId: project.workspaceId ?? DEFAULT_WORKSPACE_ID }));
+  const normalizedFileMeta = backup.files.map((file) => ({ ...file.meta, workspaceId: file.meta.workspaceId ?? DEFAULT_WORKSPACE_ID }));
 
   const decoded: Array<{ meta: FileMeta; content: FileContent }> = [];
   for (const item of backup.files) {
@@ -176,7 +179,8 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     const data: Blob | string = item.content.encoding === 'text'
       ? item.content.value
       : new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: item.meta.mimeType });
-    decoded.push({ meta: item.meta, content: { fileId: item.meta.id, data } });
+    const meta = normalizedFileMeta.find((record) => record.id === item.meta.id)!;
+    decoded.push({ meta, content: { fileId: item.meta.id, data } });
   }
 
   await database.transaction('rw', [database.files, database.contents, database.folders, database.projects, database.preferences, database.workspaces], async () => {
@@ -187,8 +191,8 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     await database.preferences.clear();
     await database.workspaces.clear();
     await database.workspaces.bulkAdd(workspaces);
-    await database.projects.bulkAdd(backup.projects);
-    await database.folders.bulkAdd(backup.folders);
+    await database.projects.bulkAdd(normalizedProjects);
+    await database.folders.bulkAdd(normalizedFolders);
     await database.files.bulkAdd(decoded.map((record) => record.meta));
     // Write content in bounded batches to keep IndexedDB transaction payloads bounded.
     for (let offset = 0; offset < decoded.length; offset += 100) {
