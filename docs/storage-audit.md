@@ -25,3 +25,7 @@ This audit records the existing Dexie schema before adding storage features. The
 - Exercise migration against representative real user backups before any future schema change.
 - Confirm the persistent WebView data location and restart/update behavior from a packaged Windows build.
 - Collect the seven startup, workspace, document and tab memory measurements listed in `AGENTS.md` using repeatable Windows measurements. No memory measurements are claimed by this audit.
+
+## Confidentiality boundary
+
+Dexie/IndexedDB provides local persistence, not encryption. Workspace records and exported JSON backups are not encrypted by the application. Access is governed by the operating-system account, browser/WebView profile and device protections. Users should enable full-disk encryption where appropriate and protect exported backups as plaintext sensitive data.
