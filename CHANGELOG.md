@@ -1,6 +1,6 @@
 # Changelog
 
-User-visible changes to SiliconVault are recorded here. The repository currently declares version `0.1.0`; this file does not fabricate a release history.
+User-visible changes to SiliconVault are recorded here. The repository currently prepares version `0.1.1-alpha.2`; this file does not fabricate a release history.
 
 ## [Unreleased]
 

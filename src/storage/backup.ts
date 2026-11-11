@@ -1,6 +1,6 @@
 import type { Table } from 'dexie';
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
-import type { BackupFile, FileContent, FileMeta, Workspace, WorkspaceBackup, WorkspacePreference } from './types';
+import type { BackupFile, FileMeta, Workspace, WorkspaceBackup, WorkspacePreference } from './types';
 
 const FORMAT = 'engineering-workspace-backup';
 const VERSION = 1;
@@ -49,7 +49,9 @@ function validateWorkspace(value: unknown): value is Workspace {
 }
 function validateProject(value: unknown): boolean {
   return isRecord(value) && nonEmptyString(value.id) && (value.workspaceId === undefined || nonEmptyString(value.workspaceId)) && nonEmptyString(value.name) &&
-    typeof value.archived === 'boolean' && finiteTime(value.createdAt) && finiteTime(value.updatedAt);
+    typeof value.archived === 'boolean' &&
+    (value.archivedAt === undefined || value.archivedAt === null || finiteTime(value.archivedAt)) &&
+    finiteTime(value.createdAt) && finiteTime(value.updatedAt);
 }
 function validateFolder(value: unknown): boolean {
   return isRecord(value) && nonEmptyString(value.id) && (value.workspaceId === undefined || nonEmptyString(value.workspaceId)) && nonEmptyString(value.name) &&
@@ -253,7 +255,7 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     }
   }
 
-  const decoded: Array<{ meta: FileMeta; content: FileContent }> = [];
+  // Validate before replacing live data, retaining only one decoded payload at a time.
   for (const item of backup.files) {
     let bytes: Uint8Array;
     try {
@@ -262,12 +264,9 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
       throw new Error(`File content for ${item.meta.name} is not valid.`);
     }
     if (bytes.byteLength !== item.meta.size) throw new Error(`File size validation failed for ${item.meta.name}.`);
-    if (!SHA256_PATTERN.test(item.sha256) || await checksum(bytes) !== item.sha256) throw new Error(`Checksum validation failed for ${item.meta.name}.`);
-    const data: Blob | string = item.content.encoding === 'text'
-      ? item.content.value
-      : new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: item.meta.mimeType });
-    const meta = normalizedMetaById.get(item.meta.id)!;
-    decoded.push({ meta, content: { fileId: item.meta.id, data } });
+    if (!SHA256_PATTERN.test(item.sha256) || await checksum(bytes) !== item.sha256) {
+      throw new Error(`Checksum validation failed for ${item.meta.name}.`);
+    }
   }
 
   await database.transaction('rw', [database.files, database.contents, database.folders, database.projects, database.preferences, database.workspaces], async () => {
@@ -280,10 +279,20 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     await database.workspaces.bulkAdd(workspaces);
     await database.projects.bulkAdd(normalizedProjects);
     await database.folders.bulkAdd(normalizedFolders);
-    await database.files.bulkAdd(decoded.map((record) => record.meta));
-    // Write content in bounded batches to keep IndexedDB transaction payloads bounded.
-    for (let offset = 0; offset < decoded.length; offset += 100) {
-      await database.contents.bulkAdd(decoded.slice(offset, offset + 100).map((record) => record.content));
+    await database.files.bulkAdd(normalizedFileMeta);
+    // Decode and persist bounded batches; never retain the complete restored content set.
+    for (let offset = 0; offset < backup.files.length; offset += 50) {
+      const batch = backup.files.slice(offset, offset + 50).map((item) => {
+        const meta = normalizedMetaById.get(item.meta.id)!;
+        const data = item.content.encoding === 'text'
+          ? item.content.value
+          : (() => {
+              const bytes = base64ToBytes(item.content.value);
+              return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: meta.mimeType });
+            })();
+        return { fileId: meta.id, data };
+      });
+      await database.contents.bulkAdd(batch);
     }
     await database.preferences.bulkAdd(backup.preferences ?? []);
   });

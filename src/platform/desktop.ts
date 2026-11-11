@@ -6,15 +6,17 @@ export function isDesktopApp(): boolean {
   return isTauri();
 }
 
-export async function pickDesktopFiles(): Promise<File[]> {
+export async function* iterateDesktopFiles(): AsyncGenerator<File> {
   const paths = await open({ multiple: true, title: 'Import files' });
-  if (!paths) return [];
+  if (!paths) return;
   const selected = Array.isArray(paths) ? paths : [paths];
-  return Promise.all(selected.map(async (path) => {
+  // Read and yield one selected file at a time; the caller persists it before
+  // the next file is read, avoiding a Promise.all-sized memory spike.
+  for (const path of selected) {
     const bytes = await readFile(path);
     const name = path.split(/[\\/]/).pop() || 'Imported file';
-    return new File([bytes], name, { type: mimeType(name) });
-  }));
+    yield new File([bytes], name, { type: mimeType(name) });
+  }
 }
 
 export async function* iterateDesktopFolder(): AsyncGenerator<File> {

@@ -23,11 +23,11 @@ import {
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { flushPendingAutosaves } from './storage/autosave';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
+import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, downloadBackupFile, exportBackup, exportBackupStream, importBackup, serializeBackup } from './storage/backup';
-import { chooseBackupToRestore, isDesktopApp, iterateDesktopFolder, pickDesktopFiles, saveBackupToDesktop } from './platform/desktop';
-import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
+import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
+import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
@@ -70,9 +70,30 @@ function MermaidDiagram({ source }: MermaidDiagramProps) {
 }
 
 function buildTree(folders: FolderRecord[], files: FileMeta[], parentId: string | null, projectId: string | null, workspaceId: string | null): TreeFolder[] {
-  return folders.filter((folder) => folder.parentFolderId === parentId && folder.projectId === projectId && folder.workspaceId === workspaceId)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
-    .map((record) => ({ record, children: buildTree(folders, files, record.id, projectId, workspaceId), files: files.filter((file) => file.parentFolderId === record.id && file.projectId === projectId && file.workspaceId === workspaceId) }));
+  const foldersByParent = new Map<string | null, FolderRecord[]>();
+  const filesByParent = new Map<string | null, FileMeta[]>();
+  for (const folder of folders) {
+    if (folder.projectId !== projectId || folder.workspaceId !== workspaceId) continue;
+    const siblings = foldersByParent.get(folder.parentFolderId);
+    if (siblings) siblings.push(folder); else foldersByParent.set(folder.parentFolderId, [folder]);
+  }
+  for (const file of files) {
+    if (file.projectId !== projectId || file.workspaceId !== workspaceId) continue;
+    const siblings = filesByParent.get(file.parentFolderId);
+    if (siblings) siblings.push(file); else filesByParent.set(file.parentFolderId, [file]);
+  }
+  for (const siblings of foldersByParent.values()) siblings.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  const visited = new Set<string>();
+  const build = (parent: string | null): TreeFolder[] => {
+    const children: TreeFolder[] = [];
+    for (const record of foldersByParent.get(parent) ?? []) {
+      if (visited.has(record.id)) continue;
+      visited.add(record.id);
+      children.push({ record, children: build(record.id), files: filesByParent.get(record.id) ?? [] });
+    }
+    return children;
+  };
+  return build(parentId);
 }
 
 function typeIcon(kind: FileKind, size = 16) {
@@ -100,7 +121,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [migrationBackup, setMigrationBackup] = useState<WorkspaceBackup | null>(null);
+  const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
   const [migrationError, setMigrationError] = useState('');
   const [upgrading, setUpgrading] = useState(false);
   const [view, setView] = useState<View>('workspace');
@@ -132,6 +153,7 @@ export default function App() {
   const folderInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const draftRecoveryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const saveChains = useRef(new Map<string, Promise<void>>());
   const draftRevisions = useRef(new Map<string, number>());
   const pendingDrafts = useRef(new Map<string, string>());
@@ -241,20 +263,23 @@ export default function App() {
   }
 
   async function downloadMigrationBackupAndUpgrade() {
-    if (!migrationBackup) return;
+    if (migrationBackup === null) return;
     setUpgrading(true);
     setMigrationError('');
+    const previous = migrationBackup === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
     try {
+      await previous.open();
       if (!isDesktopApp()) {
-        downloadBackupFile(migrationBackup);
-        setMigrationError('The browser cannot confirm that a backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
+        await downloadBackup(previous);
+        setMigrationError('The browser cannot confirm that the backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
         return;
       }
-      const backupSaved = await saveBackupToDesktop(serializeBackup(migrationBackup));
+      const backupSaved = await saveBackupToDesktop(exportBackupStream(previous));
       if (!backupSaved) {
         setMigrationError('Backup saving was cancelled. The database migration was not started; your existing database remains unchanged.');
         return;
       }
+      previous.close();
       await db.open();
       const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
       setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true);
@@ -267,11 +292,13 @@ export default function App() {
       setMigrationBackup(null);
       await refresh();
     } catch (reason) {
-      setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your downloaded backup is safe.');
+      setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your existing database remains unchanged unless the upgrade completed.');
       setLoading(false);
-    } finally { setUpgrading(false); }
+    } finally {
+      previous.close();
+      setUpgrading(false);
+    }
   }
-
   async function toggleTheme() {
     const next = !darkTheme;
     setDarkTheme(next);
@@ -292,12 +319,7 @@ export default function App() {
       try {
         const version = await existingDatabaseVersion(DATABASE_NAME);
         if (version > 0 && version < DATABASE_VERSION) {
-          const previous = version === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
-          await previous.open();
-          try {
-            const backup = await exportBackup(previous);
-            if (alive) { setMigrationBackup(backup); setLoading(false); }
-          } finally { previous.close(); }
+          if (alive) { setMigrationBackup(version); setLoading(false); }
           return;
         }
         await db.open();
@@ -440,7 +462,12 @@ export default function App() {
     const content = await db.contents.get(meta.id);
     if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
     const data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob ? await content.data.text() : content.data;
-    const draft = fileText(data);
+    const savedDraftValue = ['markdown', 'code', 'text'].includes(meta.kind)
+      ? (await db.preferences.get(`draft:${meta.id}`))?.value
+      : undefined;
+    const hasRecoveredDraft = typeof savedDraftValue === 'string';
+    const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
+    if (hasRecoveredDraft) pendingDrafts.current.set(meta.id, draft);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
     const pdfState = meta.kind === 'pdf' ? {
       page: Number.isFinite(savedPdfState?.page) ? Math.max(1, Math.floor(savedPdfState!.page!)) : 1,
@@ -453,9 +480,10 @@ export default function App() {
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
-      { id: meta.id, meta, data, draft, dirty: false, preview: meta.kind === 'markdown', pdfState },
+      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: meta.kind === 'markdown', pdfState },
     ]);
     setActiveTabId(meta.id);
+    if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
   }, [activeWorkspaceId, tabs]);
 
@@ -463,10 +491,14 @@ export default function App() {
     const pendingTimer = saveTimers.current.get(id);
     if (pendingTimer) clearTimeout(pendingTimer);
     saveTimers.current.delete(id);
+    const recoveryTimer = draftRecoveryTimers.current.get(id);
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    draftRecoveryTimers.current.delete(id);
     const revision = draftRevisions.current.get(id) ?? 0;
     const previousSave = saveChains.current.get(id) ?? Promise.resolve();
-    const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(() => {
+    const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(async () => {
       if (draftRevisions.current.get(id) === revision) {
+        await db.preferences.delete(`draft:${id}`);
         setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, dirty: false, meta: { ...tab.meta, size: new TextEncoder().encode(draft).byteLength, updatedAt: Date.now() } } : tab));
         pendingDrafts.current.delete(id);
         setStatus('Saved locally');
@@ -483,6 +515,14 @@ export default function App() {
   const updateDraft = useCallback((id: string, draft: string) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
     pendingDrafts.current.set(id, draft);
+    const recoveryTimer = draftRecoveryTimers.current.get(id);
+    if (recoveryTimer) clearTimeout(recoveryTimer);
+    draftRecoveryTimers.current.set(id, setTimeout(() => {
+      draftRecoveryTimers.current.delete(id);
+      void db.preferences.put({ key: `draft:${id}`, value: draft, updatedAt: Date.now() }).catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : 'Could not persist the crash-recovery draft.');
+      });
+    }, 150));
     const revision = (draftRevisions.current.get(id) ?? 0) + 1;
     draftRevisions.current.set(id, revision);
     setStatus('Unsaved changes · Auto-save in 1 second');
@@ -628,11 +668,10 @@ export default function App() {
     finally { setImporting(false); if (fileInput.current) fileInput.current.value = ''; }
   }
 
-  async function handlePickedImport(files: File[], target: ImportTarget) {
-    if (!files.length) return;
+  async function handlePickedImport(files: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     setImporting(true);
     try {
-      for (const file of files) {
+      for await (const file of files) {
         const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
         if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
       }
@@ -676,7 +715,7 @@ export default function App() {
 
   function startImportInto(target: ImportTarget) {
     setImportTarget(target);
-    if (isDesktopApp()) { void pickDesktopFiles().then((files) => handlePickedImport(files, target)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
+    if (isDesktopApp()) { void handlePickedImport(iterateDesktopFiles(), target).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
     fileInput.current?.click();
   }
 
@@ -854,7 +893,7 @@ export default function App() {
   }
 
   async function restoreProject(project: Project) {
-    await db.projects.update(project.id, { archived: false, updatedAt: Date.now() });
+    await unarchiveProject(db, project.id);
     setActiveProject(project.id);
     setSelectedFolder(null);
     setView('workspace');
