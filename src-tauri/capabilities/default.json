@@ -1,16 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the SiliconVault main window",
-  "windows": ["main"],
+  "description": "Capabilities for the main window. Filesystem operations use picker-selected paths; keep permissions limited to the operations required by import and backup workflows.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-read-file",
     "fs:allow-read-dir",
-    "fs:allow-write-file",
-    "fs:allow-read-text-file",
-    "fs:allow-write-text-file"
+    "fs:allow-write-file"
   ]
 }

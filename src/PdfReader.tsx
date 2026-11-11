@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { disposePdfResources } from './pdf/lifecycle';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -91,12 +92,9 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     }).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Unable to open this PDF.'); });
     return () => {
       active = false;
-      for (const task of renderTasks.current.values()) task.cancel();
-      renderTasks.current.clear();
+      disposePdfResources(renderTasks.current, loadingTask, loaded);
       renderedScales.current.clear();
       pendingScales.current.clear();
-      if (loadingTask) void loadingTask.destroy();
-      else if (loaded) void loaded.destroy();
     };
   }, [source]);
 

@@ -1,5 +1,6 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
+import { collectDescendantIds } from './tree';
 
 const CODE_EXTENSIONS = new Set(['v', 'sv', 'vh', 'svh', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'sh', 's', 'asm']);
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml']);
@@ -112,15 +113,7 @@ export async function emptyTrash(database: WorkspaceDatabase, workspaceId: strin
 
 export async function getFolderSubtreeIds(database: WorkspaceDatabase, folderId: string): Promise<string[]> {
   const folders = await database.folders.toArray();
-  const descendants = new Set([folderId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const folder of folders) if (folder.parentFolderId && descendants.has(folder.parentFolderId) && !descendants.has(folder.id)) {
-      descendants.add(folder.id); changed = true;
-    }
-  }
-  return [...descendants];
+  return collectDescendantIds(folders, folderId);
 }
 
 export async function countFolderItems(database: WorkspaceDatabase, folderId: string): Promise<number> {

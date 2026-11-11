@@ -64,7 +64,7 @@ The configured bundle is a per-user NSIS installer under `src-tauri/target/relea
 
 ## Data model
 
-Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync, or hosted backend is required. Back up important data before clearing browser/WebView data, changing machines, or testing migrations. Browser development and packaged Tauri use distinct WebView/browser profiles; do not assume their IndexedDB data is shared. The packaged Windows data path still requires confirmation on an installed build. See [Storage audit](docs/storage-audit.md).
+Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync, or hosted backend is required. **Local storage is not encryption:** the application does not currently encrypt workspace records or backups at rest. Anyone with access to the same OS account/profile and its application data may be able to access them. Use full-disk encryption and OS account security for device-level protection; do not store highly sensitive material on the assumption that the app encrypts it. Back up important data before clearing browser/WebView data, changing machines, or testing migrations. Browser development and packaged Tauri use distinct WebView/browser profiles; do not assume their IndexedDB data is shared. The packaged Windows data path still requires confirmation on an installed build. See [Storage audit](docs/storage-audit.md).
 
 ## Project documentation
 

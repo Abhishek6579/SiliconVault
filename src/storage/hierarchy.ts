@@ -1,5 +1,6 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { Workspace } from './types';
+import { collectDescendantIds } from './tree';
 
 function newId(): string {
   return crypto.randomUUID();
@@ -42,29 +43,22 @@ export async function moveFolder(database: WorkspaceDatabase, folderId: string, 
     if (!folder) throw new Error('The folder does not exist.');
     const destination = await destinationFor(database, parentFolderId, projectId, workspaceId ?? (parentFolderId ? undefined : folder.workspaceId));
     const allFolders = await database.folders.toArray();
-    const descendants = new Set<string>([folderId]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const candidate of allFolders) {
-        if (candidate.parentFolderId && descendants.has(candidate.parentFolderId) && !descendants.has(candidate.id)) {
-          descendants.add(candidate.id);
-          grew = true;
-        }
-      }
-    }
-    if (parentFolderId && descendants.has(parentFolderId)) throw new Error('A folder cannot be moved into its own subtree.');
+    const descendants = collectDescendantIds(allFolders, folderId);
+    const descendantSet = new Set(descendants);
+    if (parentFolderId && descendantSet.has(parentFolderId)) throw new Error('A folder cannot be moved into its own subtree.');
+    const foldersById = new Map(allFolders.map((item) => [item.id, item]));
     const now = Date.now();
-    for (const descendantId of descendants) {
-      const current = allFolders.find((candidate) => candidate.id === descendantId)!;
-      await database.folders.update(descendantId, {
+    await database.folders.bulkPut(descendants.map((descendantId) => {
+      const current = foldersById.get(descendantId)!;
+      return {
+        ...current,
         parentFolderId: descendantId === folderId ? parentFolderId : current.parentFolderId,
         projectId: destination.projectId,
         workspaceId: destination.workspaceId,
         updatedAt: now,
-      });
-    }
-    await database.files.where('parentFolderId').anyOf([...descendants]).modify({ projectId: destination.projectId, workspaceId: destination.workspaceId, updatedAt: now });
+      };
+    }));
+    await database.files.where('parentFolderId').anyOf(descendants).modify({ projectId: destination.projectId, workspaceId: destination.workspaceId, updatedAt: now });
   });
 }
 

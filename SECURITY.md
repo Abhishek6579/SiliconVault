@@ -19,6 +19,7 @@ The maintainer will acknowledge and investigate reports when practical and coord
 ## Security expectations
 
 - Keep user documents local; do not add cloud upload without explicit product approval.
+- Do not describe IndexedDB/Dexie persistence or JSON backups as encrypted. The application currently provides no application-level encryption at rest; local persistence is not a confidentiality boundary.
 - Keep Tauri capabilities and filesystem permissions least-privilege.
 - Treat imported files as untrusted input; never execute embedded scripts or commands.
 - Keep CSP restrictive and avoid remote script sources.
