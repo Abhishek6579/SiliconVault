@@ -438,3 +438,11 @@ html, body, #root {
 .viewer-zoom-content { transform-origin: top left; width: max-content; min-width: 100%; }
 .engineering-viewer { padding: 0; }
 .engineering-viewer > .viewer-zoom-content { padding: 18px 20px; }
+
+
+/* Constrain the opened-file location so long project/folder paths truncate cleanly. */
+.editor-titlebar { min-width: 0; }
+.editor-file-title { flex: 1 1 0; min-width: 0; overflow: hidden; }
+.editor-file-title b { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.title-location { flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-tools { flex: 0 0 auto; }
