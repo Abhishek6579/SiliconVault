@@ -1,40 +1,84 @@
-# Engineering Workspace
+# SiliconVault
 
-This project contains a runnable desktop-first web workspace backed by local-first storage. Version 3 adds separate workspaces while preserving saved theme and PDF reading position preferences. Existing databases are backed up to a downloadable file before the upgrade proceeds.
+SiliconVault is a desktop-first, local-first engineering workspace built with React, TypeScript, Tauri 2, and Dexie/IndexedDB.
 
-## Run the app
+> **Status:** early development. The source version is `0.1.0`; this is not a claim that a public release exists.
 
-1. Run `npm install` once.
-2. Run `npm run dev` and open the local address printed in the terminal.
+## Implemented functionality
 
-Data is stored in this browser's IndexedDB. Use **Backup** from the lower-left sidebar to download a copy before clearing browser data or switching devices.
+- Multiple workspaces, projects, nested folders, and file organization.
+- Local file import, rename/move/delete, Trash, and restore.
+- Dexie/IndexedDB metadata and content storage.
+- Markdown editor/preview with math and Mermaid diagrams.
+- CodeMirror source editing, including Verilog and SystemVerilog.
+- PDF reader with continuous scrolling, navigation, zoom, and text search.
+- Image previews; CSV/TSV table previews; basic VCD declaration/activity inspection.
+- JSON backup/restore with SHA-256 integrity checks.
+- Multiple open tabs and local save workflows.
 
-## Available now
+See [Architecture](docs/architecture.md#file-format-support) for exact renderer limits. A recognized extension is not necessarily a rendered format.
 
-- Multiple isolated workspaces, each with its own projects, folders, and files. Create and switch workspaces from the top bar.
-- Projects and nested folders; folders appear alongside files, and drag files or folders to move them. Drop local files to import.
-- In-app dialogs for creating and renaming projects, folders, files, and workspaces, with confirmation dialogs for destructive actions.
-- Rename or delete a workspace from its switcher menu. Deleting a workspace removes its files, projects, folders, and saved PDF positions; an empty workspace is created if you delete the last one.
-- Import a local folder from the workspace toolbar or a project/folder action menu. Its directory tree and files are recreated in the selected destination.
-- A persisted light/dark neutral theme toggle.
-- File and folder action popups for open, rename, move, import, and delete operations.
-- File list sorting, title/content search for Markdown and code, recent files, and Trash with restore and confirmed permanent deletion.
-- Multiple tabs, automatic local autosave, a Markdown editor and preview with math and Mermaid diagrams, and syntax-highlighted code editing.
-- Continuous PDF scrolling inside the reader pane, page navigation, fit/zoom controls, and full-text search with page snippets. The reader restores the last page and zoom, and renders only nearby page canvases to reduce memory use. Focus view expands the reader while keeping the sidebar and open-file tabs available.
-- Single-file JSON backup and restore with SHA-256 verification.
+## Known limitations
 
-## Storage
+- DOC/DOCX/PPTX/XLSX, FST, GDS/GDSII, and KiCad PCB files are recognized but have no dedicated renderer.
+- VCD inspection does not provide interactive timing traces.
+- Windows is the configured desktop packaging target; Linux/macOS release installers are not configured.
+- A source version number does not imply a published installer. Check [GitHub Releases](https://github.com/Abhishek6579/SiliconVault/releases).
 
-- Dexie/IndexedDB stores metadata separately from text or binary content. Metadata lists and indexes never need to load file bodies.
-- Files use stable string IDs, timestamps, soft-delete timestamps, and project/folder references.
-- Folder creation and moves enforce parent/project consistency. Folder moves update descendants and contained file metadata in one transaction and reject cycles.
-- Project deletion marks its files deleted and archives the project for recovery.
-- Dexie stores the theme and per-PDF reading positions with other local workspace state.
-- Backups serialize metadata and text/binary content into one JSON file, with SHA-256 checksums. Restore validates the format and checksums before an atomic replacement transaction.
+## Quick start: browser development
+
+Requirements: Node.js 22 LTS recommended, npm, and Git.
+
+```bash
+git clone https://github.com/Abhishek6579/SiliconVault.git
+cd SiliconVault
+npm ci
+npm run dev
+```
+
+This launches the frontend in a browser; it is not the standalone desktop deliverable.
+
+## Run/build the Windows desktop app
+
+Install prerequisites in [Installation](docs/installation.md), then:
+
+```powershell
+npm ci
+npm run tauri:dev
+npm run tauri:build
+```
+
+The configured bundle is a per-user NSIS installer under `src-tauri/target/release/bundle/nsis/`.
 
 ## Commands
 
-- `npm test` runs storage, hierarchy, and backup tests.
-- `npm run typecheck` checks strict TypeScript types.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Browser frontend development |
+| `npm run dev:desktop` | Fixed-port Vite server for Tauri |
+| `npm run build` | Production frontend build |
+| `npm test` | Vitest suite |
+| `npm run typecheck` | Strict TypeScript check |
+| `npm run tauri:dev` | Tauri desktop development |
+| `npm run tauri:build` | Desktop bundle build |
 
-Future schema versions must add a named migration and a previous-version fixture. Existing workspaces get a downloadable full backup before any version upgrade runs.
+## Data model
+
+Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync, or hosted backend is required. Back up important data before clearing browser/WebView data, changing machines, or testing migrations. Browser development and packaged Tauri use distinct WebView/browser profiles; do not assume their IndexedDB data is shared. The packaged Windows data path still requires confirmation on an installed build. See [Storage audit](docs/storage-audit.md).
+
+## Project documentation
+
+- [Developer instructions](AGENTS.md)
+- [Architecture and file support](docs/architecture.md)
+- [Development guide](docs/development.md)
+- [Windows installation](docs/installation.md)
+- [Storage audit](docs/storage-audit.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Release process](docs/release-process.md)
+- [Changelog](CHANGELOG.md)
+- [License status](docs/license-status.md)
+
+## License
+
+No license file is currently present. No license grant should be assumed. See [License status](docs/license-status.md); the maintainer must choose the intended terms before describing this repository as open source.

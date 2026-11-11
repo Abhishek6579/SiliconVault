@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible SiliconVault defect.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Search existing issues first. Do not attach private workspace files, personal data, or secrets."
+  - type: input
+    id: version
+    attributes:
+      label: SiliconVault version or commit
+      placeholder: "0.1.0 or commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Windows 11 desktop
+        - Windows 10 desktop
+        - Browser development mode
+        - Linux development environment
+        - macOS development environment
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: Affected file format (if relevant)
+      placeholder: ".pdf, .v, .csv"
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs/screenshots (redacted)
+      description: "Remove usernames, local paths, document contents, and other sensitive information."

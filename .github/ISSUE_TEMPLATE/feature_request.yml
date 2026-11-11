@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused improvement to SiliconVault.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "Check AGENTS.md and existing issues. SiliconVault prioritizes local-first engineering workflows, data safety, and memory efficiency."
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Workspace and file organization
+        - PDF reader
+        - Markdown and notes
+        - Code and HDL editing
+        - File-format viewer
+        - Storage, backup, or reliability
+        - Desktop packaging
+        - Developer tooling
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Project constraints
+      options:
+        - label: I considered offline/local-first operation.
+        - label: I considered data preservation and migration safety.
+        - label: This does not require an unapproved cloud service.

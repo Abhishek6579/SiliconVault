@@ -1,0 +1,69 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    name: Build and publish Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: Verify tag and application versions
+        shell: pwsh
+        run: |
+          $tagVersion = "${{ github.ref_name }}".Substring(1)
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $match = [regex]::Match($cargo, '(?ms)^\[package\]\s.*?^version\s*=\s*"([^"]+)"')
+          if (-not $match.Success) { throw "Could not read [package].version from Cargo.toml" }
+          $versions = @($package.version, $tauri.version, $match.Groups[1].Value)
+          if ($versions | Where-Object { $_ -ne $tagVersion }) {
+            throw "Tag v$tagVersion must match package.json, tauri.conf.json, and Cargo.toml. Found: $($versions -join ', ')"
+          }
+          if ($tagVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Tag is not valid SemVer: $tagVersion"
+          }
+      - run: npm ci
+      - name: Build Windows NSIS installer
+        run: npm run tauri:build
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe"
+          if (-not $installers) { throw "No NSIS installer was produced." }
+          $lines = foreach ($installer in $installers) {
+            $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($installer.Name)"
+          }
+          $lines | Set-Content -Encoding ascii SHA256SUMS.txt
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SiliconVault ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            SHA256SUMS.txt
