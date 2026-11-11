@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -12,7 +13,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
-  Archive, ArrowDownUp, BookOpen, Check, ChevronDown, ChevronRight, Code2, Command, Download,
+  Activity, Archive, ArrowDownUp, BookOpen, Check, ChevronDown, ChevronRight, Code2, Command, Download,
   Ellipsis, File, FileCode2, FilePlus2, FileText, Folder, FolderPlus, FolderTree, HardDrive,
   Import, LayoutGrid, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2,
   Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
@@ -30,6 +31,7 @@ interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string;
 interface TreeFolder { record: FolderRecord; children: TreeFolder[]; files: FileMeta[]; }
 interface MermaidDiagramProps { source: string; }
 interface PdfViewState { page: number; zoom: number; fit: boolean; }
+interface SystemStats { cpu: number | null; ram: number | null; gpu: number | null; }
 type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
@@ -111,6 +113,7 @@ export default function App() {
   const [darkTheme, setDarkTheme] = useState(true);
   const [appZoom, setAppZoom] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-app-zoom')); return Number.isFinite(saved) && saved >= 0.8 && saved <= 1.4 ? saved : 1; });
   const [editorFontSize, setEditorFontSize] = useState(() => { const saved = Number(localStorage.getItem('silicon-vault-editor-font-size')); return Number.isFinite(saved) && saved >= 11 && saved <= 24 ? saved : 14; });
+  const [systemStats, setSystemStats] = useState<SystemStats>({ cpu: null, ram: null, gpu: null });
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -129,6 +132,27 @@ export default function App() {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { localStorage.setItem('silicon-vault-app-zoom', String(appZoom)); }, [appZoom]);
   useEffect(() => { localStorage.setItem('silicon-vault-editor-font-size', String(editorFontSize)); }, [editorFontSize]);
+  // Poll native counters sequentially; no renderer-side hardware polling or extra process.
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const next = await invoke<SystemStats>('get_system_stats');
+        if (active) setSystemStats(next);
+      } catch {
+        if (active) setSystemStats({ cpu: null, ram: null, gpu: null });
+      }
+      if (active) timer = setTimeout(poll, 2500);
+    };
+    void poll();
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
 
   useEffect(() => {
     const onGlobalZoom = (event: KeyboardEvent) => {
@@ -877,9 +901,22 @@ export default function App() {
           </>}
         </div>
         <div className="sidebar-bottom">
-          <div className="storage-line"><HardDrive size={15} /><span>Stored on this device</span></div>
-          <div className="storage-meter"><i style={{ width: `${Math.min(100, files.reduce((sum, item) => sum + item.size, 0) / (250 * 1024 * 1024) * 100)}%` }} /></div>
-          <span className="storage-caption">{formatSize(files.reduce((sum, item) => sum + item.size, 0))} used</span>
+          <div className="system-monitor" aria-label="System utilisation">
+            <div className="system-monitor-heading"><Activity size={13} /><span>System</span><span className="system-monitor-live">LIVE</span></div>
+            {[
+              { label: 'CPU', value: systemStats.cpu },
+              { label: 'RAM', value: systemStats.ram },
+              { label: 'GPU', value: systemStats.gpu },
+            ].map(({ label, value }) => (
+              <div className="system-metric" key={label} title={value == null ? `${label} utilisation unavailable` : `${label} utilisation ${Math.round(value)}%`}>
+                <span className="system-metric-label">{label}</span>
+                <div className="system-metric-track" role="meter" aria-label={`${label} utilisation`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value ?? undefined}>
+                  <i style={{ width: `${value == null ? 0 : Math.min(100, Math.max(0, value))}%` }} />
+                </div>
+                <span className="system-metric-value">{value == null ? '—' : `${Math.round(value)}%`}</span>
+              </div>
+            ))}
+          </div>
           <div className="sidebar-actions">
             <button onClick={() => void saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
             <button onClick={() => void restoreFromPicker()} title="Restore from backup"><Import size={15} /> Restore</button>
