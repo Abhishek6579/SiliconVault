@@ -63,6 +63,10 @@ export function downloadBackupFile(backup: WorkspaceBackup): void {
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
+export function serializeBackup(backup: WorkspaceBackup): string {
+  return JSON.stringify(backup);
+}
+
 export async function downloadBackup(database: BackupDatabase): Promise<void> {
   const backup = await exportBackup(database);
   downloadBackupFile(backup);

@@ -1,19 +1,26 @@
 {
-  "name": "engineering-workspace",
+  "name": "silicon-vault",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:desktop": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build": "vite build",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@uiw/react-codemirror": "^4.23.10",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-markdown": "^6.3.2",
     "@codemirror/legacy-modes": "^6.4.0",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-fs": "^2.7.1",
+    "@uiw/react-codemirror": "^4.23.10",
     "dexie": "^4.0.11",
     "katex": "^0.16.22",
     "lucide-react": "^0.468.0",
@@ -27,6 +34,7 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

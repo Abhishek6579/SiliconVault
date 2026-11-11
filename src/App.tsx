@@ -3,7 +3,9 @@ import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { StreamLanguage } from '@codemirror/language';
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
+import { EditorView } from '@codemirror/view';
 import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,8 +20,9 @@ import {
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, downloadBackupFile, exportBackup, importBackup } from './storage/backup';
-import type { FileContent, FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
+import { downloadBackup, downloadBackupFile, exportBackup, importBackup, serializeBackup } from './storage/backup';
+import { chooseBackupToRestore, isDesktopApp, pickDesktopFiles, pickDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace, WorkspaceBackup } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 
 type View = 'workspace' | 'recent' | 'trash';
@@ -31,6 +34,7 @@ type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
+interface SearchResult { file: FileMeta; text: string; }
 interface DialogState {
   mode: 'input' | 'confirm';
   title: string;
@@ -86,7 +90,7 @@ export default function App() {
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [contents, setContents] = useState<FileContent[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [migrationBackup, setMigrationBackup] = useState<WorkspaceBackup | null>(null);
@@ -121,16 +125,45 @@ export default function App() {
   const draftRevisions = useRef(new Map<string, number>());
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const editorTheme = useMemo(() => EditorView.theme({
+    '&': { height: '100%', backgroundColor: darkTheme ? '#1b1e22' : '#ffffff', color: darkTheme ? '#d9dde3' : '#3f4650' },
+    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
+    '.cm-content': { caretColor: darkTheme ? '#c6d2ec' : '#4867aa' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: darkTheme ? '#c6d2ec' : '#4867aa' },
+    '.cm-gutters': { backgroundColor: darkTheme ? '#1b1e22' : '#f8f9fb', color: darkTheme ? '#707782' : '#a2a8b1', border: 'none', borderRight: `1px solid ${darkTheme ? '#30343a' : '#eceef1'}` },
+    '.cm-activeLine': { backgroundColor: darkTheme ? '#24282e' : '#f7f8fa' },
+    '.cm-activeLineGutter': { backgroundColor: darkTheme ? '#24282e' : '#f1f3f6', color: darkTheme ? '#b2bac7' : '#657084' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: darkTheme ? '#39465e' : '#dce6fa' },
+    '.cm-selectionMatch': { backgroundColor: darkTheme ? '#34403d' : '#e4eee8' },
+    '.cm-tooltip': { backgroundColor: darkTheme ? '#25292f' : '#ffffff', color: darkTheme ? '#d9dde3' : '#3f4650', border: `1px solid ${darkTheme ? '#3a4048' : '#dfe3e9'}` },
+    '.cm-foldPlaceholder': { backgroundColor: darkTheme ? '#30343a' : '#eef0f3', color: darkTheme ? '#c1c7d0' : '#68717d', border: 'none' },
+  }, { dark: darkTheme }), [darkTheme]);
+  const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define(darkTheme ? [
+    { tag: tags.comment, color: '#8f99a5', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#aebfe5' },
+    { tag: [tags.typeName, tags.className], color: '#9bc8c1' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#c6b0e4' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#c4d6a4' },
+    { tag: [tags.number, tags.bool, tags.null], color: '#d8b58c' },
+    { tag: tags.operator, color: '#c0c8d6' },
+  ] : [
+    { tag: tags.comment, color: '#858c96', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#405e9d' },
+    { tag: [tags.typeName, tags.className], color: '#286c68' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#725398' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#4f7c49' },
+    { tag: [tags.number, tags.bool, tags.null], color: '#9b6330' },
+    { tag: tags.operator, color: '#555f70' },
+  ])), [darkTheme]);
 
   const refresh = useCallback(async () => {
     try {
-      const [nextFiles, nextFolders, nextProjects, nextContents, nextWorkspaces] = await Promise.all([
-        db.files.toArray(), db.folders.toArray(), db.projects.toArray(), db.contents.toArray(), db.workspaces.toArray(),
+      const [nextFiles, nextFolders, nextProjects, nextWorkspaces] = await Promise.all([
+        db.files.toArray(), db.folders.toArray(), db.projects.toArray(), db.workspaces.toArray(),
       ]);
       setFiles(nextFiles);
       setFolders(nextFolders);
       setProjects(nextProjects);
-      setContents(nextContents);
       setWorkspaces(nextWorkspaces);
       setError('');
     } catch (reason) {
@@ -159,7 +192,8 @@ export default function App() {
     setUpgrading(true);
     setMigrationError('');
     try {
-      downloadBackupFile(migrationBackup);
+      if (isDesktopApp()) await saveBackupToDesktop(serializeBackup(migrationBackup));
+      else downloadBackupFile(migrationBackup);
       await db.open();
       const theme = await db.preferences.get('theme');
       if (theme?.value === 'dark') setDarkTheme(true);
@@ -281,13 +315,36 @@ export default function App() {
     })),
   ], [excludedMoveFolders, folders, projects, workspaces]);
 
-  const searchResults = useMemo(() => {
-    const textById = new Map(contents.map((item) => [item.fileId, typeof item.data === 'string' ? item.data : '']));
-    if (!query.trim()) return [];
-    const needle = query.toLocaleLowerCase();
-    return liveFiles.filter((file) => `${file.name} ${textById.get(file.id) ?? ''}`.toLocaleLowerCase().includes(needle))
-      .map((file) => ({ file, text: textById.get(file.id) ?? '' }));
-  }, [contents, liveFiles, query]);
+  useEffect(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) { setSearchResults([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        const results: SearchResult[] = [];
+        for (const file of liveFiles) {
+          const titleMatch = file.name.toLocaleLowerCase().includes(needle);
+          let text = '';
+          if (file.kind === 'markdown' || file.kind === 'code') {
+            const content = await db.contents.get(file.id);
+            if (typeof content?.data === 'string') text = content.data;
+            else if (content?.data instanceof Blob) text = await content.data.text();
+          }
+          if (cancelled) return;
+          if (titleMatch || text.toLocaleLowerCase().includes(needle)) {
+            const index = text.toLocaleLowerCase().indexOf(needle);
+            const snippet = index < 0 ? file.name : text.slice(Math.max(0, index - 56), Math.min(text.length, index + needle.length + 88)).trim();
+            results.push({ file, text: snippet });
+            if (results.length >= 100) break;
+          }
+        }
+        if (!cancelled) setSearchResults(results);
+      })().catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Search could not read workspace content.');
+      });
+    }, 180);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [liveFiles, query]);
 
   const openFile = useCallback(async (meta: FileMeta) => {
     if (meta.workspaceId !== activeWorkspaceId) {
@@ -417,6 +474,19 @@ export default function App() {
     finally { setImporting(false); if (fileInput.current) fileInput.current.value = ''; }
   }
 
+  async function handlePickedImport(files: File[], target: ImportTarget) {
+    if (!files.length) return;
+    setImporting(true);
+    try {
+      for (const file of files) {
+        const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
+        if (['pdf', 'markdown', 'code'].includes(meta.kind)) await openFile(meta);
+      }
+      await refresh();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected files.'); }
+    finally { setImporting(false); }
+  }
+
   async function openBackup(file: File | undefined) {
     if (!file) return;
     try {
@@ -437,13 +507,28 @@ export default function App() {
     finally { if (backupInput.current) backupInput.current.value = ''; }
   }
 
+  async function restoreFromPicker() {
+    if (!isDesktopApp()) { backupInput.current?.click(); return; }
+    try { await openBackup(await chooseBackupToRestore() ?? undefined); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not open the backup picker.'); }
+  }
+
+  async function saveWorkspaceBackup() {
+    try {
+      if (isDesktopApp()) await saveBackupToDesktop(serializeBackup(await exportBackup(db)));
+      else await downloadBackup(db);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create the workspace backup.'); }
+  }
+
   function startImportInto(target: ImportTarget) {
     setImportTarget(target);
+    if (isDesktopApp()) { void pickDesktopFiles().then((files) => handlePickedImport(files, target)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
     fileInput.current?.click();
   }
 
   function startImportFolderInto(target: ImportTarget) {
     setImportTarget(target);
+    if (isDesktopApp()) { void pickDesktopFolder().then(async (files) => { if (!files.length) return; setImporting(true); try { await importFolderFiles(files, target); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.'); } finally { setImporting(false); setImportTarget(null); } }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the folder picker.')); return; }
     folderInput.current?.setAttribute('webkitdirectory', '');
     folderInput.current?.setAttribute('directory', '');
     folderInput.current?.click();
@@ -452,10 +537,16 @@ export default function App() {
   async function handleFolderImport(fileList: FileList | null, target: ImportTarget) {
     if (!fileList?.length) return;
     setImporting(true);
+    try { await importFolderFiles(Array.from(fileList), target); await refresh(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import this folder.'); }
+    finally { setImporting(false); setImportTarget(null); if (folderInput.current) folderInput.current.value = ''; }
+  }
+
+  async function importFolderFiles(selectedFiles: File[], target: ImportTarget) {
     const folderIds = new Map<string, string>();
     let imported = 0;
-    try {
-      const selectedFiles = Array.from(fileList).sort((a, b) => a.name.localeCompare(b.name));
+    {
+      selectedFiles.sort((a, b) => a.name.localeCompare(b.name));
       for (const file of selectedFiles) {
         const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.replaceAll('\\', '/') ?? file.name;
         const segments = relativePath.split('/').filter(Boolean);
@@ -483,9 +574,7 @@ export default function App() {
         setExpanded((current) => new Set([...current, rootFolderId]));
       }
       setStatus(`Imported ${imported} file${imported === 1 ? '' : 's'}`);
-      await refresh();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import this folder.'); }
-    finally { setImporting(false); setImportTarget(null); if (folderInput.current) folderInput.current.value = ''; }
+    }
   }
 
   function showContextMenu(type: ContextItemType, id: string, event: ReactMouseEvent) {
@@ -757,8 +846,8 @@ export default function App() {
           <div className="storage-meter"><i style={{ width: `${Math.min(100, files.reduce((sum, item) => sum + item.size, 0) / (250 * 1024 * 1024) * 100)}%` }} /></div>
           <span className="storage-caption">{formatSize(files.reduce((sum, item) => sum + item.size, 0))} used</span>
           <div className="sidebar-actions">
-            <button onClick={() => void downloadBackup(db)} title="Download a workspace backup"><Download size={15} /> Backup</button>
-            <button onClick={() => backupInput.current?.click()} title="Restore from backup"><Import size={15} /> Restore</button>
+            <button onClick={() => void saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
+            <button onClick={() => void restoreFromPicker()} title="Restore from backup"><Import size={15} /> Restore</button>
           </div>
           <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void openBackup(event.target.files?.[0])} />
         </div>
@@ -845,7 +934,7 @@ export default function App() {
         </div>
         {activeTab.meta.kind === 'pdf' ? <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}><PdfReader key={activeTab.id} data={activeTab.data} title={activeTab.meta.name} initialState={activeTab.pdfState} onStateChange={updateActivePdfView} /></Suspense> : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
-            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={darkTheme ? 'dark' : 'light'} extensions={[markdown()]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
+            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{ code({ className, children, ...props }) {
               const code = String(children).replace(/\n$/, '');
               if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
@@ -853,7 +942,7 @@ export default function App() {
             } }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={darkTheme ? 'dark' : 'light'} extensions={[activeTab.meta.name.match(/\.(sv|v)$/i) ? StreamLanguage.define(verilog) : javascript()]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.name.match(/\.(sv|v)$/i) ? StreamLanguage.define(verilog) : javascript(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body">
@@ -899,7 +988,7 @@ export default function App() {
       {rightPanel === 'details' ? <div className="details-content">
         <div className="details-card"><span className="details-icon"><HardDrive size={18} /></span><div><b>Stored on this device</b><span>Only you can access these files.</span></div></div>
         <div className="detail-row"><span>Total files</span><b>{liveFiles.length}</b></div><div className="detail-row"><span>Projects</span><b>{activeProjects.length}</b></div><div className="detail-row"><span>Folders</span><b>{folders.filter((folder) => folder.workspaceId === activeWorkspaceId).length}</b></div><div className="detail-row"><span>Storage used</span><b>{formatSize(liveFiles.reduce((sum, item) => sum + item.size, 0))}</b></div>
-        <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void downloadBackup(db)}><Download size={15} /> Download backup</button>
+        <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
       </div> : <div className="search-results-panel">
         {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and text in notes or code.</span></div> : searchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Try a different word or phrase.</span></div> : searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => void openFile(file)}>
           <span className="search-result-title">{typeIcon(file.kind, 15)}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
