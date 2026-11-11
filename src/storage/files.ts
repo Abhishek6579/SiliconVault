@@ -53,10 +53,32 @@ export async function importFile(database: WorkspaceDatabase, file: File, option
   return meta;
 }
 
+function fileExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+export function validateFileName(name: string, currentName?: string): void {
+  if (!name || name !== name.trim() || name === '.' || name === '..') {
+    throw new Error('Enter a valid file name without leading or trailing whitespace.');
+  }
+  if (name.length > 255) throw new Error('File names cannot exceed 255 characters.');
+  if (/[<>:"/\\|?*\\u0000-\\u001f]/.test(name) || /[. ]$/.test(name)) {
+    throw new Error('The file name contains characters or trailing punctuation that Windows does not support.');
+  }
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\..*)?$/i.test(name)) {
+    throw new Error('This file name is reserved by Windows.');
+  }
+  if (currentName !== undefined && fileExtension(name) !== fileExtension(currentName)) {
+    throw new Error('Changing a file extension does not convert its contents. Keep the existing extension; format conversion is not supported.');
+  }
+}
+
 export async function renameFile(database: WorkspaceDatabase, id: string, name: string): Promise<void> {
   const file = await database.files.get(id);
   if (!file) throw new Error('The file does not exist.');
-  await database.files.update(id, { name, kind: kindForFile(name, file.mimeType), updatedAt: Date.now() });
+  validateFileName(name, file.name);
+  await database.files.update(id, { name, updatedAt: Date.now() });
 }
 
 export async function saveFileText(database: WorkspaceDatabase, id: string, text: string): Promise<void> {
@@ -77,9 +99,12 @@ export async function restoreFile(database: WorkspaceDatabase, id: string): Prom
   await database.files.update(id, { deletedAt: null, updatedAt: Date.now() });
 }
 
-export async function emptyTrash(database: WorkspaceDatabase): Promise<void> {
+export async function emptyTrash(database: WorkspaceDatabase, workspaceId: string): Promise<void> {
+  if (!workspaceId) throw new Error('A workspace must be selected before emptying Trash.');
   await database.transaction('rw', database.files, database.contents, async () => {
-    const deleted = await database.files.where('deletedAt').above(0).primaryKeys();
+    const deleted = await database.files.where('workspaceId').equals(workspaceId)
+      .filter((file) => file.deletedAt !== null)
+      .primaryKeys();
     await database.contents.bulkDelete(deleted);
     await database.files.bulkDelete(deleted);
   });
