@@ -1,4 +1,4 @@
-export type FileKind = 'pdf' | 'markdown' | 'code' | 'other';
+export type FileKind = 'pdf' | 'markdown' | 'code' | 'text' | 'viewer' | 'other';
 
 export interface Workspace {
   id: string;
