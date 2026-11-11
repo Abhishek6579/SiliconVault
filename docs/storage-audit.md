@@ -51,5 +51,5 @@ The main-window capability retains file read, directory read and file write oper
 
 - File imports are capped at 64 MiB per file; PDF imports and PDF.js loading are capped at 24 MiB. The limits are enforced before persistence and before PDF.js requests a full `arrayBuffer()`.
 - Backup restore rejects JSON files larger than 128 MiB before calling `File.text()` or allocating a desktop `Uint8Array`. Desktop file and folder pickers inspect file metadata before reading selected bytes.
-- Backup records are limited to 100,000 in aggregate, each restored file is limited to 32 MiB, and aggregate decoded file content is limited to 72 MiB. These limits are checked against metadata before base64 decoding and before the replacement transaction.
+- Backup records are limited to 100,000 in aggregate, each restored file is limited to 64 MiB, and aggregate decoded file content is limited to 72 MiB. These limits are checked against metadata before base64 decoding and before the replacement transaction.
 - Restore still uses the existing JSON parser after the file-size preflight. A streaming JSON parser is intentionally deferred: the hard file/content bounds make current parsing bounded, while streaming parsing requires a separate parser and compatibility test effort.
