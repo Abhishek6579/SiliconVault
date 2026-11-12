@@ -353,7 +353,7 @@ export default function App() {
     if (existing) {
       let hydrated: Tab;
       try {
-        hydrated = existing.data === undefined ? await hydrateWorkspaceTab(db, existing) : existing;
+        hydrated = existing.hydrated !== true ? await hydrateWorkspaceTab(db, existing) : existing;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
         return;
@@ -399,7 +399,7 @@ export default function App() {
   }, [activeWorkspaceId, restoreWorkspaceTabs, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
 
   useEffect(() => {
-    if (!activeTab || activeTab.data !== undefined || loading) return;
+    if (!activeTab || activeTab.hydrated === true || loading) return;
     void openFile(activeTab.meta).catch((reason: unknown) => {
       setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
     });
