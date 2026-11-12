@@ -26,6 +26,10 @@ impl Logger {
             app_version: env!("CARGO_PKG_VERSION"), operating_system: std::env::consts::OS, architecture: std::env::consts::ARCH };
         fs::write(logger.path("startup.json"), serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?)
             .map_err(|e| format!("Cannot write startup report: {e}"))?;
+        for name in ["app.log", "crash.log"] {
+            OpenOptions::new().create(true).append(true).open(logger.path(name))
+                .map_err(|e| format!("Cannot initialize {name}: {e}"))?;
+        }
         logger.info("application.startup", "Diagnostics logger initialized");
         Ok(logger)
     }
