@@ -82,6 +82,26 @@ test('keeps multiple open documents and the selected tab across reloads', async 
   const tabs = page.locator('.tab-strip .file-tab');
   await expect(tabs).toHaveCount(2);
   await tabs.filter({ hasText: 'first-session.md' }).click();
+  await expect.poll(() => page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('engineering-workspace');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise<boolean>((resolve, reject) => {
+        const transaction = database.transaction(['files', 'preferences'], 'readonly');
+        const files = transaction.objectStore('files').getAll();
+        const session = transaction.objectStore('preferences').get('session:workspace-default');
+        transaction.oncomplete = () => {
+          const first = files.result.find((file: { name: string }) => file.name === 'first-session.md');
+          resolve(Boolean(first && session.result?.value?.activeFileId === first.id
+            && session.result?.value?.openFileIds?.length === 2));
+        };
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } finally { database.close(); }
+  })).toBe(true);
   await page.reload();
   await expect(page.locator('.tab-strip .file-tab')).toHaveCount(2);
   await expect(page.locator('.tab-strip .file-tab').filter({ hasText: 'first-session.md' })).toBeVisible();
