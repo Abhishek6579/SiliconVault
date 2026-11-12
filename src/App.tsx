@@ -23,7 +23,7 @@ import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
-import { fileText, formatSize } from './utils/format';
+import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { hydrateWorkspaceTab, restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';

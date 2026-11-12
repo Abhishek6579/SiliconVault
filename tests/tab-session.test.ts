@@ -118,6 +118,16 @@ describe('tab hydration and draft recovery', () => {
     expect(hydrated.preview).toBe(true);
     expect(hydrated.editorState).toMatchObject({ anchor: 4, head: 9, scrollTop: 120 });
     expect(hydrated.data).toBe('# Saved content');
+
+    const pdfMeta = { ...file('pdf', 'workspace-a'), kind: 'pdf' as const, mimeType: 'application/pdf' };
+    await database.files.add(pdfMeta);
+    await database.contents.add({ fileId: 'pdf', data: new Blob(['pdf-bytes'], { type: 'application/pdf' }) });
+    await database.preferences.put({ key: 'pdf:pdf', value: { page: 7, zoom: 1.5, fit: false }, updatedAt: Date.now() });
+    const hydratedPdf = await hydrateWorkspaceTab(database, {
+      id: 'pdf', meta: pdfMeta, draft: '', dirty: false, preview: false,
+    });
+    expect(hydratedPdf.pdfState).toEqual({ page: 7, zoom: 1.5, fit: false });
+    expect(hydratedPdf.data).toBeInstanceOf(Blob);
   });
 
   it('rejects hydration when the referenced file content is missing', async () => {
