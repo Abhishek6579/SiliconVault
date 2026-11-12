@@ -77,6 +77,7 @@ export default function App() {
   const [systemStats, setSystemStats] = useState<SystemStats>({ cpu: null, ram: null, gpu: null });
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
@@ -93,6 +94,7 @@ export default function App() {
   const pendingDrafts = useRef(new Map<string, string>());
   const closeInProgress = useRef(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!uiPreferencesReady) return;
@@ -291,6 +293,7 @@ export default function App() {
     const closeMenus = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!workspaceMenuRef.current?.contains(target)) setWorkspaceMenuOpen(false);
+      if (!importMenuRef.current?.contains(target)) setImportMenuOpen(false);
       if (!contextMenuRef.current?.contains(target)) setContextMenu(null);
     };
     window.addEventListener('pointerdown', closeMenus);
@@ -1028,9 +1031,29 @@ export default function App() {
             <button onClick={() => { setView('recent'); setActiveTabId(null); setWorkspaceMenuOpen(false); }}><Clock3 size={15} /><span>Recent files</span></button>
             <button onClick={() => { setView('trash'); setActiveTabId(null); setWorkspaceMenuOpen(false); }}><Trash2 size={15} /><span>Trash</span></button>
             <button onClick={() => { setWorkspaceMenuOpen(false); void createProject(); }}><Plus size={15} /><span>New project…</span></button>
+            {(view === 'trash' && trashedFiles.length > 0) || (view === 'workspace' && (activeProjectRecord || selectedFolder)) ? <>
+              <div className="switch-menu-separator" />
+              <div className="menu-heading">CURRENT VIEW</div>
+              {view === 'trash' && trashedFiles.length > 0 && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void doEmptyTrash(); }}><Trash2 size={15} /><span>Empty trash…</span></button>}
+              {view === 'workspace' && activeProjectRecord?.archived && <button onClick={() => { setWorkspaceMenuOpen(false); void restoreProject(activeProjectRecord); }}><Archive size={15} /><span>Restore project</span></button>}
+              {view === 'workspace' && activeProjectRecord && !activeProjectRecord.archived && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void deleteProject(activeProjectRecord); }}><Trash2 size={15} /><span>Delete project…</span></button>}
+              {view === 'workspace' && selectedFolder && folders.find((folder) => folder.id === selectedFolder) && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void deleteFolder(folders.find((folder) => folder.id === selectedFolder)!); }}><Trash2 size={15} /><span>Delete folder…</span></button>}
+            </> : null}
           </div>}
         </div>
         <div className="topbar-actions">
+          {view === 'workspace' && <div className="import-menu-wrapper" ref={importMenuRef}>
+            <button className="primary-button import-button" aria-expanded={importMenuOpen} onClick={() => setImportMenuOpen((open) => !open)}><Import size={15} /> Import <ChevronDown size={13} /></button>
+            {importMenuOpen && <div className="import-menu">
+              <div className="menu-heading">ADD TO {selectedFolder ? 'FOLDER' : activeProjectRecord?.name?.toLocaleUpperCase() ?? 'WORKSPACE'}</div>
+              <button onClick={() => { setImportMenuOpen(false); startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }); }}><FileText size={15} /><span>Import files</span></button>
+              <button onClick={() => { setImportMenuOpen(false); startImportFolderInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }); }}><FolderPlus size={15} /><span>Import folder</span></button>
+              <div className="switch-menu-separator" />
+              <button onClick={() => { setImportMenuOpen(false); void createFolderInCurrent(); }}><FolderPlus size={15} /><span>New folder</span></button>
+              <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('markdown'); }}><FilePlus2 size={15} /><span>New note</span></button>
+              <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('code'); }}><Code2 size={15} /><span>New code file</span></button>
+            </div>}
+          </div>}
           <label className="global-search"><Search size={16} /><input placeholder="Search files and notes" value={query} onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} /><kbd>⌘ K</kbd></label>
           <div className="app-zoom-controls" title="App zoom: Ctrl+= to increase, Ctrl+- to decrease, Ctrl+0 to reset"><button className="icon-button" aria-label="Decrease app size" title="Decrease app size (Ctrl+-)" onClick={() => setAppZoom((value) => Math.max(0.8, Math.round((value - 0.1) * 100) / 100))}><ZoomOut size={15} /></button><span>{Math.round(appZoom * 100)}%</span><button className="icon-button" aria-label="Increase app size" title="Increase app size (Ctrl+=)" onClick={() => setAppZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100))}><ZoomIn size={15} /></button><button className="icon-button" aria-label="Reset app size" title="Reset app size (Ctrl+0)" onClick={() => setAppZoom(1)}><span className="zoom-reset-label">100</span></button></div>
           <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
@@ -1039,27 +1062,8 @@ export default function App() {
         </div>
       </header>
 
-      <div className="content-toolbar">
-        <div className="toolbar-left">
-          <span className="toolbar-caption">{view === 'workspace' ? (selectedFolder ? 'FOLDER' : activeProject ? 'PROJECT FILES' : 'GENERAL WORKSPACE') : view === 'recent' ? 'RECENT' : 'RECYCLE BIN'}</span>
-          {view === 'workspace' && <span className="file-count">{visibleFiles.length + currentFolders.length} item{visibleFiles.length + currentFolders.length === 1 ? '' : 's'}</span>}
-        </div>
-        <div className="toolbar-right">
-          {view === 'trash' && trashedFiles.length > 0 && <button className="text-button danger-text" onClick={() => void doEmptyTrash()}><Trash2 size={14} /> Empty trash</button>}
-          {view === 'workspace' && activeProjectRecord && !activeProjectRecord.archived && <button className="text-button danger-text" onClick={() => void deleteProject(activeProjectRecord)}><Trash2 size={14} /> Delete project</button>}
-          {view === 'workspace' && activeProjectRecord?.archived && <button className="text-button" onClick={() => void restoreProject(activeProjectRecord)}><Archive size={14} /> Restore project</button>}
-          {view === 'workspace' && selectedFolder && folders.find((folder) => folder.id === selectedFolder) && <button className="text-button danger-text" onClick={() => void deleteFolder(folders.find((folder) => folder.id === selectedFolder)!)}><Trash2 size={14} /> Delete folder</button>}
-          {view === 'workspace' && <>
-            <button className="text-button" onClick={() => void createFolderInCurrent()}><FolderPlus size={15} /> New folder</button>
-            <button className="text-button" onClick={() => startImportFolderInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={15} /> Import folder</button>
-            <button className="text-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button>
-            <button className="primary-button" onClick={() => void createWorkspaceFile('code')}><Plus size={16} /> New file</button>
-            <button className="icon-button" title="Import files" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={16} /></button>
-          </>}
-          <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
-          <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleFolderImport(event.target.files, target); }} />
-        </div>
-      </div>
+      <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
+      <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleFolderImport(event.target.files, target); }} />
 
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
 
