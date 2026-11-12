@@ -132,7 +132,7 @@ describe('tab hydration and draft recovery', () => {
     expect(hydrated.preview).toBe(true);
     expect(hydrated.editorState).toMatchObject({ anchor: 4, head: 9, scrollTop: 120 });
     expect(hydrated.data).toBeUndefined();
-    expect(hydrated.draft).toBe('# Saved content');
+    expect(hydrated.draft).toBe('# Recovered unsaved content');
 
     const pdfMeta = { ...file('pdf', 'workspace-a'), kind: 'pdf' as const, mimeType: 'application/pdf' };
     await database.files.add(pdfMeta);
