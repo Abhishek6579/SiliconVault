@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorkspaceDatabase } from '../src/storage/database';
-import { loadEditorViewState, restoreWorkspaceSession, saveWorkspaceSession, workspaceSessionKey } from '../src/storage/tabSession';
+import { hydrateWorkspaceTab, loadEditorViewState, restoreWorkspaceSession, saveWorkspaceSession, workspaceSessionKey } from '../src/storage/tabSession';
 import type { FileMeta } from '../src/storage/types';
 
 const databases: WorkspaceDatabase[] = [];
@@ -94,5 +94,36 @@ describe('per-file editor view state', () => {
     await database.open();
     await database.preferences.put({ key: 'editor:note-1', value: { anchor: -1, head: 3, scrollTop: 0, scrollLeft: 0, preview: false }, updatedAt: Date.now() });
     await expect(loadEditorViewState(database, 'note-1')).resolves.toBeUndefined();
+  });
+});
+
+describe('tab hydration and draft recovery', () => {
+  it('hydrates only the selected tab and restores its unsaved draft and PDF/editor positions', async () => {
+    const database = createDatabase();
+    await database.open();
+    await database.files.add(file('note', 'workspace-a'));
+    await database.contents.add({ fileId: 'note', data: '# Saved content' });
+    await database.preferences.put({ key: 'draft:note', value: '# Recovered unsaved content', updatedAt: Date.now() });
+    await database.preferences.put({ key: 'editor:note', value: { anchor: 4, head: 9, scrollTop: 120, scrollLeft: 0, preview: true }, updatedAt: Date.now() });
+    const placeholder = {
+      id: 'note',
+      meta: file('note', 'workspace-a'),
+      draft: '',
+      dirty: false,
+      preview: false,
+    };
+    const hydrated = await hydrateWorkspaceTab(database, placeholder);
+    expect(hydrated.draft).toBe('# Recovered unsaved content');
+    expect(hydrated.dirty).toBe(true);
+    expect(hydrated.preview).toBe(true);
+    expect(hydrated.editorState).toMatchObject({ anchor: 4, head: 9, scrollTop: 120 });
+    expect(hydrated.data).toBe('# Saved content');
+  });
+
+  it('rejects hydration when the referenced file content is missing', async () => {
+    const database = createDatabase();
+    await database.open();
+    const placeholder = { id: 'missing', meta: file('missing', 'workspace-a'), draft: '', dirty: false, preview: false };
+    await expect(hydrateWorkspaceTab(database, placeholder)).rejects.toThrow('content for');
   });
 });

@@ -1,6 +1,7 @@
 import type { WorkspaceDatabase } from './database';
 import type { FileMeta } from './types';
-import type { Tab, EditorViewState } from '../features/tabs/types';
+import { fileText } from '../utils/format';
+import type { Tab, EditorViewState, PdfViewState } from '../features/tabs/types';
 
 export interface WorkspaceSession {
   workspaceId: string;
@@ -84,6 +85,37 @@ export async function restoreWorkspaceSession(
       preview: meta.kind === 'markdown',
     })),
     activeTabId,
+  };
+}
+
+function normalizePdfViewState(value: unknown): PdfViewState {
+  const state = isRecord(value) ? value : {};
+  return {
+    page: typeof state.page === 'number' && Number.isFinite(state.page) ? Math.max(1, Math.floor(state.page)) : 1,
+    zoom: typeof state.zoom === 'number' && Number.isFinite(state.zoom) ? Math.max(.5, Math.min(2, state.zoom)) : 1,
+    fit: typeof state.fit === 'boolean' ? state.fit : true,
+  };
+}
+
+/** Hydrates only the selected tab; unsaved drafts and editor state remain in per-file preferences. */
+export async function hydrateWorkspaceTab(database: WorkspaceDatabase, tab: Tab): Promise<Tab> {
+  const content = await database.contents.get(tab.id);
+  if (!content) throw new Error(`The content for “${tab.meta.name}” is missing.`);
+  const isText = ['markdown', 'code', 'text'].includes(tab.meta.kind);
+  const data = isText && content.data instanceof Blob ? await content.data.text() : content.data;
+  const savedDraft = isText ? (await database.preferences.get(`draft:${tab.id}`))?.value : undefined;
+  const hasRecoveredDraft = typeof savedDraft === 'string';
+  const draft = hasRecoveredDraft ? savedDraft : isText ? fileText(data) : '';
+  const savedPdfState = tab.meta.kind === 'pdf' ? (await database.preferences.get(`pdf:${tab.id}`))?.value : undefined;
+  const editorState = isText ? await loadEditorViewState(database, tab.id) : undefined;
+  return {
+    ...tab,
+    data,
+    draft,
+    dirty: hasRecoveredDraft,
+    pdfState: tab.meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : tab.pdfState,
+    editorState,
+    preview: editorState?.preview ?? tab.preview,
   };
 }
 

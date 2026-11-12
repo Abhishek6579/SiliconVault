@@ -25,7 +25,7 @@ import WorkspaceDialog, { type WorkspaceDialogState } from './components/Workspa
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { loadEditorViewState, restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
+import { hydrateWorkspaceTab, restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -316,36 +316,35 @@ export default function App() {
     }
     const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
     if (existing) {
-      let data = existing.data;
-      let draft = existing.draft;
-      let dirty = existing.dirty;
-      let pdfState = existing.pdfState;
-      let editorState = existing.editorState;
-      if (data === undefined) {
-        const content = await db.contents.get(meta.id);
-        if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-        data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob
-          ? await content.data.text() : content.data;
-        if (['markdown', 'code', 'text'].includes(meta.kind)) {
-          const savedDraftValue = (await db.preferences.get(`draft:${meta.id}`))?.value;
-          const hasRecoveredDraft = typeof savedDraftValue === 'string';
-          draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
-          dirty = hasRecoveredDraft;
-          if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
-          editorState = await loadEditorViewState(db, meta.id);
-        }
-        if (meta.kind === 'pdf') {
-          const savedPdfState = (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined;
-          pdfState = normalizePdfViewState(savedPdfState);
-        }
-      }
+      const hydrated = existing.data === undefined ? await hydrateWorkspaceTab(db, existing) : existing;
+      if (hydrated.dirty) trackRecoveredDraft(meta.id, hydrated.draft);
       setTabs((current) => current.map((tab) => {
-        if (tab.id === meta.id) return { ...tab, data, draft, dirty, pdfState, editorState, preview: editorState?.preview ?? tab.preview };
+        if (tab.id === meta.id) return hydrated;
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }));
       setActiveTabId(meta.id);
+      setError('');
+      return;
+    }
+    const newTab = await hydrateWorkspaceTab(db, {
+      id: meta.id,
+      meta,
+      draft: '',
+      dirty: false,
+      preview: meta.kind === 'markdown',
+    });
+    if (newTab.dirty) trackRecoveredDraft(meta.id, newTab.draft);
+    setTabs((current) => [
+      ...current.map((tab) => {
+        if (!(tab.data instanceof Blob)) return tab;
+        const { data: _released, ...withoutPdfData } = tab;
+        return withoutPdfData;
+      }),
+      newTab,
+    ]);
+    setActiveTabId(meta.id);
       setError('');
       return;
     }
@@ -1044,14 +1043,6 @@ export default function App() {
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
-}
-
-function normalizePdfViewState(state?: Partial<PdfViewState>): PdfViewState {
-  return {
-    page: Number.isFinite(state?.page) ? Math.max(1, Math.floor(state!.page!)) : 1,
-    zoom: Number.isFinite(state?.zoom) ? Math.max(.5, Math.min(2, state!.zoom!)) : 1,
-    fit: typeof state?.fit === 'boolean' ? state.fit : true,
-  };
 }
 
 function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
