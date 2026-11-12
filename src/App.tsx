@@ -945,7 +945,9 @@ export default function App() {
 
   const visibleFiles = view === 'trash' ? trashedFiles : view === 'recent'
     ? [...liveFiles].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40)
-    : liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === activeProject && file.parentFolderId === selectedFolder);
+    : view === 'workspace' && !activeProject && !selectedFolder
+      ? liveFiles
+      : liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === activeProject && file.parentFolderId === selectedFolder);
   const sortedVisible = view === 'recent' || view === 'trash' ? [...visibleFiles] : [...visibleFiles].sort((a, b) => {
     const order = sort === 'type' ? a.kind.localeCompare(b.kind) : sort === 'size' ? a.size - b.size : sort === 'updatedAt' ? a.updatedAt - b.updatedAt : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     return sortDesc ? -order : order;
@@ -1114,7 +1116,7 @@ export default function App() {
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
-      </div> : <div className="workspace-body">
+      </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
         {workspaceTabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{workspaceTabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <div className="welcome-page">
           <div className="welcome-kicker"><Sparkles size={15} /> LOCAL ENGINEERING WORKSPACE</div>
@@ -1139,6 +1141,7 @@ export default function App() {
               <button className="file-name-button" onClick={() => { setSelectedFolder(folder.id); setActiveTabId(null); }}><Folder size={17} className="folder-icon" /><span>{folder.name}</span><small>Folder</small></button><span className="kind-cell">Folder</span><span className="size-cell">—</span><span className="date-cell">{new Date(folder.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.id, event)}><Ellipsis size={16} /></button>
             </div>)}
           </>}
+          {view === 'workspace' && !activeProject && !selectedFolder && <div className="workspace-files-heading"><h2>All workspace files</h2><span>{visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'}</span></div>}
           <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
           {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
             <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
