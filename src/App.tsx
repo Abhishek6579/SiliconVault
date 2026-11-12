@@ -22,20 +22,23 @@ import {
 } from 'lucide-react';
 import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import { flushPendingAutosaves } from './storage/autosave';
+import MermaidDiagram from './components/MermaidDiagram';
+import FileKindIcon from './components/FileKindIcon';
+import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
+import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
+import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
 import { parseBackupFile } from './features/backup/parse';
 import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
-import type { FileKind, FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
+import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
 type View = 'workspace' | 'recent' | 'trash';
 interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
-interface TreeFolder { record: FolderRecord; children: TreeFolder[]; files: FileMeta[]; }
-interface MermaidDiagramProps { source: string; }
 interface PdfViewState { page: number; zoom: number; fit: boolean; }
 interface SystemStats { cpu: number | null; ram: number | null; gpu: number | null; }
 type ContextItemType = 'file' | 'folder' | 'project';
@@ -43,76 +46,6 @@ interface ContextMenuState { type: ContextItemType; id: string; x: number; y: nu
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
 interface SearchResult { file: FileMeta; text: string; }
-interface DialogState {
-  mode: 'input' | 'confirm';
-  title: string;
-  message?: string;
-  value?: string;
-  placeholder?: string;
-  confirmLabel: string;
-  destructive?: boolean;
-  onConfirm: (value: string) => void | Promise<void>;
-}
-
-function MermaidDiagram({ source }: MermaidDiagramProps) {
-  const target = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let alive = true;
-    const id = `diagram-${crypto.randomUUID()}`;
-    import('mermaid').then(({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral' });
-      return mermaid.render(id, source);
-    }).then(({ svg }) => { if (alive && target.current) target.current.innerHTML = svg; }).catch(() => {
-      if (alive && target.current) target.current.textContent = 'This diagram could not be rendered.';
-    });
-    return () => { alive = false; };
-  }, [source]);
-  return <div className="mermaid-diagram" ref={target} />;
-}
-
-function buildTree(folders: FolderRecord[], files: FileMeta[], parentId: string | null, projectId: string | null, workspaceId: string | null): TreeFolder[] {
-  const foldersByParent = new Map<string | null, FolderRecord[]>();
-  const filesByParent = new Map<string | null, FileMeta[]>();
-  for (const folder of folders) {
-    if (folder.projectId !== projectId || folder.workspaceId !== workspaceId) continue;
-    const siblings = foldersByParent.get(folder.parentFolderId);
-    if (siblings) siblings.push(folder); else foldersByParent.set(folder.parentFolderId, [folder]);
-  }
-  for (const file of files) {
-    if (file.projectId !== projectId || file.workspaceId !== workspaceId) continue;
-    const siblings = filesByParent.get(file.parentFolderId);
-    if (siblings) siblings.push(file); else filesByParent.set(file.parentFolderId, [file]);
-  }
-  for (const siblings of foldersByParent.values()) siblings.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-  const visited = new Set<string>();
-  const build = (parent: string | null): TreeFolder[] => {
-    const children: TreeFolder[] = [];
-    for (const record of foldersByParent.get(parent) ?? []) {
-      if (visited.has(record.id)) continue;
-      visited.add(record.id);
-      children.push({ record, children: build(record.id), files: filesByParent.get(record.id) ?? [] });
-    }
-    return children;
-  };
-  return build(parentId);
-}
-
-function typeIcon(kind: FileKind, size = 16) {
-  if (kind === 'pdf') return <FileText size={size} className="file-kind pdf-kind" />;
-  if (kind === 'markdown') return <BookOpen size={size} className="file-kind md-kind" />;
-  if (kind === 'code') return <FileCode2 size={size} className="file-kind code-kind" />;
-  return <File size={size} className="file-kind" />;
-}
-
-function formatSize(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function fileText(data: Blob | string) {
-  return typeof data === 'string' ? data : '';
-}
 
 export default function App() {
   const [files, setFiles] = useState<FileMeta[]>([]);
@@ -147,7 +80,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
-  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [dialog, setDialog] = useState<WorkspaceDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -376,7 +309,7 @@ export default function App() {
   const trashedFiles = files.filter((file) => file.workspaceId === activeWorkspaceId && file.deletedAt !== null).sort((a, b) => b.deletedAt! - a.deletedAt!);
   const rootFiles = liveFiles.filter((file) => file.parentFolderId === null && file.projectId === activeProject);
   const currentFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.parentFolderId === selectedFolder && folder.projectId === activeProject);
-  const tree = useMemo(() => buildTree(folders, liveFiles, null, activeProject, activeWorkspaceId), [folders, liveFiles, activeProject, activeWorkspaceId]);
+  const tree = useMemo(() => buildWorkspaceTree(folders, liveFiles, null, activeProject, activeWorkspaceId), [folders, liveFiles, activeProject, activeWorkspaceId]);
   const excludedMoveFolders = useMemo(() => {
     const ids = new Set<string>();
     if (moveDialog?.type !== 'folder') return ids;
@@ -953,7 +886,7 @@ export default function App() {
     })();
   }
 
-  function renderFolder(folder: TreeFolder, depth = 0) {
+  function renderFolder(folder: WorkspaceTreeFolder, depth = 0) {
     const isOpen = expanded.has(folder.record.id);
     const selected = selectedFolder === folder.record.id;
     return <div key={folder.record.id}>
@@ -974,14 +907,14 @@ export default function App() {
 
   function renderFileTree(file: FileMeta, depth = 0) {
     return <div key={file.id} className={`tree-row file-row ${activeTabId === file.id ? 'selected' : ''}`} style={{ paddingLeft: `${31 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-      <button className="tree-main" onClick={() => void openFile(file)}>{typeIcon(file.kind, 15)}<span className="truncate" title={file.name}>{file.name}</span></button>
+      <button className="tree-main" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={15} />}<span className="truncate" title={file.name}>{file.name}</span></button>
       <button className="mini-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={15} /></button>
     </div>;
   }
 
   function renderProjectTree(project: Project) {
     const open = activeProject === project.id;
-    const projectTree = buildTree(folders, liveFiles, null, project.id, project.workspaceId);
+    const projectTree = buildWorkspaceTree(folders, liveFiles, null, project.id, project.workspaceId);
     const filesAtRoot = liveFiles.filter((file) => file.projectId === project.id && file.parentFolderId === null);
     return <div key={project.id}>
       <div className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => showContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, null, project.id, project.workspaceId)}>
@@ -1029,8 +962,8 @@ export default function App() {
         </div>
         <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={() => void createProject()}><Plus size={15} /></button></div>
         <div className="project-tree">
-          {(buildTree(folders, liveFiles, null, null, activeWorkspaceId).length > 0 || liveFiles.some((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null)) && <div className="sidebar-section-heading workspace-tree-heading"><span>WORKSPACE FILES</span></div>}
-          {buildTree(folders, liveFiles, null, null, activeWorkspaceId).map((folder) => renderFolder(folder))}
+          {(buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).length > 0 || liveFiles.some((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null)) && <div className="sidebar-section-heading workspace-tree-heading"><span>WORKSPACE FILES</span></div>}
+          {buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).map((folder) => renderFolder(folder))}
           {liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null).map((file) => renderFileTree(file))}
           {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).map(renderProjectTree)}
           {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).length === 0 && <div className="sidebar-empty">Your projects<br /><span>show up here</span></div>}
@@ -1134,14 +1067,14 @@ export default function App() {
         <div className="tab-strip">
           <div className="tab-list">
             {tabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
-              {typeIcon(tab.meta.kind, 15)}<span className="truncate" title={tab.meta.name}>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
+              {<FileKindIcon kind={tab.meta.kind} size={15} />}<span className="truncate" title={tab.meta.name}>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
               <span role="button" tabIndex={0} className="tab-close" aria-label={`Close ${tab.meta.name}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); closeTab(tab.id); } }}><X size={14} /></span>
             </button>)}
           </div>
             <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Plus size={16} /></button>
         </div>
         <div className="editor-titlebar">
-          <div className="editor-file-title">{typeIcon(activeTab.meta.kind, 16)}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
+          <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
           <div className="editor-tools">
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
             {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview: !tab.preview } : tab))}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
@@ -1176,7 +1109,7 @@ export default function App() {
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body">
-        {tabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{tabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{typeIcon(tab.meta.kind, 14)}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
+        {tabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{tabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <div className="welcome-page">
           <div className="welcome-kicker"><Sparkles size={15} /> LOCAL ENGINEERING WORKSPACE</div>
           <h1>Your work, in one place.</h1>
@@ -1202,11 +1135,11 @@ export default function App() {
           </>}
           <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
           {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-            <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{typeIcon(file.kind, 17)}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
+            <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
           </div>) : view === 'recent' ? sortedVisible.length === 0 ? <EmptyState title="No recent files" message="Open a file or import one to start building your workspace." icon={<Clock3 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-            <button className="file-name-button" onClick={() => void openFile(file)}>{typeIcon(file.kind, 17)}<span>{file.name}</span><small>{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
+            <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
           </div>) : sortedVisible.length === 0 && currentFolders.length === 0 ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-            <button className="file-name-button" onClick={() => void openFile(file)}>{typeIcon(file.kind, 17)}<span>{file.name}</span><small>{file.projectId ? projects.find((project) => project.id === file.projectId)?.name : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
+            <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? projects.find((project) => project.id === file.projectId)?.name : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
           </div>)}
           {view === 'workspace' && <div className="root-drop-hint"><Import size={14} /> Drop files here to import them into {selectedFolder ? 'this folder' : activeProjectRecord?.name ?? 'the workspace'}</div>}
         </div>}
@@ -1221,7 +1154,7 @@ export default function App() {
         <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
       </div> : <div className="search-results-panel">
         {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and text in notes or code.</span></div> : searchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Try a different word or phrase.</span></div> : searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => void openFile(file)}>
-          <span className="search-result-title">{typeIcon(file.kind, 15)}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
+          <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
         </button>)}
         {query.trim() && searchResults.length > 0 && <div className="search-count">{searchResults.length} matching file{searchResults.length === 1 ? '' : 's'}</div>}
       </div>}
@@ -1252,14 +1185,7 @@ export default function App() {
       </section>
     </div>}
 
-    {dialog && <div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setDialog(null); }}>
-      <form className="app-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); void submitDialog(); }}>
-        <div className="move-dialog-header"><div><div className="modal-eyebrow">WORKSPACE</div><h2>{dialog.title}</h2></div><button type="button" className="icon-button" onClick={() => setDialog(null)} aria-label="Close"><X size={17} /></button></div>
-        {dialog.message && <p className="move-dialog-copy">{dialog.message}</p>}
-        {dialog.mode === 'input' && <input className="dialog-input" autoFocus value={dialog.value ?? ''} placeholder={dialog.placeholder} onChange={(event) => setDialog((current) => current ? { ...current, value: event.target.value } : current)} onKeyDown={(event) => { if (event.key === 'Escape') setDialog(null); }} />}
-        <div className="move-dialog-footer"><button type="button" className="text-button" onClick={() => setDialog(null)}>Cancel</button><button type="submit" className={dialog.destructive ? 'danger-button' : 'primary-button'} disabled={dialog.mode === 'input' && !dialog.value?.trim()}>{dialog.confirmLabel}</button></div>
-      </form>
-    </div>}
+    <WorkspaceDialog dialog={dialog} onClose={() => setDialog(null)} onSubmit={() => void submitDialog()} onChange={(value) => setDialog((current) => current ? { ...current, value } : current)} />
 
     {migrationBackup && <div className="modal-backdrop upgrade-backdrop">
       <section className="move-dialog upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-title">

@@ -381,10 +381,15 @@ describe('workspace storage', () => {
     const now = Date.now();
     await legacy.projects.add({ id: 'legacy-project', name: 'Legacy project', archived: false, createdAt: now, updatedAt: now } as never);
     await legacy.folders.add({ id: 'legacy-folder', name: 'Legacy folder', parentFolderId: null, projectId: 'legacy-project', createdAt: now, updatedAt: now } as never);
-    await legacy.files.add({ id: 'legacy-file', kind: 'markdown', name: 'legacy.md', parentFolderId: 'legacy-folder', projectId: 'legacy-project', size: 6, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null } as never);
-    await legacy.contents.add({ fileId: 'legacy-file', data: 'legacy' });
+    await legacy.folders.add({ id: 'legacy-child', name: 'Nested folder', parentFolderId: 'legacy-folder', projectId: 'legacy-project', createdAt: now, updatedAt: now } as never);
+    await legacy.files.bulkAdd([
+      { id: 'legacy-file', kind: 'markdown', name: 'legacy.md', parentFolderId: 'legacy-folder', projectId: 'legacy-project', size: 6, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null },
+      { id: 'legacy-deleted', kind: 'text', name: 'deleted.txt', parentFolderId: 'legacy-child', projectId: 'legacy-project', size: 3, mimeType: 'text/plain', createdAt: now - 2000, updatedAt: now - 1000, deletedAt: now - 500 },
+    ] as never);
+    await legacy.contents.bulkAdd([{ fileId: 'legacy-file', data: 'legacy' }, { fileId: 'legacy-deleted', data: 'old' }]);
     const preUpgradeBackup = await exportBackup(legacy);
-    expect(preUpgradeBackup.files[0].meta.id).toBe('legacy-file');
+    expect(preUpgradeBackup.files).toHaveLength(2);
+    expect(preUpgradeBackup.files.some((file) => file.meta.id === 'legacy-file')).toBe(true);
     legacy.close();
 
     const restored = createDatabase();
@@ -398,9 +403,12 @@ describe('workspace storage', () => {
     databases.push(upgraded);
     await upgraded.open();
     expect(await upgraded.projects.get('legacy-project')).toMatchObject({ name: 'Legacy project' });
-    expect(await upgraded.folders.get('legacy-folder')).toMatchObject({ projectId: 'legacy-project' });
-    expect(await upgraded.files.get('legacy-file')).toMatchObject({ id: 'legacy-file', size: 6 });
+    expect(await upgraded.folders.get('legacy-folder')).toMatchObject({ projectId: 'legacy-project', workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await upgraded.folders.get('legacy-child')).toMatchObject({ parentFolderId: 'legacy-folder', workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await upgraded.files.get('legacy-file')).toMatchObject({ id: 'legacy-file', size: 6, workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await upgraded.files.get('legacy-deleted')).toMatchObject({ deletedAt: now - 500, workspaceId: DEFAULT_WORKSPACE_ID });
     expect(await upgraded.contents.get('legacy-file')).toEqual({ fileId: 'legacy-file', data: 'legacy' });
+    expect(await upgraded.contents.get('legacy-deleted')).toEqual({ fileId: 'legacy-deleted', data: 'old' });
     expect(await upgraded.preferences.count()).toBe(0);
   });
 
@@ -410,9 +418,19 @@ describe('workspace storage', () => {
     await legacy.open();
     const now = Date.now();
     await legacy.projects.add({ id: 'v2-project', name: 'Version two', archived: false, createdAt: now, updatedAt: now } as never);
-    await legacy.files.add({ id: 'v2-file', kind: 'markdown', name: 'v2.md', parentFolderId: null, projectId: 'v2-project', size: 3, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null } as never);
-    await legacy.contents.add({ fileId: 'v2-file', data: 'v2!' });
-    await legacy.preferences.add({ key: 'theme', value: 'dark', updatedAt: now });
+    await legacy.folders.add({ id: 'v2-folder', name: 'Nested', parentFolderId: null, projectId: 'v2-project', createdAt: now, updatedAt: now } as never);
+    await legacy.files.bulkAdd([
+      { id: 'v2-file', kind: 'markdown', name: 'v2.md', parentFolderId: 'v2-folder', projectId: 'v2-project', size: 3, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null },
+      { id: 'v2-binary', kind: 'viewer', name: 'plot.png', parentFolderId: 'v2-folder', projectId: 'v2-project', size: 3, mimeType: 'image/png', createdAt: now, updatedAt: now, deletedAt: null },
+    ] as never);
+    await legacy.contents.bulkAdd([
+      { fileId: 'v2-file', data: 'v2!' },
+      { fileId: 'v2-binary', data: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }) },
+    ]);
+    await legacy.preferences.bulkAdd([
+      { key: 'theme', value: 'dark', updatedAt: now },
+      { key: 'appZoom', value: 1.2, updatedAt: now },
+    ]);
     legacy.close();
 
     const upgraded = new WorkspaceDatabase(name);
@@ -420,8 +438,14 @@ describe('workspace storage', () => {
     await upgraded.open();
     expect(await upgraded.workspaces.get(DEFAULT_WORKSPACE_ID)).toMatchObject({ name: 'My Workspace' });
     expect(await upgraded.projects.get('v2-project')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
-    expect(await upgraded.files.get('v2-file')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await upgraded.folders.get('v2-folder')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID });
+    expect(await upgraded.files.get('v2-file')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID, parentFolderId: 'v2-folder' });
+    expect(await upgraded.files.get('v2-binary')).toMatchObject({ workspaceId: DEFAULT_WORKSPACE_ID, mimeType: 'image/png' });
     expect(await upgraded.contents.get('v2-file')).toEqual({ fileId: 'v2-file', data: 'v2!' });
+    const migratedBinary = await upgraded.contents.get('v2-binary');
+    expect(migratedBinary?.data).toBeInstanceOf(Blob);
+    expect([...new Uint8Array(await (migratedBinary?.data as Blob).arrayBuffer())]).toEqual([1, 2, 3]);
     expect(await upgraded.preferences.get('theme')).toMatchObject({ value: 'dark' });
+    expect(await upgraded.preferences.get('appZoom')).toMatchObject({ value: 1.2 });
   });
 });
