@@ -40,11 +40,13 @@ export async function saveWorkspaceSession(
   const previousValue = previous?.value;
   const previousActive = isRecord(previousValue) && typeof previousValue.activeFileId === 'string'
     ? previousValue.activeFileId : null;
-  const selectedActive = activeFileId && uniqueIds.includes(activeFileId)
-    ? activeFileId
-    : previousActive && uniqueIds.includes(previousActive)
-      ? previousActive
-      : uniqueIds.at(-1) ?? null;
+  const selectedActive = activeFileId === null
+    ? null
+    : activeFileId && uniqueIds.includes(activeFileId)
+      ? activeFileId
+      : previousActive && uniqueIds.includes(previousActive)
+        ? previousActive
+        : uniqueIds.at(-1) ?? null;
   const session: WorkspaceSession = { workspaceId, openFileIds: uniqueIds, activeFileId: selectedActive, updatedAt: Date.now() };
   await database.preferences.put({ key: workspaceSessionKey(workspaceId), value: session, updatedAt: session.updatedAt });
   return session;
@@ -65,9 +67,11 @@ export async function restoreWorkspaceSession(
   ));
   const validIds = validFiles.map((file) => file.id);
   const requestedActive = isRecord(value) && typeof value.activeFileId === 'string' ? value.activeFileId : null;
-  const activeTabId = requestedActive && validIds.includes(requestedActive)
-    ? requestedActive
-    : validIds.at(-1) ?? null;
+  const activeTabId = requestedActive === null
+    ? null
+    : requestedActive && validIds.includes(requestedActive)
+      ? requestedActive
+      : validIds.at(-1) ?? null;
   const isValidRecord = isRecord(value)
     && value.workspaceId === workspaceId
     && requestedIds.length === rawIds.length

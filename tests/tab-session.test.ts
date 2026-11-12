@@ -66,6 +66,20 @@ describe('workspace tab sessions', () => {
     expect((await restoreWorkspaceSession(database, 'missing-workspace')).tabs).toEqual([]);
   });
 
+  it('persists an explicitly cleared active tab instead of reviving the previous selection', async () => {
+    const database = createDatabase();
+    await database.open();
+    await database.files.bulkAdd([file('a', 'workspace-a'), file('b', 'workspace-a')]);
+
+    await saveWorkspaceSession(database, 'workspace-a', ['a', 'b'], 'a');
+    const cleared = await saveWorkspaceSession(database, 'workspace-a', ['a', 'b'], null);
+
+    expect(cleared.activeFileId).toBeNull();
+    const restored = await restoreWorkspaceSession(database, 'workspace-a');
+    expect(restored.tabs.map((tab) => tab.id)).toEqual(['a', 'b']);
+    expect(restored.activeTabId).toBeNull();
+  });
+
   it('falls back to the last valid tab when the stored active ID is invalid', async () => {
     const database = createDatabase();
     await database.open();

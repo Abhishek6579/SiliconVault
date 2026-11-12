@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "SemVer version to publish from the selected branch commit (without the v prefix)"
+        description: "SemVer version to publish from the selected master commit (without the v prefix)"
         required: true
         type: string
         default: "0.1.1-alpha.2"
@@ -20,6 +20,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-provenance:
+    name: Verify approved master release source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Verify release source is an approved master commit
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$EVENT_REF" != "refs/heads/master" ]]; then
+              echo "::error::Manual releases may only be dispatched from master (selected ref: $EVENT_REF)."
+              exit 1
+            fi
+            if [[ -z "$RELEASE_VERSION" || ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::A valid SemVer release version is required."
+              exit 1
+            fi
+            if git show-ref --verify --quiet "refs/tags/v$RELEASE_VERSION"; then
+              echo "::error::Tag v$RELEASE_VERSION already exists; releases must never retarget an existing tag."
+              exit 1
+            fi
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ "$EVENT_REF" != refs/tags/v* ]]; then
+              echo "::error::Release workflow push events must originate from a v* tag."
+              exit 1
+            fi
+          else
+            echo "::error::Unsupported release event: $EVENT_NAME"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/master; then
+            echo "::error::Release commit $RELEASE_SHA is not reachable from approved master history."
+            exit 1
+          fi
+          echo "Verified $RELEASE_SHA is reachable from origin/master."
+
   frontend-validation:
     name: Release frontend validation
     runs-on: ubuntu-latest
@@ -40,7 +86,9 @@ jobs:
 
   windows-release:
     name: Build and publish Windows installers
-    needs: frontend-validation
+    needs:
+      - release-provenance
+      - frontend-validation
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
