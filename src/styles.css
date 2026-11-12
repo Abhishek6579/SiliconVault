@@ -564,3 +564,60 @@ html, body, #root {
   border-color: #292929;
   color: #a0a0a0;
 }
+
+
+/* Compact top-bar import menu replaces the separate content action toolbar. */
+.topbar {
+  height: 48px;
+  padding: 0 18px;
+  gap: 14px;
+}
+.topbar-actions { gap: 11px; }
+.import-menu-wrapper { position: relative; flex: 0 0 auto; }
+.import-button {
+  height: 30px;
+  min-width: 91px;
+  padding: 0 10px;
+  gap: 7px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+.import-button[aria-expanded="true"] { background: #314f96; }
+.import-menu {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 205px;
+  padding: 6px;
+  border: 1px solid #e3e6eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 34px #1824391f, 0 2px 7px #1824390c;
+}
+.import-menu button {
+  width: 100%;
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #616874;
+  text-align: left;
+  font-size: 11px;
+}
+.import-menu button:hover { background: #f2f4f7; color: #34435f; }
+.import-menu button svg { flex: 0 0 auto; color: #8993a2; }
+.import-menu button span { flex: 1; }
+.workspace-switch-menu { max-height: min(72vh, 560px); overflow-y: auto; }
+.app-shell[data-theme="dark"] .import-menu {
+  background: #24272c;
+  border-color: #3a3f47;
+  box-shadow: 0 14px 38px #0006;
+}
+.app-shell[data-theme="dark"] .import-menu button { color: #c0c5cd; }
+.app-shell[data-theme="dark"] .import-menu button:hover { background: #30353d; color: #e0e3e8; }
+.app-shell[data-theme="dark"] .import-menu button svg { color: #a0a8b4; }
