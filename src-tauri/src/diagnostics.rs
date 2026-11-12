@@ -39,7 +39,7 @@ fn collect(app: &AppHandle, logger: &Logger, state: &DiagnosticsState, system: S
         schema_version: 1, app_version: env!("CARGO_PKG_VERSION"), platform: std::env::consts::OS, architecture: std::env::consts::ARCH,
         uptime_seconds: state.started.elapsed().as_secs(), collected_at: crate::logger::timestamp(), system,
         logs: LogInventory { app_log_bytes: logger.log_size("app.log"), crash_log_bytes: logger.log_size("crash.log"),
-            startup_report_bytes: logger.log_size("startup.json"), diagnostics_directory: logger.directory().to_string_lossy().into_owned() },
+            startup_report_bytes: logger.log_size("startup.json"), diagnostics_directory: "app_log_dir/diagnostics".to_string() },
         data_isolation: "Diagnostics use Tauri app log/cache directories; Dexie and user documents are not accessed.",
     }
 }
