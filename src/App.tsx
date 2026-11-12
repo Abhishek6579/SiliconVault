@@ -223,8 +223,11 @@ export default function App() {
     await refresh();
   }, [refresh, setWorkspaces]);
   const backup = useWorkspaceBackup(flushPendingSaves, requestConfirmation, setError, onBackupRestored);
-  const allLiveFiles = files.filter((file) => file.deletedAt === null);
-  const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
+    // Memoized so the array keeps its identity between renders. Without this, the search effect reruns on every render.
+  const liveFiles = useMemo(
+    () => files.filter((file) => file.deletedAt === null && file.workspaceId === activeWorkspaceId),
+    [files, activeWorkspaceId],
+  );
   const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
   const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
   const trashedFiles = files.filter((file) => file.workspaceId === activeWorkspaceId && file.deletedAt !== null).sort((a, b) => b.deletedAt! - a.deletedAt!);

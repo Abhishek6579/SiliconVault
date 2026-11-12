@@ -9,7 +9,13 @@ export function useWorkspaceSearch(files: FileMeta[], query: string, onError: (m
 
   useEffect(() => {
     const needle = query.trim().toLocaleLowerCase();
-    if (!needle) { setResults([]); return; }
+
+    if (!needle) {
+      // Only update when there is something to clear. A new [] on every run causes a render loop.
+      setResults(current => (current.length === 0 ? current : []));
+      return;
+    }
+
     let cancelled = false;
     const timer = setTimeout(() => {
       void (async () => {
@@ -25,17 +31,26 @@ export function useWorkspaceSearch(files: FileMeta[], query: string, onError: (m
           if (cancelled) return;
           if (titleMatch || text.toLocaleLowerCase().includes(needle)) {
             const index = text.toLocaleLowerCase().indexOf(needle);
-            const snippet = index < 0 ? file.name : text.slice(Math.max(0, index - 56), Math.min(text.length, index + needle.length + 88)).trim();
+            const snippet = index < 0
+              ? file.name
+              : text.slice(Math.max(0, index - 56), Math.min(text.length, index + needle.length + 88)).trim();
             matches.push({ file, text: snippet });
             if (matches.length >= 100) break;
           }
         }
         if (!cancelled) setResults(matches);
       })().catch((reason: unknown) => {
-        if (!cancelled) onError(reason instanceof Error ? reason.message : 'Search could not read workspace content.');
+        console.error('Workspace search failed:', reason);
+        if (!cancelled) {
+          onError(reason instanceof Error ? reason.message : 'Search could not read workspace content.');
+        }
       });
     }, 180);
-    return () => { cancelled = true; clearTimeout(timer); };
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [files, onError, query]);
 
   return results;
