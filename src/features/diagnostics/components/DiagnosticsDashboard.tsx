@@ -9,7 +9,7 @@ interface DiagnosticsSnapshot {
   uptimeSeconds: number; collectedAt: string;
   system: { cpu: number | null; ram: number | null; gpu: number | null };
   logs: { appLogBytes: number; crashLogBytes: number; startupReportBytes: number; diagnosticsDirectory: string };
-  dataIsolation: string;
+  dataIsolation: string; previousSessionClean: boolean | null; recoveryNote: string;
 }
 const formatBytes = (bytes: number) => bytes < 1024 ? bytes + ' B' : bytes < 1048576 ? (bytes / 1024).toFixed(1) + ' KB' : (bytes / 1048576).toFixed(2) + ' MB';
 const formatUptime = (seconds: number) => {
@@ -70,7 +70,9 @@ export default function DiagnosticsDashboard() {
           <div><dt>Platform</dt><dd>{snapshot.platform} · {snapshot.architecture}</dd></div>
           <div><dt>Collected</dt><dd>{new Date(Number(snapshot.collectedAt) * 1000).toLocaleString()}</dd></div>
           <div><dt>Schema</dt><dd>Diagnostics v{snapshot.schemaVersion}</dd></div>
+          <div><dt>Previous session</dt><dd>{snapshot.previousSessionClean == null ? 'Unknown' : snapshot.previousSessionClean ? 'Clean shutdown' : 'Unclean shutdown detected'}</dd></div>
         </dl>
+        <p className="diagnostics-path">{snapshot.recoveryNote}</p>
       </div>
       <div className="diagnostics-section">
         <div className="diagnostics-section-title"><FileText size={17} /><h2>Diagnostic files</h2></div>
