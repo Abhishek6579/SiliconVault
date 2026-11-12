@@ -475,3 +475,92 @@ html, body, #root {
   background: #737b8b80;
   background-clip: content-box;
 }
+
+
+/* Compact tab groups: keep background tabs and editor tabs visually consistent. */
+.background-tab-strip {
+  height: 35px;
+  min-height: 35px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.background-tab-strip > span { flex: 0 0 auto; }
+.background-tab {
+  flex: 0 1 170px;
+  min-width: 76px;
+  height: 25px;
+  gap: 6px;
+  padding: 0 6px;
+}
+.background-tab > span:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.tab-strip {
+  height: 35px;
+  min-height: 35px;
+  flex: 0 0 35px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 14px;
+}
+.tab-list {
+  height: 25px;
+  align-items: center;
+  gap: 5px;
+}
+.file-tab {
+  flex: 1 1 170px;
+  min-width: 76px;
+  max-width: 190px;
+  height: 25px;
+  gap: 6px;
+  padding: 0 6px;
+  border: 1px solid #e7e9ed;
+  border-radius: 5px;
+  border-right: 1px solid #e7e9ed;
+  background: #fff;
+  color: #747b85;
+  font-size: 9px;
+}
+.file-tab.active {
+  border-color: #bfcbe1;
+  background: #f1f4fa;
+  color: #455f94;
+  box-shadow: none;
+}
+.tab-close {
+  width: 17px;
+  height: 17px;
+}
+.tab-plus {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  margin: 0;
+  border: 1px solid #e7e9ed;
+  border-radius: 5px;
+}
+.app-shell[data-theme="dark"] .tab-strip { background: #141414; border-color: #292929; }
+.app-shell[data-theme="dark"] .file-tab {
+  background: #25292e;
+  border-color: #393e46;
+  color: #b3bac4;
+}
+.app-shell[data-theme="dark"] .file-tab.active {
+  background: #30394b;
+  border-color: #4d5b76;
+  color: #d5deef;
+  box-shadow: none;
+}
+.app-shell[data-theme="dark"] .tab-plus {
+  background: #171717;
+  border-color: #292929;
+  color: #a0a0a0;
+}
