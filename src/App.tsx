@@ -88,10 +88,15 @@ export default function App() {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const restoreWorkspaceTabs = useCallback(async (workspaceId: string) => {
     const restored = await restoreWorkspaceSession(db, workspaceId);
-    setTabs((current) => [
-      ...current.filter((tab) => tab.meta.workspaceId !== workspaceId),
-      ...restored.tabs,
-    ]);
+    setTabs((current) => {
+      const existingTabs = new Map(
+        current.filter((tab) => tab.meta.workspaceId === workspaceId).map((tab) => [tab.id, tab]),
+      );
+      return [
+        ...current.filter((tab) => tab.meta.workspaceId !== workspaceId),
+        ...restored.tabs.map((tab) => existingTabs.get(tab.id) ?? tab),
+      ];
+    });
     setActiveTabId(restored.activeTabId);
     return restored;
   }, []);
