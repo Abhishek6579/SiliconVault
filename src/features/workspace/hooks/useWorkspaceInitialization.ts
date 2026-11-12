@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from 'react';
 import { DATABASE_NAME, DATABASE_VERSION, db, existingDatabaseVersion } from '../../../storage/database';
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
 import type { Workspace } from '../../../storage/types';
-import type { Tab } from '../../tabs/types';
 
 interface Options {
   refresh: () => Promise<void>;
@@ -16,7 +15,7 @@ interface Options {
   setDarkTheme: Dispatch<SetStateAction<boolean>>;
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
   setActiveWorkspaceId: Dispatch<SetStateAction<string | null>>;
-  restoreTabs: (workspaceId: string) => Promise<void>;
+  restoreTabs: (workspaceId: string) => Promise<unknown>;
 }
 
 /** Opens the local database and restores persisted app and workspace selections. */

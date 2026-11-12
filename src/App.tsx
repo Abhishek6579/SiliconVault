@@ -25,7 +25,7 @@ import WorkspaceDialog, { type WorkspaceDialogState } from './components/Workspa
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
+import { loadEditorViewState, restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -98,7 +98,7 @@ export default function App() {
   useWorkspaceInitialization({
     refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
     setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
-    restoreTabs: async (workspaceId) => { await restoreWorkspaceTabs(workspaceId); },
+    restoreTabs: restoreWorkspaceTabs,
   });
   useGlobalShortcuts(setAppZoom);
 
@@ -302,14 +302,19 @@ export default function App() {
   const openFile = useCallback(async (fileMeta: FileMeta) => {
     // Reclassify on open so legacy HDL records cannot remain editable.
     const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
+    let restoredTabs: Tab[] = [];
     if (meta.workspaceId !== activeWorkspaceId) {
+      if (activeWorkspaceId) {
+        await saveWorkspaceSession(db, activeWorkspaceId, tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId).map((tab) => tab.id), activeTabId);
+      }
       await workspace.switchWorkspace(meta.workspaceId);
-      await restoreWorkspaceTabs(meta.workspaceId);
+      const restored = await restoreWorkspaceTabs(meta.workspaceId);
+      restoredTabs = restored.tabs;
       setActiveProject(meta.projectId);
       setSelectedFolder(meta.parentFolderId);
       setView('workspace');
     }
-    const existing = tabs.find((tab) => tab.id === meta.id);
+    const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
     if (existing) {
       let data = existing.data;
       let draft = existing.draft;
@@ -327,8 +332,7 @@ export default function App() {
           draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
           dirty = hasRecoveredDraft;
           if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
-          const savedEditorState = (await db.preferences.get(`editor:${meta.id}`))?.value as Partial<EditorViewState> | undefined;
-          editorState = normalizeEditorViewState(savedEditorState);
+          editorState = await loadEditorViewState(db, meta.id);
         }
         if (meta.kind === 'pdf') {
           const savedPdfState = (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined;
@@ -356,10 +360,9 @@ export default function App() {
     if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
     const pdfState = meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : undefined;
-    const savedEditorState = ['markdown', 'code', 'text'].includes(meta.kind)
-      ? (await db.preferences.get(`editor:${meta.id}`))?.value as Partial<EditorViewState> | undefined
+    const editorState = ['markdown', 'code', 'text'].includes(meta.kind)
+      ? await loadEditorViewState(db, meta.id)
       : undefined;
-    const editorState = normalizeEditorViewState(savedEditorState);
     setTabs((current) => [
       ...current.map((tab) => {
         if (!(tab.data instanceof Blob)) return tab;
@@ -371,7 +374,7 @@ export default function App() {
     setActiveTabId(meta.id);
     if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
-  }, [activeWorkspaceId, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
+  }, [activeWorkspaceId, restoreWorkspaceTabs, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
 
   useEffect(() => {
     if (!activeTab || activeTab.data !== undefined || loading) return;
@@ -907,7 +910,12 @@ export default function App() {
           <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
           <div className="editor-tools">
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
-            {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview: !tab.preview } : tab))}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
+            {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => {
+              const preview = !activeTab.preview;
+              const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
+              setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
+              void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
+            }}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
             <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
             <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
@@ -1044,13 +1052,6 @@ function normalizePdfViewState(state?: Partial<PdfViewState>): PdfViewState {
     zoom: Number.isFinite(state?.zoom) ? Math.max(.5, Math.min(2, state!.zoom!)) : 1,
     fit: typeof state?.fit === 'boolean' ? state.fit : true,
   };
-}
-
-function normalizeEditorViewState(state?: Partial<EditorViewState>): EditorViewState | undefined {
-  if (!state) return undefined;
-  const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-  if (!finite(state.anchor) || !finite(state.head) || !finite(state.scrollTop) || !finite(state.scrollLeft)) return undefined;
-  return { anchor: state.anchor!, head: state.head!, scrollTop: state.scrollTop!, scrollLeft: state.scrollLeft!, preview: state.preview === true };
 }
 
 function restoreEditorViewState(view: EditorView, state?: EditorViewState) {

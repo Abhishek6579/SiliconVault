@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WorkspaceDatabase } from '../src/storage/database';
-import { restoreWorkspaceSession, saveWorkspaceSession, workspaceSessionKey } from '../src/storage/tabSession';
+import { loadEditorViewState, restoreWorkspaceSession, saveWorkspaceSession, workspaceSessionKey } from '../src/storage/tabSession';
 import type { FileMeta } from '../src/storage/types';
 
 const databases: WorkspaceDatabase[] = [];
@@ -77,5 +77,22 @@ describe('workspace tab sessions', () => {
     });
     const restored = await restoreWorkspaceSession(database, 'workspace-a');
     expect(restored.activeTabId).toBe('b');
+  });
+});
+
+describe('per-file editor view state', () => {
+  it('loads valid cursor, scroll, and preview metadata from Dexie', async () => {
+    const database = createDatabase();
+    await database.open();
+    const state = { anchor: 12, head: 15, scrollTop: 240, scrollLeft: 8, preview: true };
+    await database.preferences.put({ key: 'editor:note-1', value: state, updatedAt: Date.now() });
+    await expect(loadEditorViewState(database, 'note-1')).resolves.toEqual(state);
+  });
+
+  it('rejects malformed editor state instead of applying invalid positions', async () => {
+    const database = createDatabase();
+    await database.open();
+    await database.preferences.put({ key: 'editor:note-1', value: { anchor: -1, head: 3, scrollTop: 0, scrollLeft: 0, preview: false }, updatedAt: Date.now() });
+    await expect(loadEditorViewState(database, 'note-1')).resolves.toBeUndefined();
   });
 });
