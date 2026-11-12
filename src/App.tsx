@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
@@ -33,6 +32,10 @@ import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, get
 import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
 import { parseBackupFile } from './features/backup/parse';
 import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
+import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
+import { useSystemStats } from './features/settings/hooks/useSystemStats';
+import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -40,7 +43,6 @@ const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 type View = 'workspace' | 'recent' | 'trash';
 interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
 interface PdfViewState { page: number; zoom: number; fit: boolean; }
-interface SystemStats { cpu: number | null; ram: number | null; gpu: number | null; }
 type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
@@ -52,7 +54,6 @@ export default function App() {
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
@@ -70,11 +71,8 @@ export default function App() {
   const [sortDesc, setSortDesc] = useState(false);
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkTheme, setDarkTheme] = useState(true);
-  const [appZoom, setAppZoom] = useState(1);
-  const [editorFontSize, setEditorFontSize] = useState(14);
-  const [uiPreferencesReady, setUiPreferencesReady] = useState(false);
-  const [systemStats, setSystemStats] = useState<SystemStats>({ cpu: null, ram: null, gpu: null });
+  const { darkTheme, setDarkTheme, appZoom, setAppZoom, editorFontSize, setEditorFontSize, setReady: setUiPreferencesReady, toggleTheme } = useUiSettings(setError);
+  const systemStats = useSystemStats();
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
@@ -96,46 +94,7 @@ export default function App() {
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!uiPreferencesReady) return;
-    void db.preferences.put({ key: 'appZoom', value: appZoom, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save application zoom.'));
-  }, [appZoom, uiPreferencesReady]);
-  useEffect(() => {
-    if (!uiPreferencesReady) return;
-    void db.preferences.put({ key: 'editorFontSize', value: editorFontSize, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor font size.'));
-  }, [editorFontSize, uiPreferencesReady]);
-  // Poll native counters sequentially; no renderer-side hardware polling or extra process.
-  useEffect(() => {
-    if (!isDesktopApp()) return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const next = await invoke<SystemStats>('get_system_stats');
-        if (active) setSystemStats(next);
-      } catch {
-        if (active) setSystemStats({ cpu: null, ram: null, gpu: null });
-      }
-      if (active) timer = setTimeout(poll, 2500);
-    };
-    void poll();
-    return () => {
-      active = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
-
-
-  useEffect(() => {
-    const onGlobalZoom = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
-      if (event.key === '=' || event.key === '+') { event.preventDefault(); setAppZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100)); }
-      else if (event.key === '-' || event.key === '_') { event.preventDefault(); setAppZoom((value) => Math.max(0.8, Math.round((value - 0.1) * 100) / 100)); }
-      else if (event.key === '0') { event.preventDefault(); setAppZoom(1); }
-    };
-    window.addEventListener('keydown', onGlobalZoom);
-    return () => window.removeEventListener('keydown', onGlobalZoom);
-  }, []);
+  useGlobalShortcuts(setAppZoom);
 
   // Fixed near-black editor theme inspired by the supplied reference.
   const editorTheme = useMemo(() => EditorView.theme({
@@ -235,13 +194,6 @@ export default function App() {
       setUpgrading(false);
     }
   }
-  async function toggleTheme() {
-    const next = !darkTheme;
-    setDarkTheme(next);
-    try { await db.preferences.put({ key: 'theme', value: next ? 'dark' : 'light', updatedAt: Date.now() }); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save the theme preference.'); }
-  }
-
   const updatePdfView = useCallback((id: string, state: PdfViewState) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, pdfState: state } : tab));
     void db.preferences.put({ key: `pdf:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
@@ -339,36 +291,7 @@ export default function App() {
     })),
   ], [excludedMoveFolders, folders, projects, workspaces]);
 
-  useEffect(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    if (!needle) { setSearchResults([]); return; }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void (async () => {
-        const results: SearchResult[] = [];
-        for (const file of liveFiles) {
-          const titleMatch = file.name.toLocaleLowerCase().includes(needle);
-          let text = '';
-          if (file.kind === 'markdown' || file.kind === 'code' || file.kind === 'text') {
-            const content = await db.contents.get(file.id);
-            if (typeof content?.data === 'string') text = content.data;
-            else if (content?.data instanceof Blob) text = await content.data.text();
-          }
-          if (cancelled) return;
-          if (titleMatch || text.toLocaleLowerCase().includes(needle)) {
-            const index = text.toLocaleLowerCase().indexOf(needle);
-            const snippet = index < 0 ? file.name : text.slice(Math.max(0, index - 56), Math.min(text.length, index + needle.length + 88)).trim();
-            results.push({ file, text: snippet });
-            if (results.length >= 100) break;
-          }
-        }
-        if (!cancelled) setSearchResults(results);
-      })().catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Search could not read workspace content.');
-      });
-    }, 180);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [liveFiles, query]);
+  const searchResults = useWorkspaceSearch(liveFiles, query, setError);
 
   const openFile = useCallback(async (fileMeta: FileMeta) => {
     // Reclassify on open so legacy HDL records cannot remain editable.
