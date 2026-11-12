@@ -69,3 +69,15 @@ function mimeType(name: string): string {
   if (['sv', 'v', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'json', 'sh', 's', 'asm', 'txt'].includes(extension ?? '')) return 'text/plain';
   return 'application/octet-stream';
 }
+
+
+export async function saveDiagnosticsExport(content: string): Promise<boolean> {
+  const path = await save({
+    title: 'Export SiliconVault diagnostics',
+    defaultPath: `silicon-vault-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+    filters: [{ name: 'Diagnostics report', extensions: ['json'] }],
+  });
+  if (!path) return false;
+  await writeFile(path, new TextEncoder().encode(content));
+  return true;
+}
