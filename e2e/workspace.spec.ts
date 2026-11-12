@@ -178,3 +178,70 @@ test('keeps files isolated when switching between workspaces', async ({ page }) 
   await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-beta.md' })).toBeVisible();
   await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-alpha.md' })).toHaveCount(0);
 });
+
+
+test('imports a text file, edits it, saves it, and recovers the saved content', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
+
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: 'import-edit.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('original import content'),
+  });
+  await expect(page.locator('.editor-workspace')).toBeVisible();
+  const editor = page.locator('.cm-content');
+  await expect(editor).toBeVisible();
+  await editor.fill('edited content persisted by SiliconVault');
+  await page.locator('button[title="Save changes (Ctrl+S)"]').click();
+
+  await expect.poll(() => page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('engineering-workspace');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise<string | null>((resolve, reject) => {
+        const transaction = database.transaction(['files', 'contents'], 'readonly');
+        const files = transaction.objectStore('files').getAll();
+        transaction.oncomplete = () => {
+          const file = files.result.find((item: { name: string }) => item.name === 'import-edit.txt');
+          if (!file) { resolve(null); return; }
+          const contentRequest = database.transaction('contents', 'readonly').objectStore('contents').get(file.id);
+          contentRequest.onsuccess = () => resolve(typeof contentRequest.result?.data === 'string' ? contentRequest.result.data : null);
+          contentRequest.onerror = () => reject(contentRequest.error);
+        };
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } finally {
+      database.close();
+    }
+  })).toBe('edited content persisted by SiliconVault');
+
+  await page.reload();
+  await expect(page.locator('.cm-content')).toContainText('edited content persisted by SiliconVault');
+});
+
+test('exports and restores a backup through the browser workflow', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
+
+  await page.getByRole('button', { name: /Technical notes/ }).click();
+  const createDialog = page.getByRole('dialog');
+  await createDialog.getByPlaceholder('File name').fill('backup-roundtrip.md');
+  await createDialog.getByRole('button', { name: 'Create file' }).click();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Backup', exact: true }).click();
+  const download = await downloadPromise;
+  const backupPath = await download.path();
+  expect(backupPath).not.toBeNull();
+
+  await page.locator('input[type="file"]').nth(2).setInputFiles(backupPath!);
+  const confirmDialog = page.getByRole('dialog');
+  await expect(confirmDialog.getByRole('heading', { name: 'Restore workspace backup?' })).toBeVisible();
+  await confirmDialog.getByRole('button', { name: 'Restore backup', exact: true }).click();
+
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'backup-roundtrip.md' })).toBeVisible();
+});
