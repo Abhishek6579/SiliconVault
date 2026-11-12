@@ -2,7 +2,7 @@ import Dexie, { type Table, type Transaction } from 'dexie';
 import type { FileContent, FileMeta, Folder, Project, Workspace, WorkspacePreference } from './types';
 
 export const DATABASE_NAME = 'engineering-workspace';
-export const DATABASE_VERSION = 3;
+export const DATABASE_VERSION = 4;
 export const DEFAULT_WORKSPACE_ID = 'workspace-default';
 
 export async function existingDatabaseVersion(name = DATABASE_NAME): Promise<number> {
@@ -47,6 +47,12 @@ const VERSION_THREE_STORES = {
   projects: '&id, workspaceId, name, archived, createdAt, updatedAt',
   preferences: '&key, updatedAt',
   workspaces: '&id, name, createdAt, updatedAt',
+};
+
+// Compound indexes mirror the measured workspace-scoped Trash and project-archive query paths.
+const VERSION_FOUR_STORES = {
+  ...VERSION_THREE_STORES,
+  files: '&id, workspaceId, kind, name, parentFolderId, projectId, createdAt, updatedAt, deletedAt, [workspaceId+deletedAt], [projectId+deletedAt]',
 };
 
 /** Initial schema for a fresh workspace. Future schema changes must be named migrations. */
@@ -110,7 +116,8 @@ export class WorkspaceDatabase extends Dexie {
     super(name);
     this.version(1).stores(VERSION_ONE_STORES).upgrade(migrateToUnifiedMetadata);
     this.version(2).stores(VERSION_TWO_STORES).upgrade(migrateToWorkspacePreferences);
-    this.version(DATABASE_VERSION).stores(VERSION_THREE_STORES).upgrade(migrateToWorkspaces);
+    this.version(3).stores(VERSION_THREE_STORES).upgrade(migrateToWorkspaces);
+    this.version(DATABASE_VERSION).stores(VERSION_FOUR_STORES);
     this.on('populate', (transaction) => {
       const now = Date.now();
       return transaction.table('workspaces').add({ id: DEFAULT_WORKSPACE_ID, name: 'My Workspace', createdAt: now, updatedAt: now });
