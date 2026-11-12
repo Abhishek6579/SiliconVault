@@ -36,7 +36,7 @@ git push origin v0.1.1
 
 The version is illustrative; use the actual synchronized version. Never tag an unmerged development commit.
 
-Pushing a `v*` tag triggers `.github/workflows/release.yml`. It verifies the tag against the three version fields, builds both Windows NSIS and MSI installers, generates `SHA256SUMS.txt`, and fails if any installer asset is missing. The workflow can also be run manually from the release-ready branch with the exact version in all three files; this creates the matching version tag and release from that commit. Fix a failed workflow before announcing the release. Never rerun an old tag against different source; the existing `v0.1.1-alpha.1` release is assetless and predates this corrected version.
+Pushing a `v*` tag triggers `.github/workflows/release.yml`. Before building, the workflow verifies that the tag commit is reachable from `master`. Manual dispatch is accepted only when run against `master`, and refuses to retarget an existing tag. The workflow then verifies the tag against the three version fields, builds both Windows NSIS and MSI installers, generates `SHA256SUMS.txt`, and fails if any installer asset is missing. A manual dispatch from `slave` or any other branch is rejected. Fix a failed workflow before announcing the release. Never rerun an old tag against different source; the existing `v0.1.1-alpha.1` release is assetless and predates this corrected version.
 
 ## Checksum verification
 

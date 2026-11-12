@@ -157,6 +157,8 @@ describe('workspace storage', () => {
     expect(database.tables.map((table) => table.name).sort()).toEqual(['contents', 'files', 'folders', 'preferences', 'projects', 'workspaces']);
     expect(await database.workspaces.get(DEFAULT_WORKSPACE_ID)).toMatchObject({ name: 'My Workspace' });
     expect(database.files.schema.indexes.map((index) => index.name)).toContain('updatedAt');
+    expect(database.files.schema.indexes.map((index) => index.name)).toContain('[workspaceId+deletedAt]');
+    expect(database.files.schema.indexes.map((index) => index.name)).toContain('[projectId+deletedAt]');
   });
 
   it('round-trips text and binary content while preserving all metadata', async () => {
@@ -269,6 +271,58 @@ describe('workspace storage', () => {
     ] };
     await expect(importBackup(database, cyclic)).rejects.toThrow('hierarchy cycle');
     expect(await database.projects.get('keep')).toBeDefined();
+  });
+
+  it('rolls back every store when restore fails after the replacement transaction starts', async () => {
+    const source = createDatabase();
+    const target = createDatabase();
+    await Promise.all([source.open(), target.open()]);
+    await createTextFile(source, 'incoming.md', 'incoming restore payload', { kind: 'markdown' });
+
+    const backup = await exportBackup(source);
+    backup.files[0] = {
+      ...backup.files[0],
+      meta: { ...backup.files[0].meta, id: 'incoming-failure' },
+    };
+
+    const now = Date.now();
+    await target.projects.add({
+      id: 'keep-project', name: 'Keep project', workspaceId: DEFAULT_WORKSPACE_ID,
+      archived: false, createdAt: now, updatedAt: now,
+    });
+    await target.folders.add({
+      id: 'keep-folder', name: 'Keep folder', workspaceId: DEFAULT_WORKSPACE_ID,
+      parentFolderId: null, projectId: 'keep-project', createdAt: now, updatedAt: now,
+    });
+    await target.files.add({
+      id: 'keep-file', kind: 'markdown', name: 'keep.md', workspaceId: DEFAULT_WORKSPACE_ID,
+      parentFolderId: 'keep-folder', projectId: 'keep-project', size: 4,
+      mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null,
+    });
+    await target.contents.add({ fileId: 'keep-file', data: 'keep' });
+    await target.preferences.add({ key: 'keep-preference', value: 'preserve-me', updatedAt: now });
+
+    const before = {
+      files: await target.files.toArray(),
+      contents: await target.contents.toArray(),
+      folders: await target.folders.toArray(),
+      projects: await target.projects.toArray(),
+      preferences: await target.preferences.toArray(),
+      workspaces: await target.workspaces.toArray(),
+    };
+
+    target.files.hook('creating').subscribe((_key, record) => {
+      if (record.id === 'incoming-failure') throw new Error('injected restore write failure');
+    });
+
+    await expect(importBackup(target, backup)).rejects.toThrow();
+
+    expect(await target.files.toArray()).toEqual(before.files);
+    expect(await target.contents.toArray()).toEqual(before.contents);
+    expect(await target.folders.toArray()).toEqual(before.folders);
+    expect(await target.projects.toArray()).toEqual(before.projects);
+    expect(await target.preferences.toArray()).toEqual(before.preferences);
+    expect(await target.workspaces.toArray()).toEqual(before.workspaces);
   });
 
   it('moves a folder subtree atomically and rejects cycles and project mismatches', async () => {

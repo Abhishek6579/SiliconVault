@@ -23,9 +23,10 @@ import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
-import { fileText, formatSize } from './utils/format';
+import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
+import { hydrateWorkspaceTab, saveWorkspaceSession } from './storage/tabSession';
+import { createFolder, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
 import { isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
@@ -34,10 +35,12 @@ import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
+import { useWorkspaceActions } from './features/workspace/hooks/useWorkspaceActions';
 import { useWorkspaceInitialization } from './features/workspace/hooks/useWorkspaceInitialization';
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
-import type { PdfViewState, Tab } from './features/tabs/types';
+import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
+import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -61,8 +64,7 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession } = useWorkspaceTabs(activeWorkspaceId, loading, setError);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'name' | 'type' | 'size' | 'updatedAt'>('name');
   const [sortDesc, setSortDesc] = useState(false);
@@ -85,9 +87,11 @@ export default function App() {
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+
   useWorkspaceInitialization({
     refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
     setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
+    restoreTabs: restoreWorkspaceTabs,
   });
   useGlobalShortcuts(setAppZoom);
 
@@ -174,6 +178,20 @@ export default function App() {
       setUpgrading(false);
     }
   }
+  const persistEditorViewState = useCallback((id: string, view: EditorView, preview: boolean) => {
+    const selection = view.state.selection.main;
+    const state: EditorViewState = {
+      anchor: selection.anchor,
+      head: selection.head,
+      scrollTop: view.scrollDOM.scrollTop,
+      scrollLeft: view.scrollDOM.scrollLeft,
+      preview,
+    };
+    void db.preferences.put({ key: `editor:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : 'Could not save editor position.');
+    });
+  }, [setError]);
+
   const updatePdfView = useCallback((id: string, state: PdfViewState) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, pdfState: state } : tab));
     void db.preferences.put({ key: `pdf:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
@@ -210,8 +228,10 @@ export default function App() {
   const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
   // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
   const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
+  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
   const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
-  const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus);
+
+  const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
     const restoredWorkspaces = await db.workspaces.toArray();
@@ -223,6 +243,13 @@ export default function App() {
     await refresh();
   }, [refresh, setWorkspaces]);
   const backup = useWorkspaceBackup(flushPendingSaves, requestConfirmation, setError, onBackupRestored);
+  const workspaceActions = useWorkspaceActions({
+    files, folders, projects, workspaces, activeWorkspaceId, activeTabId, tabs,
+    setTabs, setActiveWorkspaceId, setActiveProject, setSelectedFolder, setActiveTabId,
+    setView, refresh, flushPendingSaves, requestInput, requestConfirmation,
+  });
+  const { createWorkspace, renameWorkspace, deleteCurrentWorkspace } = workspaceActions;
+
     // Memoized so the array keeps its identity between renders. Without this, the search effect reruns on every render.
   const liveFiles = useMemo(
     () => files.filter((file) => file.deletedAt === null && file.workspaceId === activeWorkspaceId),
@@ -263,96 +290,87 @@ export default function App() {
   const openFile = useCallback(async (fileMeta: FileMeta) => {
     // Reclassify on open so legacy HDL records cannot remain editable.
     const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
+    let restoredTabs: Tab[] = [];
     if (meta.workspaceId !== activeWorkspaceId) {
+      if (activeWorkspaceId) {
+        await saveWorkspaceSession(db, activeWorkspaceId, tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId).map((tab) => tab.id), activeTabId);
+      }
       await workspace.switchWorkspace(meta.workspaceId);
+      const restored = await restoreWorkspaceTabs(meta.workspaceId);
+      restoredTabs = restored.tabs;
       setActiveProject(meta.projectId);
       setSelectedFolder(meta.parentFolderId);
       setView('workspace');
     }
-    const existing = tabs.find((tab) => tab.id === meta.id);
-    if (existing) {
-      let data = existing.data;
-      if ((meta.kind === 'pdf' || meta.kind === 'viewer') && !data) {
-        const content = await db.contents.get(meta.id);
-        if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-        data = content.data;
+    const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
+    const persistOpenTabSession = async () => {
+      const currentWorkspaceTabs = (meta.workspaceId === activeWorkspaceId ? tabs : restoredTabs)
+        .filter((tab) => tab.meta.workspaceId === meta.workspaceId);
+      const openFileIds = [...new Set([...currentWorkspaceTabs.map((tab) => tab.id), meta.id])];
+      try {
+        // Commit the session before publishing the tab in React state. A page reload
+        // immediately after the tab appears must not race the debounced session effect.
+        await saveWorkspaceSession(db, meta.workspaceId, openFileIds, meta.id);
+        return true;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.');
+        return false;
       }
+    };
+    if (existing) {
+      let hydrated: Tab;
+      try {
+        hydrated = existing.hydrated !== true ? await hydrateWorkspaceTab(db, existing) : existing;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
+        return;
+      }
+      if (hydrated.dirty) trackRecoveredDraft(meta.id, hydrated.draft);
+      if (!(await persistOpenTabSession())) return;
       setTabs((current) => current.map((tab) => {
-        if (tab.id === meta.id) return data === undefined ? tab : { ...tab, data };
+        if (tab.id === meta.id) return hydrated;
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
-        return withoutPdfData;
+        return { ...withoutPdfData, hydrated: false };
       }));
       setActiveTabId(meta.id);
       setError('');
       return;
     }
-    const content = await db.contents.get(meta.id);
-    if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-    const data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob ? await content.data.text() : content.data;
-    const savedDraftValue = ['markdown', 'code', 'text'].includes(meta.kind)
-      ? (await db.preferences.get(`draft:${meta.id}`))?.value
-      : undefined;
-    const hasRecoveredDraft = typeof savedDraftValue === 'string';
-    const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
-    if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
-    const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
-    const pdfState = meta.kind === 'pdf' ? {
-      page: Number.isFinite(savedPdfState?.page) ? Math.max(1, Math.floor(savedPdfState!.page!)) : 1,
-      zoom: Number.isFinite(savedPdfState?.zoom) ? Math.max(.5, Math.min(2, savedPdfState!.zoom!)) : 1,
-      fit: typeof savedPdfState?.fit === 'boolean' ? savedPdfState.fit : true,
-    } : undefined;
+    let newTab: Tab;
+    try {
+      newTab = await hydrateWorkspaceTab(db, {
+        id: meta.id,
+        meta,
+        draft: '',
+        dirty: false,
+        preview: meta.kind === 'markdown',
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
+      return;
+    }
+    if (newTab.dirty) trackRecoveredDraft(meta.id, newTab.draft);
+    if (!(await persistOpenTabSession())) return;
     setTabs((current) => [
       ...current.map((tab) => {
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
-        return withoutPdfData;
+        return { ...withoutPdfData, hydrated: false };
       }),
-      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: meta.kind === 'markdown', pdfState },
+      newTab,
     ]);
     setActiveTabId(meta.id);
-    if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
+    if (newTab.dirty) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
-  }, [activeWorkspaceId, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
+  }, [activeWorkspaceId, restoreWorkspaceTabs, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
 
-  function createWorkspace() {
-    requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
-      const now = Date.now();
-      const workspace: Workspace = { id: crypto.randomUUID(), name: name.trim(), createdAt: now, updatedAt: now };
-      await db.workspaces.add(workspace);
-      await db.preferences.put({ key: 'activeWorkspace', value: workspace.id, updatedAt: now });
-      setActiveWorkspaceId(workspace.id);
-      setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); setView('workspace');
-      await refresh();
-    }, 'Each workspace has its own projects, folders, and files.');
-  }
-
-  function renameWorkspace(workspace: Workspace) {
-    requestInput('Rename workspace', workspace.name, 'Workspace name', 'Save name', async (name) => {
-      await db.workspaces.update(workspace.id, { name: name.trim(), updatedAt: Date.now() });
-      await refresh();
+  useEffect(() => {
+    if (!activeTab || activeTab.hydrated === true || loading) return;
+    void openFile(activeTab.meta).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
     });
-  }
-
-  function deleteCurrentWorkspace() {
-    if (!activeWorkspace) return;
-    const target = activeWorkspace;
-    const fileCount = files.filter((file) => file.workspaceId === target.id).length;
-    const folderCount = folders.filter((folder) => folder.workspaceId === target.id).length;
-    const projectCount = projects.filter((project) => project.workspaceId === target.id).length;
-    requestConfirmation('Delete workspace?', `Permanently delete “${target.name}” and its ${projectCount} project${projectCount === 1 ? '' : 's'}, ${folderCount} folder${folderCount === 1 ? '' : 's'}, and ${fileCount} file${fileCount === 1 ? '' : 's'}? This cannot be undone.`, 'Delete workspace', async () => {
-      const closingTabs = tabs.filter((tab) => tab.meta.workspaceId === target.id);
-      await flushPendingSaves();
-      const nextWorkspace = await removeWorkspace(db, target.id);
-      setTabs((current) => current.filter((tab) => tab.meta.workspaceId !== target.id));
-      if (activeTabId && closingTabs.some((tab) => tab.id === activeTabId)) setActiveTabId(null);
-      if (activeWorkspaceId === target.id) {
-        setActiveWorkspaceId(nextWorkspace.id);
-        setActiveProject(null); setSelectedFolder(null); setView('workspace');
-      }
-      await refresh();
-    }, true);
-  }
+  }, [activeTab, loading, openFile]);
 
   function createProject() {
     requestInput('Create project', '', 'Project name', 'Create project', async (name) => {
@@ -479,11 +497,15 @@ export default function App() {
   }
 
   async function switchWorkspace(workspaceId: string) {
+    if (!workspaces.some((item) => item.id === workspaceId)) return;
+    if (activeWorkspaceId) {
+      await saveWorkspaceSession(db, activeWorkspaceId, workspaceTabs.map((tab) => tab.id), activeTabId);
+    }
     await workspace.switchWorkspace(workspaceId);
+    await restoreWorkspaceTabs(workspaceId);
     setActiveProject(null);
     setSelectedFolder(null);
     setView('workspace');
-    setActiveTabId(null);
     setWorkspaceMenuOpen(false);
   }
 
@@ -838,7 +860,12 @@ export default function App() {
           <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
           <div className="editor-tools">
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
-            {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview: !tab.preview } : tab))}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
+            {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => {
+              const preview = !activeTab.preview;
+              const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
+              setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
+              void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
+            }}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
             {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
             <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
             <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
@@ -856,7 +883,7 @@ export default function App() {
         )}
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
-            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
+            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
               code({ className, children, ...props }) {
                 const code = String(children).replace(/\n$/, '');
@@ -866,7 +893,7 @@ export default function App() {
             }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? (
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
@@ -967,6 +994,14 @@ export default function App() {
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
+}
+
+function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
+  if (!state) return;
+  const length = view.state.doc.length;
+  view.dispatch({ selection: { anchor: Math.min(state.anchor, length), head: Math.min(state.head, length) } });
+  view.scrollDOM.scrollTop = state.scrollTop;
+  view.scrollDOM.scrollLeft = state.scrollLeft;
 }
 
 function EmptyState({ title, message, icon, action }: { title: string; message: string; icon: ReactNode; action?: ReactNode }) {

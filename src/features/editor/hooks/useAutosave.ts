@@ -15,6 +15,7 @@ export function useAutosave(
   refresh: () => Promise<void>,
   setError: (message: string) => void,
   setStatus: (message: string) => void,
+  flushSession: () => Promise<void> = async () => undefined,
 ) {
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const draftRecoveryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -106,7 +107,8 @@ export function useAutosave(
   const flushPendingSaves = useCallback(async () => {
     await flushPendingAutosaves(pendingDrafts.current, saveTimers.current, persistDraft);
     await Promise.all([...saveChains.current.values()]);
-  }, [persistDraft]);
+    await flushSession();
+  }, [flushSession, persistDraft]);
 
   const trackRecoveredDraft = useCallback((id: string, draft: string) => {
     pendingDrafts.current.set(id, draft);
@@ -121,8 +123,17 @@ export function useAutosave(
         event.preventDefault();
         event.returnValue = '';
       };
+      const persistWorkspaceBeforePageHide = () => {
+        void flushPendingSaves().catch((reason: unknown) => {
+          console.error('Could not persist workspace data before page hide.', reason);
+        });
+      };
       window.addEventListener('beforeunload', warnBeforeUnload);
-      return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+      window.addEventListener('pagehide', persistWorkspaceBeforePageHide);
+      return () => {
+        window.removeEventListener('beforeunload', warnBeforeUnload);
+        window.removeEventListener('pagehide', persistWorkspaceBeforePageHide);
+      };
     }
 
     const currentWindow = getCurrentWindow();
@@ -159,7 +170,7 @@ export function useAutosave(
       disposed = true;
       unlisten?.();
     };
-  }, [flushPendingSaves, setError, setStatus]);
+  }, [flushPendingSaves, flushSession, setError, setStatus]);
 
   return { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave };
 }

@@ -1,3 +1,4 @@
+import Dexie from 'dexie';
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 import { collectDescendantIds } from './tree';
@@ -105,8 +106,8 @@ export async function restoreFile(database: WorkspaceDatabase, id: string): Prom
 export async function emptyTrash(database: WorkspaceDatabase, workspaceId: string): Promise<void> {
   if (!workspaceId) throw new Error('A workspace must be selected before emptying Trash.');
   await database.transaction('rw', database.files, database.contents, async () => {
-    const deleted = await database.files.where('workspaceId').equals(workspaceId)
-      .filter((file) => file.deletedAt !== null)
+    const deleted = await database.files.where('[workspaceId+deletedAt]')
+      .between([workspaceId, Dexie.minKey], [workspaceId, Dexie.maxKey])
       .primaryKeys();
     await database.contents.bulkDelete(deleted);
     await database.files.bulkDelete(deleted);

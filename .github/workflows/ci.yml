@@ -35,6 +35,22 @@ jobs:
 
 
 
+  performance-benchmarks:
+    name: Startup, query, and memory benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Measure database startup and indexed query workloads
+        run: npm run benchmark:storage
+      - name: Measure backup JSON parse memory
+        run: npm run benchmark:backup-memory
+
   dependency-audit:
     name: Dependency security audit
     runs-on: ubuntu-latest
@@ -73,6 +89,23 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify stable Windows install identity against master
+        shell: pwsh
+        run: |
+          git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
+          $baseJson = (git show origin/master:src-tauri/tauri.conf.json | Out-String) | ConvertFrom-Json
+          $candidate = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($candidate.identifier -ne $baseJson.identifier) {
+            throw "Tauri application identifier changed; an installed upgrade may use a different WebView2 profile."
+          }
+          if ($candidate.bundle.windows.nsis.installMode -ne $baseJson.bundle.windows.nsis.installMode) {
+            throw "NSIS installation scope changed; installed-upgrade compatibility requires explicit migration."
+          }
+          foreach ($target in @("nsis", "msi")) {
+            if ($candidate.bundle.targets -notcontains $target) { throw "Missing required Windows installer target: $target" }
+          }
       - uses: actions/setup-node@v7
         with:
           node-version: 22

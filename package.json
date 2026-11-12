@@ -13,7 +13,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "test:e2e": "playwright test",
-    "benchmark:backup-memory": "node --expose-gc scripts/benchmarks/backup-memory.mjs"
+    "benchmark:backup-memory": "node --expose-gc scripts/benchmarks/backup-memory.mjs",
+    "benchmark:storage": "node scripts/benchmarks/storage-startup.mjs"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.2",
@@ -36,6 +37,7 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tauri-apps/cli": "^2.12.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
