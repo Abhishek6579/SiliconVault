@@ -88,6 +88,7 @@ export async function restoreWorkspaceSession(
       meta,
       draft: '',
       dirty: false,
+      hydrated: false,
       preview: meta.kind === 'markdown',
     })),
     activeTabId,
@@ -114,9 +115,11 @@ export async function hydrateWorkspaceTab(database: WorkspaceDatabase, tab: Tab)
   const draft = hasRecoveredDraft ? savedDraft : isText ? fileText(data) : '';
   const savedPdfState = tab.meta.kind === 'pdf' ? (await database.preferences.get(`pdf:${tab.id}`))?.value : undefined;
   const editorState = isText ? await loadEditorViewState(database, tab.id) : undefined;
+  const { data: _previousDocument, ...tabMetadata } = tab;
   return {
-    ...tab,
-    data,
+    ...tabMetadata,
+    ...(isText ? {} : { data }),
+    hydrated: true,
     draft,
     dirty: hasRecoveredDraft,
     pdfState: tab.meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : tab.pdfState,
