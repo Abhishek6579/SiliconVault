@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktopApp } from '../../../platform/desktop';
+import { logger } from '../../../logger.js';
 
 export interface SystemStats { cpu: number | null; ram: number | null; gpu: number | null; }
 const EMPTY_STATS: SystemStats = { cpu: null, ram: null, gpu: null };
@@ -11,9 +12,10 @@ export function useSystemStats() {
     if (!isDesktopApp()) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failureReported = false;
     const poll = async () => {
-      try { const next = await invoke<SystemStats>('get_system_stats'); if (active) setStats(next); }
-      catch { if (active) setStats(EMPTY_STATS); }
+      try { const next = await invoke<SystemStats>('get_system_stats'); if (active) setStats(next); failureReported = false; }
+      catch (reason) { if (active) setStats(EMPTY_STATS); if (!failureReported) void logger.warn('system_monitor.sample_failed', reason instanceof Error ? reason.message : String(reason)); failureReported = true; }
       if (active) timer = setTimeout(poll, 2500);
     };
     void poll();

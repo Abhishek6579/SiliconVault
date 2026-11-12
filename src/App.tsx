@@ -33,6 +33,8 @@ import { isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDe
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
+import DiagnosticsDashboard from './features/diagnostics/components/DiagnosticsDashboard';
+import { collectFrontendDiagnostics } from './diagnostics.js';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceActions } from './features/workspace/hooks/useWorkspaceActions';
@@ -45,7 +47,7 @@ import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './sto
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
-type View = 'workspace' | 'recent' | 'trash';
+type View = 'workspace' | 'recent' | 'trash' | 'diagnostics';
 type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
@@ -53,6 +55,7 @@ interface ImportTarget { folderId: string | null; projectId: string | null; work
 interface SearchResult { file: FileMeta; text: string; }
 
 export default function App() {
+  useEffect(() => collectFrontendDiagnostics(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const workspace = useWorkspace(setError, setLoading);
@@ -741,6 +744,7 @@ export default function App() {
           <button className={`nav-item ${view === 'workspace' && activeProject === null ? 'active' : ''}`} onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={16} /> Workspace</button>
           <button className={`nav-item ${view === 'recent' ? 'active' : ''}`} onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={16} /> Recent <span className="nav-count">{liveFiles.length}</span></button>
           <button className={`nav-item ${view === 'trash' ? 'active' : ''}`} onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={16} /> Trash {trashedFiles.length > 0 && <span className="nav-count">{trashedFiles.length}</span>}</button>
+          <button className={`nav-item ${view === 'diagnostics' ? 'active' : ''}`} onClick={() => { setView('diagnostics'); setActiveTabId(null); }}><Activity size={16} /> Diagnostics</button>
         </div>
         <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={() => void createProject()}><Plus size={15} /></button></div>
         <div className="project-tree">
@@ -783,14 +787,14 @@ export default function App() {
           <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void backup.openBackup(event.target.files?.[0], event.currentTarget)} />
         </div>
       </>}
-      {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
+      {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="Diagnostics" onClick={() => { setView('diagnostics'); setActiveTabId(null); }}><Activity size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
     </aside>
 
     <main className="main-area">
       <header className="topbar">
         <div className="workspace-switcher" ref={workspaceMenuRef}>
           <button className="workspace-switch-button" aria-expanded={workspaceMenuOpen} onClick={() => setWorkspaceMenuOpen((open) => !open)}>
-            <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
+            <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : view === 'diagnostics' ? 'Diagnostics' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
             {selectedFolder && view === 'workspace' && <small> / {folders.find((folder) => folder.id === selectedFolder)?.name}</small>}
             <ChevronDown size={14} />
           </button>
@@ -846,7 +850,7 @@ export default function App() {
 
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
 
-      {activeTab ? <div className="editor-workspace">
+      {view === 'diagnostics' ? <DiagnosticsDashboard /> : activeTab ? <div className="editor-workspace">
         <div className="tab-strip">
           <div className="tab-list">
             {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>

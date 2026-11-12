@@ -3893,3 +3893,45 @@ body,
 .app-shell[data-theme="dark"] .import-menu button { color: #c0c5cd; }
 .app-shell[data-theme="dark"] .import-menu button:hover { background: #30353d; color: #e0e3e8; }
 .app-shell[data-theme="dark"] .import-menu button svg { color: #a0a8b4; }
+
+/* Diagnostics dashboard */
+.diagnostics-dashboard { width: 100%; height: 100%; overflow: auto; padding: 34px clamp(22px, 4vw, 58px) 48px; color: var(--text-primary, #202633); }
+.diagnostics-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 0 auto 28px; max-width: 1120px; }
+.diagnostics-eyebrow { color: #758198; font-size: 10px; font-weight: 750; letter-spacing: .13em; }
+.diagnostics-heading h1 { margin: 7px 0 5px; font-size: 27px; letter-spacing: -.035em; }
+.diagnostics-heading p { margin: 0; color: #7c8492; font-size: 12px; }
+.diagnostics-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.diagnostics-card-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-width: 1120px; margin: 0 auto 20px; }
+.diagnostics-card, .diagnostics-section, .diagnostics-privacy { border: 1px solid var(--border, #e6e8ed); border-radius: 10px; background: var(--panel, #fff); }
+.diagnostics-card { min-height: 116px; padding: 16px; display: flex; flex-direction: column; gap: 9px; }
+.diagnostics-card span { color: #7c8492; font-size: 11px; }
+.diagnostics-card strong { font-size: 23px; font-weight: 650; letter-spacing: -.03em; }
+.diagnostics-card small { color: #9299a5; font-size: 10px; }
+.diagnostics-section { max-width: 1120px; margin: 0 auto 14px; padding: 18px 20px; }
+.diagnostics-section-title { display: flex; align-items: center; gap: 9px; margin-bottom: 15px; color: #6d7c96; }
+.diagnostics-section-title h2 { margin: 0; color: var(--text-primary, #202633); font-size: 13px; font-weight: 650; }
+.diagnostics-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; margin: 0; }
+.diagnostics-details div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border, #eceef1); font-size: 11px; }
+.diagnostics-details dt { color: #838b99; }
+.diagnostics-details dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+.diagnostics-log-list > div { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 10px 0; border-top: 1px solid var(--border, #eceef1); }
+.diagnostics-log-list span { display: flex; flex-direction: column; gap: 3px; }
+.diagnostics-log-list b { font-size: 11px; }
+.diagnostics-log-list small { color: #858d9a; font-size: 10px; }
+.diagnostics-log-list strong { font-size: 11px; font-variant-numeric: tabular-nums; }
+.diagnostics-path { margin: 12px 0 0; color: #8b93a0; font-size: 10px; overflow-wrap: anywhere; }
+.diagnostics-privacy { max-width: 1120px; margin: 0 auto; padding: 15px 18px; display: flex; align-items: flex-start; gap: 12px; color: #47816a; background: color-mix(in srgb, #47816a 6%, var(--panel, #fff)); }
+.diagnostics-privacy b { display: block; margin-bottom: 4px; color: var(--text-primary, #202633); font-size: 11px; }
+.diagnostics-privacy p { margin: 0; color: #7b8491; font-size: 10px; line-height: 1.55; }
+.diagnostics-error { max-width: 1120px; margin: 0 auto 14px; padding: 11px 13px; display: flex; align-items: center; gap: 9px; border: 1px solid #e8c9c4; border-radius: 8px; color: #a54b3f; background: #fff8f6; font-size: 11px; }
+.app-shell[data-theme="dark"] .diagnostics-card,
+.app-shell[data-theme="dark"] .diagnostics-section,
+.app-shell[data-theme="dark"] .diagnostics-privacy { background: #22262c; border-color: #383e47; }
+.app-shell[data-theme="dark"] .diagnostics-card span,
+.app-shell[data-theme="dark"] .diagnostics-heading p,
+.app-shell[data-theme="dark"] .diagnostics-details dt,
+.app-shell[data-theme="dark"] .diagnostics-log-list small,
+.app-shell[data-theme="dark"] .diagnostics-path,
+.app-shell[data-theme="dark"] .diagnostics-privacy p { color: #9ba3af; }
+@media (max-width: 900px) { .diagnostics-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .diagnostics-heading { align-items: flex-start; flex-direction: column; } .diagnostics-details { grid-template-columns: 1fr; } .diagnostics-card-grid { gap: 8px; } .diagnostics-card { padding: 12px; } }

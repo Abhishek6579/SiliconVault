@@ -46,6 +46,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Install Chromium for storage benchmark
+        run: npx playwright install --with-deps chromium
       - name: Measure database startup and indexed query workloads
         run: npm run benchmark:storage
       - name: Measure backup JSON parse memory
