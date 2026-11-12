@@ -629,12 +629,14 @@ button:disabled {
 .workspace-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   background: #fff
 }
 
 .welcome-page {
   max-width: 820px;
+  max-height: 100%;
+  overflow-y: auto;
   margin: 0 auto;
   padding: 88px 45px 45px
 }
@@ -755,8 +757,23 @@ button:disabled {
 }
 
 .file-area {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   padding: 0 24px 30px;
-  min-height: 100%;
+}
+
+.workspace-overview {
+  flex: 0 0 auto;
+}
+
+.file-list-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .list-header {
