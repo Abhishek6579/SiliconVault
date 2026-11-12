@@ -19,7 +19,14 @@ The frontend is not a client for a remote application server. The Tauri entry po
 
 ## Important source paths
 
-- `src/App.tsx`: workspace composition and application interactions.
+- `src/App.tsx`: application layout composition and cross-feature coordination.
+- `src/features/workspace/hooks/useWorkspace.ts`: workspace catalog, selection, refresh, and persisted switching.
+- `src/features/workspace/hooks/useWorkspaceInitialization.ts`: database startup, UI preference restoration, and active-workspace recovery.
+- `src/features/editor/hooks/useAutosave.ts`: draft recovery, serialized autosaves, save shortcut, and safe shutdown.
+- `src/features/backup/hooks/useWorkspaceBackup.ts`: backup export, picker integration, and confirmed restore flow.
+- `src/features/tabs/types.ts`: shared tab and PDF view state types.
+- `src/features/search/hooks/useWorkspaceSearch.ts`: debounced workspace content search.
+- `src/features/settings/hooks/`: persisted UI preferences, global zoom shortcuts, and desktop system monitoring.
 - `src/styles.css`: application styling.
 - `src/storage/`: Dexie schema, migrations, metadata/content operations, file classification.
 - `src/PdfReader.tsx`: PDF reader.

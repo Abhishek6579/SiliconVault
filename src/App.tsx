@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -19,8 +18,7 @@ import {
   Import, LayoutGrid, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2,
   Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
-import { DATABASE_NAME, DATABASE_VERSION, DEFAULT_WORKSPACE_ID, db, existingDatabaseVersion, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
-import { flushPendingAutosaves } from './storage/autosave';
+import { DEFAULT_WORKSPACE_ID, db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
@@ -28,21 +26,23 @@ import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
-import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile } from './storage/files';
-import { downloadBackup, exportBackupStream, importBackup } from './storage/backup';
-import { parseBackupFile } from './features/backup/parse';
-import { chooseBackupToRestore, isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
+import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
+import { downloadBackup, exportBackupStream } from './storage/backup';
+import { isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDesktop } from './platform/desktop';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
+import { useWorkspace } from './features/workspace/hooks/useWorkspace';
+import { useWorkspaceInitialization } from './features/workspace/hooks/useWorkspaceInitialization';
+import { useAutosave } from './features/editor/hooks/useAutosave';
+import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
+import type { PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
 type View = 'workspace' | 'recent' | 'trash';
-interface Tab { id: string; meta: FileMeta; data?: Blob | string; draft: string; dirty: boolean; preview: boolean; pdfState?: PdfViewState; }
-interface PdfViewState { page: number; zoom: number; fit: boolean; }
 type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
@@ -50,18 +50,15 @@ interface ImportTarget { folderId: string | null; projectId: string | null; work
 interface SearchResult { file: FileMeta; text: string; }
 
 export default function App() {
-  const [files, setFiles] = useState<FileMeta[]>([]);
-  const [folders, setFolders] = useState<FolderRecord[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const workspace = useWorkspace(setError, setLoading);
+  const { files, folders, projects, workspaces, setWorkspaces, activeWorkspaceId, setActiveWorkspaceId, refresh } = workspace;
   const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
   const [migrationError, setMigrationError] = useState('');
   const [upgrading, setUpgrading] = useState(false);
   const [view, setView] = useState<View>('workspace');
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -85,15 +82,13 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
-  const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const draftRecoveryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const saveChains = useRef(new Map<string, Promise<void>>());
-  const draftRevisions = useRef(new Map<string, number>());
-  const pendingDrafts = useRef(new Map<string, string>());
-  const closeInProgress = useRef(false);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  useWorkspaceInitialization({
+    refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
+    setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
+  });
   useGlobalShortcuts(setAppZoom);
 
   // Fixed near-black editor theme inspired by the supplied reference.
@@ -125,21 +120,6 @@ export default function App() {
     { tag: [tags.number, tags.bool, tags.null], color: '#b5cea8' },
     { tag: tags.operator, color: '#d4d4d4' },
   ])), []);
-
-  const refresh = useCallback(async () => {
-    try {
-      const [nextFiles, nextFolders, nextProjects, nextWorkspaces] = await Promise.all([
-        db.files.toArray(), db.folders.toArray(), db.projects.toArray(), db.workspaces.toArray(),
-      ]);
-      setFiles(nextFiles);
-      setFolders(nextFolders);
-      setProjects(nextProjects);
-      setWorkspaces(nextWorkspaces);
-      setError('');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not open the local workspace.');
-    } finally { setLoading(false); }
-  }, []);
 
   function requestInput(title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) {
     setDialog({ mode: 'input', title, value: initialValue, placeholder, confirmLabel, onConfirm, message });
@@ -202,34 +182,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    const initialize = async () => {
-      try {
-        const version = await existingDatabaseVersion(DATABASE_NAME);
-        if (version > 0 && version < DATABASE_VERSION) {
-          if (alive) { setMigrationBackup(version); setLoading(false); }
-          return;
-        }
-        await db.open();
-        const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
-        if (alive) { setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true); }
-        const theme = await db.preferences.get('theme');
-        if (theme?.value === 'dark') setDarkTheme(true);
-        const storedWorkspace = await db.preferences.get('activeWorkspace');
-        const nextWorkspaces = await db.workspaces.toArray();
-        const selectedWorkspace = nextWorkspaces.find((workspace) => workspace.id === storedWorkspace?.value)?.id ?? nextWorkspaces[0]?.id ?? null;
-        setWorkspaces(nextWorkspaces);
-        setActiveWorkspaceId(selectedWorkspace);
-        if (selectedWorkspace && !storedWorkspace) await db.preferences.put({ key: 'activeWorkspace', value: selectedWorkspace, updatedAt: Date.now() });
-        await refresh();
-      } catch (reason) {
-        if (alive) { setError(reason instanceof Error ? reason.message : 'Could not open the local workspace.'); setLoading(false); }
-      }
-    };
-    void initialize();
-    return () => { alive = false; };
-  }, [refresh]);
-  useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -259,6 +211,18 @@ export default function App() {
   // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
   const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
   const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
+  const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus);
+  const onBackupRestored = useCallback(async () => {
+    setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
+    const restoredWorkspaces = await db.workspaces.toArray();
+    const storedWorkspace = await db.preferences.get('activeWorkspace');
+    const selected = restoredWorkspaces.find((item) => item.id === storedWorkspace?.value)?.id ?? restoredWorkspaces[0]?.id ?? null;
+    setWorkspaces(restoredWorkspaces);
+    setActiveWorkspaceId(selected);
+    if (selected) await db.preferences.put({ key: 'activeWorkspace', value: selected, updatedAt: Date.now() });
+    await refresh();
+  }, [refresh, setWorkspaces]);
+  const backup = useWorkspaceBackup(flushPendingSaves, requestConfirmation, setError, onBackupRestored);
   const allLiveFiles = files.filter((file) => file.deletedAt === null);
   const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
   const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
@@ -297,11 +261,10 @@ export default function App() {
     // Reclassify on open so legacy HDL records cannot remain editable.
     const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
     if (meta.workspaceId !== activeWorkspaceId) {
-      setActiveWorkspaceId(meta.workspaceId);
+      await workspace.switchWorkspace(meta.workspaceId);
       setActiveProject(meta.projectId);
       setSelectedFolder(meta.parentFolderId);
       setView('workspace');
-      await db.preferences.put({ key: 'activeWorkspace', value: meta.workspaceId, updatedAt: Date.now() });
     }
     const existing = tabs.find((tab) => tab.id === meta.id);
     if (existing) {
@@ -329,7 +292,7 @@ export default function App() {
       : undefined;
     const hasRecoveredDraft = typeof savedDraftValue === 'string';
     const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
-    if (hasRecoveredDraft) pendingDrafts.current.set(meta.id, draft);
+    if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
     const pdfState = meta.kind === 'pdf' ? {
       page: Number.isFinite(savedPdfState?.page) ? Math.max(1, Math.floor(savedPdfState!.page!)) : 1,
@@ -347,108 +310,7 @@ export default function App() {
     setActiveTabId(meta.id);
     if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
-  }, [activeWorkspaceId, tabs]);
-
-  const persistDraft = useCallback(async (id: string, draft: string) => {
-    const pendingTimer = saveTimers.current.get(id);
-    if (pendingTimer) clearTimeout(pendingTimer);
-    saveTimers.current.delete(id);
-    const recoveryTimer = draftRecoveryTimers.current.get(id);
-    if (recoveryTimer) clearTimeout(recoveryTimer);
-    draftRecoveryTimers.current.delete(id);
-    const revision = draftRevisions.current.get(id) ?? 0;
-    const previousSave = saveChains.current.get(id) ?? Promise.resolve();
-    const save = previousSave.catch(() => undefined).then(() => saveFileText(db, id, draft)).then(async () => {
-      if (draftRevisions.current.get(id) === revision) {
-        await db.preferences.delete(`draft:${id}`);
-        setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, dirty: false, meta: { ...tab.meta, size: new TextEncoder().encode(draft).byteLength, updatedAt: Date.now() } } : tab));
-        pendingDrafts.current.delete(id);
-        setStatus('Saved locally');
-      }
-    }).catch((reason: unknown) => {
-      if (draftRevisions.current.get(id) === revision) { setStatus('Could not save'); setError(reason instanceof Error ? reason.message : 'Unable to save changes.'); }
-      throw reason;
-    });
-    saveChains.current.set(id, save);
-    await save;
-    await refresh();
-  }, [refresh]);
-
-  const updateDraft = useCallback((id: string, draft: string) => {
-    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, draft, dirty: true } : tab));
-    pendingDrafts.current.set(id, draft);
-    const recoveryTimer = draftRecoveryTimers.current.get(id);
-    if (recoveryTimer) clearTimeout(recoveryTimer);
-    draftRecoveryTimers.current.set(id, setTimeout(() => {
-      draftRecoveryTimers.current.delete(id);
-      void db.preferences.put({ key: `draft:${id}`, value: draft, updatedAt: Date.now() }).catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : 'Could not persist the crash-recovery draft.');
-      });
-    }, 150));
-    const revision = (draftRevisions.current.get(id) ?? 0) + 1;
-    draftRevisions.current.set(id, revision);
-    setStatus('Unsaved changes · Auto-save in 1 second');
-    const previous = saveTimers.current.get(id);
-    if (previous) clearTimeout(previous);
-    saveTimers.current.set(id, setTimeout(() => {
-      saveTimers.current.delete(id);
-      void persistDraft(id, draft).catch(() => undefined);
-    }, 1000));
-  }, [persistDraft]);
-
-  const flushPendingSaves = useCallback(async () => {
-    await flushPendingAutosaves(pendingDrafts.current, saveTimers.current, persistDraft);
-    await Promise.all([...saveChains.current.values()]);
-  }, [persistDraft]);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-    if (!isDesktopApp()) {
-      const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-        if (pendingDrafts.current.size === 0) return;
-        event.preventDefault();
-        event.returnValue = '';
-      };
-      window.addEventListener('beforeunload', warnBeforeUnload);
-      return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-    }
-    const currentWindow = getCurrentWindow();
-    void currentWindow.onCloseRequested(async (event) => {
-      if (closeInProgress.current) return;
-      event.preventDefault();
-      closeInProgress.current = true;
-      try {
-        await flushPendingSaves();
-        await Promise.all([...saveChains.current.values()]);
-        await currentWindow.close();
-      } catch (reason) {
-        closeInProgress.current = false;
-        setStatus('Save failed · close cancelled');
-        setError(reason instanceof Error ? reason.message : 'Unsaved changes could not be saved. The application remains open.');
-      }
-    }).then((stopListening) => {
-      if (disposed) stopListening();
-      else unlisten = stopListening;
-    }).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : 'Could not register safe shutdown handling.');
-    });
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [flushPendingSaves]);
-
-  useEffect(() => {
-    const onSaveShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
-      if (!activeTab || !activeTab.dirty || !['code', 'text', 'markdown'].includes(activeTab.meta.kind)) return;
-      event.preventDefault();
-      void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined);
-    };
-    window.addEventListener('keydown', onSaveShortcut);
-    return () => window.removeEventListener('keydown', onSaveShortcut);
-  }, [activeTab, persistDraft]);
+  }, [activeWorkspaceId, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
 
   function createWorkspace() {
     requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
@@ -542,39 +404,6 @@ export default function App() {
     finally { setImporting(false); }
   }
 
-  async function openBackup(file: File | undefined) {
-    if (!file) return;
-    try {
-      const backup = await parseBackupFile(file);
-      requestConfirmation('Restore workspace backup?', 'Restoring replaces the current workspaces, projects, folders, files, and preferences.', 'Restore backup', async () => {
-        await flushPendingSaves();
-        await importBackup(db, backup);
-        setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
-        const restoredWorkspaces = await db.workspaces.toArray();
-        const storedWorkspace = await db.preferences.get('activeWorkspace');
-        const selected = restoredWorkspaces.find((workspace) => workspace.id === storedWorkspace?.value)?.id ?? restoredWorkspaces[0]?.id ?? null;
-        setWorkspaces(restoredWorkspaces);
-        setActiveWorkspaceId(selected);
-        if (selected) await db.preferences.put({ key: 'activeWorkspace', value: selected, updatedAt: Date.now() });
-        await refresh();
-      }, true);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to restore this backup.'); }
-    finally { if (backupInput.current) backupInput.current.value = ''; }
-  }
-
-  async function restoreFromPicker() {
-    if (!isDesktopApp()) { backupInput.current?.click(); return; }
-    try { await openBackup(await chooseBackupToRestore() ?? undefined); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not open the backup picker.'); }
-  }
-
-  async function saveWorkspaceBackup() {
-    try {
-      if (isDesktopApp()) await saveBackupToDesktop(exportBackupStream(db));
-      else await downloadBackup(db);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create the workspace backup.'); }
-  }
-
   function startImportInto(target: ImportTarget) {
     setImportTarget(target);
     if (isDesktopApp()) { void handlePickedImport(iterateDesktopFiles(), target).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.')); return; }
@@ -647,13 +476,12 @@ export default function App() {
   }
 
   async function switchWorkspace(workspaceId: string) {
-    setActiveWorkspaceId(workspaceId);
+    await workspace.switchWorkspace(workspaceId);
     setActiveProject(null);
     setSelectedFolder(null);
     setView('workspace');
     setActiveTabId(null);
     setWorkspaceMenuOpen(false);
-    await db.preferences.put({ key: 'activeWorkspace', value: workspaceId, updatedAt: Date.now() });
   }
 
   async function moveItemTo(destination: ImportTarget) {
@@ -665,10 +493,9 @@ export default function App() {
       } else {
         await moveFolder(db, moveDialog.id, destination.folderId, destination.projectId, destination.workspaceId);
       }
-      setActiveWorkspaceId(destination.workspaceId);
+      await workspace.switchWorkspace(destination.workspaceId);
       setActiveProject(destination.projectId);
       setSelectedFolder(destination.folderId);
-      await db.preferences.put({ key: 'activeWorkspace', value: destination.workspaceId, updatedAt: Date.now() });
       setMoveDialog(null);
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not move this item.'); }
@@ -720,7 +547,7 @@ export default function App() {
 
   async function deleteFile(meta: FileMeta) {
     requestConfirmation('Move file to Trash?', `“${meta.name}” can be restored from Trash.`, 'Move to Trash', async () => {
-      await saveChains.current.get(meta.id);
+      await waitForSave(meta.id);
       await softDeleteFile(db, meta.id);
       setTabs((current) => current.filter((tab) => tab.id !== meta.id));
       if (activeTabId === meta.id) setActiveTabId(null);
@@ -733,7 +560,7 @@ export default function App() {
     requestConfirmation('Delete folder?', `Delete “${folder.name}” and ${count} item${count === 1 ? '' : 's'} inside it? This cannot be undone.`, 'Delete folder', async () => {
       const folderIds = await getFolderSubtreeIds(db, folder.id);
       const closingTabs = tabs.filter((tab) => tab.meta.parentFolderId !== null && folderIds.includes(tab.meta.parentFolderId));
-      await Promise.all(closingTabs.map((tab) => saveChains.current.get(tab.id)));
+      await Promise.all(closingTabs.map((tab) => waitForSave(tab.id)));
       await deleteFolderContents(db, folder.id);
       setTabs((current) => current.filter((tab) => !closingTabs.some((closing) => closing.id === tab.id)));
       if (closingTabs.some((tab) => tab.id === activeTabId)) setActiveTabId(tabs.find((tab) => !closingTabs.some((closing) => closing.id === tab.id))?.id ?? null);
@@ -746,7 +573,7 @@ export default function App() {
     const itemCount = files.filter((file) => file.projectId === project.id && file.deletedAt === null).length + folders.filter((folder) => folder.projectId === project.id).length;
     requestConfirmation('Delete project?', `Delete project “${project.name}” and its ${itemCount} item${itemCount === 1 ? '' : 's'}? Files will move to Trash.`, 'Delete project', async () => {
       const projectTabs = tabs.filter((tab) => tab.meta.projectId === project.id);
-      await Promise.all(projectTabs.map((tab) => saveChains.current.get(tab.id)));
+      await Promise.all(projectTabs.map((tab) => waitForSave(tab.id)));
       await softDeleteProject(db, project.id);
       setTabs((current) => current.filter((tab) => !projectTabs.some((tabToClose) => tabToClose.id === tab.id)));
       if (activeProject === project.id) { setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }
@@ -925,10 +752,10 @@ export default function App() {
             </div>
           </div>
           <div className="sidebar-actions">
-            <button onClick={() => void saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
-            <button onClick={() => void restoreFromPicker()} title="Restore from backup"><Import size={15} /> Restore</button>
+            <button onClick={() => void backup.saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
+            <button onClick={() => void backup.restoreFromPicker(backupInput.current)} title="Restore from backup"><Import size={15} /> Restore</button>
           </div>
-          <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void openBackup(event.target.files?.[0])} />
+          <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void backup.openBackup(event.target.files?.[0], event.currentTarget)} />
         </div>
       </>}
       {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
@@ -1087,7 +914,7 @@ export default function App() {
       {rightPanel === 'details' ? <div className="details-content">
         <div className="details-card"><span className="details-icon"><HardDrive size={18} /></span><div><b>Stored on this device</b><span>Only you can access these files.</span></div></div>
         <div className="detail-row"><span>Total files</span><b>{liveFiles.length}</b></div><div className="detail-row"><span>Projects</span><b>{activeProjects.length}</b></div><div className="detail-row"><span>Folders</span><b>{folders.filter((folder) => folder.workspaceId === activeWorkspaceId).length}</b></div><div className="detail-row"><span>Storage used</span><b>{formatSize(liveFiles.reduce((sum, item) => sum + item.size, 0))}</b></div>
-        <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
+        <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void backup.saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
       </div> : <div className="search-results-panel">
         {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and text in notes or code.</span></div> : searchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Try a different word or phrase.</span></div> : searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => void openFile(file)}>
           <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
