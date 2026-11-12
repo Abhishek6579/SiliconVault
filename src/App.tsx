@@ -331,7 +331,7 @@ export default function App() {
         if (tab.id === meta.id) return hydrated;
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
-        return withoutPdfData;
+        return { ...withoutPdfData, hydrated: false };
       }));
       setActiveTabId(meta.id);
       setError('');
@@ -356,7 +356,7 @@ export default function App() {
       ...current.map((tab) => {
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
-        return withoutPdfData;
+        return { ...withoutPdfData, hydrated: false };
       }),
       newTab,
     ]);
