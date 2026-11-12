@@ -205,13 +205,14 @@ test('imports a text file, edits it, saves it, and recovers the saved content', 
       return await new Promise<string | null>((resolve, reject) => {
         const transaction = database.transaction(['files', 'contents'], 'readonly');
         const files = transaction.objectStore('files').getAll();
-        transaction.oncomplete = () => {
+        files.onsuccess = () => {
           const file = files.result.find((item: { name: string }) => item.name === 'import-edit.txt');
           if (!file) { resolve(null); return; }
-          const contentRequest = database.transaction('contents', 'readonly').objectStore('contents').get(file.id);
+          const contentRequest = transaction.objectStore('contents').get(file.id);
           contentRequest.onsuccess = () => resolve(typeof contentRequest.result?.data === 'string' ? contentRequest.result.data : null);
           contentRequest.onerror = () => reject(contentRequest.error);
         };
+        files.onerror = () => reject(files.error);
         transaction.onerror = () => reject(transaction.error);
       });
     } finally {
