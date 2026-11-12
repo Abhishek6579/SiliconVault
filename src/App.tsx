@@ -304,7 +304,9 @@ export default function App() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
   const activeProjects = projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId);
   const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
+  const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
+  const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
   const allLiveFiles = files.filter((file) => file.deletedAt === null);
   const liveFiles = allLiveFiles.filter((file) => file.workspaceId === activeWorkspaceId);
   const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
@@ -513,7 +515,7 @@ export default function App() {
       unlisten?.();
     };
   }, [flushPendingSaves]);
-  
+
   useEffect(() => {
     const onSaveShortcut = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's') return;
@@ -893,8 +895,8 @@ export default function App() {
     const isOpen = expanded.has(folder.record.id);
     const selected = selectedFolder === folder.record.id;
     return <div key={folder.record.id}>
-        <div className={`tree-row ${selected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('folder', folder.record.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.record.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.record.id, folder.record.projectId, folder.record.workspaceId)}>
-          <button className="tree-main" onClick={() => { setSelectedFolder(folder.record.id); setActiveProject(folder.record.projectId); setView('workspace'); setActiveTabId(null); }} onDoubleClick={() => toggleFolder(folder.record.id)}>
+      <div className={`tree-row ${selected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('folder', folder.record.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.record.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.record.id, folder.record.projectId, folder.record.workspaceId)}>
+        <button className="tree-main" onClick={() => { setSelectedFolder(folder.record.id); setActiveProject(folder.record.projectId); setView('workspace'); setActiveTabId(null); }} onDoubleClick={() => toggleFolder(folder.record.id)}>
           <span className="twisty" onClick={(event) => { event.stopPropagation(); toggleFolder(folder.record.id); }}>{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
           {isOpen ? <Folder size={16} className="folder-icon open" /> : <Folder size={16} className="folder-icon" />}
           <span className="truncate" title={folder.record.name}>{folder.record.name}</span>
@@ -943,7 +945,9 @@ export default function App() {
 
   const visibleFiles = view === 'trash' ? trashedFiles : view === 'recent'
     ? [...liveFiles].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40)
-    : liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === activeProject && file.parentFolderId === selectedFolder);
+    : view === 'workspace' && !activeProject && !selectedFolder
+      ? liveFiles
+      : liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === activeProject && file.parentFolderId === selectedFolder);
   const sortedVisible = view === 'recent' || view === 'trash' ? [...visibleFiles] : [...visibleFiles].sort((a, b) => {
     const order = sort === 'type' ? a.kind.localeCompare(b.kind) : sort === 'size' ? a.size - b.size : sort === 'updatedAt' ? a.updatedAt - b.updatedAt : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     return sortDesc ? -order : order;
@@ -1070,12 +1074,12 @@ export default function App() {
       {activeTab ? <div className="editor-workspace">
         <div className="tab-strip">
           <div className="tab-list">
-            {tabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
+            {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
               {<FileKindIcon kind={tab.meta.kind} size={15} />}<span className="truncate" title={tab.meta.name}>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
               <span role="button" tabIndex={0} className="tab-close" aria-label={`Close ${tab.meta.name}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); closeTab(tab.id); } }}><X size={14} /></span>
             </button>)}
           </div>
-            <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Plus size={16} /></button>
+          <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Plus size={16} /></button>
         </div>
         <div className="editor-titlebar">
           <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
@@ -1100,11 +1104,13 @@ export default function App() {
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
             {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
-            <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{ code({ className, children, ...props }) {
-              const code = String(children).replace(/\n$/, '');
-              if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
-              return <code className={className} {...props}>{children}</code>;
-            } }}>{activeTab.draft}</ReactMarkdown></article></div>
+            <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
+              code({ className, children, ...props }) {
+                const code = String(children).replace(/\n$/, '');
+                if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
+                return <code className={className} {...props}>{children}</code>;
+              }
+            }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
           <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
@@ -1112,8 +1118,8 @@ export default function App() {
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
-      </div> : <div className="workspace-body">
-        {tabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{tabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
+      </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
+        {workspaceTabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{workspaceTabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <div className="welcome-page">
           <div className="welcome-kicker"><Sparkles size={15} /> LOCAL ENGINEERING WORKSPACE</div>
           <h1>Your work, in one place.</h1>
@@ -1131,21 +1137,24 @@ export default function App() {
             {activeProjects.length > 0 && <><h2>Projects</h2><div className="overview-card-grid">{activeProjects.map((project) => <button className="overview-card" key={project.id} onClick={() => void switchProject(project.id)}><span className="overview-card-icon project-card-icon"><Layers size={17} /></span><b>{project.name}</b><small>{liveFiles.filter((file) => file.projectId === project.id).length} files · {folders.filter((folder) => folder.projectId === project.id).length} folders</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
             {generalRootFolders.length > 0 && <><h2>General folders</h2><div className="overview-card-grid">{generalRootFolders.map((folder) => <button className="overview-card" key={folder.id} onClick={() => { setSelectedFolder(folder.id); setActiveProject(null); setActiveTabId(null); }}><span className="overview-card-icon folder-card-icon"><Folder size={17} /></span><b>{folder.name}</b><small>General workspace folder</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
           </section>}
-          {view === 'workspace' && currentFolders.length > 0 && <>
-            {selectedFolder && <div className="folder-contents-heading"><Folder size={14} /> Folders</div>}
-            {currentFolders.sort((a, b) => a.name.localeCompare(b.name)).map((folder) => <div className="file-list-row folder-list-row" key={folder.id} draggable onContextMenu={(event) => showContextMenu('folder', folder.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.id, folder.projectId, folder.workspaceId)}>
-              <button className="file-name-button" onClick={() => { setSelectedFolder(folder.id); setActiveTabId(null); }}><Folder size={17} className="folder-icon" /><span>{folder.name}</span><small>Folder</small></button><span className="kind-cell">Folder</span><span className="size-cell">—</span><span className="date-cell">{new Date(folder.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.id, event)}><Ellipsis size={16} /></button>
+          <div className="file-list-scroll">
+            {view === 'workspace' && currentFolders.length > 0 && <>
+              {selectedFolder && <div className="folder-contents-heading"><Folder size={14} /> Folders</div>}
+              {currentFolders.sort((a, b) => a.name.localeCompare(b.name)).map((folder) => <div className="file-list-row folder-list-row" key={folder.id} draggable onContextMenu={(event) => showContextMenu('folder', folder.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.id, folder.projectId, folder.workspaceId)}>
+                <button className="file-name-button" onClick={() => { setSelectedFolder(folder.id); setActiveTabId(null); }}><Folder size={17} className="folder-icon" /><span>{folder.name}</span><small>Folder</small></button><span className="kind-cell">Folder</span><span className="size-cell">—</span><span className="date-cell">{new Date(folder.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.id, event)}><Ellipsis size={16} /></button>
+              </div>)}
+            </>}
+            {/* {view === 'workspace' && !activeProject && !selectedFolder && <div className="workspace-files-heading"><span>{visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'}</span></div>} */}
+            <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
+            {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
+              <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
+            </div>) : view === 'recent' ? sortedVisible.length === 0 ? <EmptyState title="No recent files" message="Open a file or import one to start building your workspace." icon={<Clock3 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
+              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
+            </div>) : sortedVisible.length === 0 && currentFolders.length === 0 && !(view === 'workspace' && !activeProject && activeProjects.length > 0) ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
+              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? projects.find((project) => project.id === file.projectId)?.name : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
             </div>)}
-          </>}
-          <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
-          {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-            <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
-          </div>) : view === 'recent' ? sortedVisible.length === 0 ? <EmptyState title="No recent files" message="Open a file or import one to start building your workspace." icon={<Clock3 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-            <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
-          </div>) : sortedVisible.length === 0 && currentFolders.length === 0 ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-            <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? projects.find((project) => project.id === file.projectId)?.name : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
-          </div>)}
-          {view === 'workspace' && <div className="root-drop-hint"><Import size={14} /> Drop files here to import them into {selectedFolder ? 'this folder' : activeProjectRecord?.name ?? 'the workspace'}</div>}
+            {view === 'workspace' && <div className="root-drop-hint"><Import size={14} /> Drop files here to import them into {selectedFolder ? 'this folder' : activeProjectRecord?.name ?? 'the workspace'}</div>}
+          </div>
         </div>}
       </div>}
     </main>
