@@ -332,7 +332,13 @@ export default function App() {
     }
     const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
     if (existing) {
-      const hydrated = existing.data === undefined ? await hydrateWorkspaceTab(db, existing) : existing;
+      let hydrated: Tab;
+      try {
+        hydrated = existing.data === undefined ? await hydrateWorkspaceTab(db, existing) : existing;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
+        return;
+      }
       if (hydrated.dirty) trackRecoveredDraft(meta.id, hydrated.draft);
       setTabs((current) => current.map((tab) => {
         if (tab.id === meta.id) return hydrated;
@@ -344,13 +350,19 @@ export default function App() {
       setError('');
       return;
     }
-    const newTab = await hydrateWorkspaceTab(db, {
-      id: meta.id,
-      meta,
-      draft: '',
-      dirty: false,
-      preview: meta.kind === 'markdown',
-    });
+    let newTab: Tab;
+    try {
+      newTab = await hydrateWorkspaceTab(db, {
+        id: meta.id,
+        meta,
+        draft: '',
+        dirty: false,
+        preview: meta.kind === 'markdown',
+      });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
+      return;
+    }
     if (newTab.dirty) trackRecoveredDraft(meta.id, newTab.draft);
     setTabs((current) => [
       ...current.map((tab) => {
