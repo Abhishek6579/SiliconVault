@@ -123,16 +123,16 @@ export function useAutosave(
         event.preventDefault();
         event.returnValue = '';
       };
-      const persistSessionBeforePageHide = () => {
-        void flushSession().catch((reason: unknown) => {
-          console.error('Could not persist the workspace tab session before page hide.', reason);
+      const persistWorkspaceBeforePageHide = () => {
+        void flushPendingSaves().catch((reason: unknown) => {
+          console.error('Could not persist workspace data before page hide.', reason);
         });
       };
       window.addEventListener('beforeunload', warnBeforeUnload);
-      window.addEventListener('pagehide', persistSessionBeforePageHide);
+      window.addEventListener('pagehide', persistWorkspaceBeforePageHide);
       return () => {
         window.removeEventListener('beforeunload', warnBeforeUnload);
-        window.removeEventListener('pagehide', persistSessionBeforePageHide);
+        window.removeEventListener('pagehide', persistWorkspaceBeforePageHide);
       };
     }
 

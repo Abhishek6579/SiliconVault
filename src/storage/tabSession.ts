@@ -66,10 +66,12 @@ export async function restoreWorkspaceSession(
     file && file.workspaceId === workspaceId && file.deletedAt === null
   ));
   const validIds = validFiles.map((file) => file.id);
-  const requestedActive = isRecord(value) && typeof value.activeFileId === 'string' ? value.activeFileId : null;
+  const requestedActive = isRecord(value) && (typeof value.activeFileId === 'string' || value.activeFileId === null)
+    ? value.activeFileId
+    : undefined;
   const activeTabId = requestedActive === null
     ? null
-    : requestedActive && validIds.includes(requestedActive)
+    : typeof requestedActive === 'string' && validIds.includes(requestedActive)
       ? requestedActive
       : validIds.at(-1) ?? null;
   const isValidRecord = isRecord(value)
