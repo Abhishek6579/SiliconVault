@@ -113,3 +113,68 @@ test('keeps multiple open documents and the selected tab across reloads', async 
   await expect(page.locator('.tab-strip .file-tab').filter({ hasText: 'second-session.md' })).toBeVisible();
   await expect(page.locator('.editor-workspace')).toBeVisible();
 });
+
+
+test('moves a file to Trash and restores it without losing its content', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
+
+  await page.getByRole('button', { name: /Technical notes/ }).click();
+  const createDialog = page.getByRole('dialog');
+  await createDialog.getByPlaceholder('File name').fill('trash-roundtrip.md');
+  await createDialog.getByRole('button', { name: 'Create file' }).click();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'trash-roundtrip.md' })).toBeVisible();
+
+  await page.locator('.tree-row.file-row').filter({ hasText: 'trash-roundtrip.md' }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Move to Trash', exact: true }).click();
+  const confirmDialog = page.getByRole('dialog');
+  await expect(confirmDialog.getByRole('heading', { name: 'Move file to Trash?' })).toBeVisible();
+  await confirmDialog.getByRole('button', { name: 'Move to Trash', exact: true }).click();
+
+  await page.locator('.sidebar-primary .nav-item').filter({ hasText: 'Trash' }).click();
+  const trashedRow = page.locator('.file-list-row').filter({ hasText: 'trash-roundtrip.md' });
+  await expect(trashedRow).toBeVisible();
+  await trashedRow.getByRole('button', { name: 'Restore' }).click();
+  await expect(trashedRow).toHaveCount(0);
+
+  await page.locator('.sidebar-primary .nav-item').filter({ hasText: 'Workspace' }).click();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'trash-roundtrip.md' })).toBeVisible();
+});
+
+test('keeps files isolated when switching between workspaces', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
+
+  const createNote = async (name: string) => {
+    await page.getByRole('button', { name: 'Import', exact: true }).click();
+    await page.getByRole('button', { name: 'New note' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Create note' })).toBeVisible();
+    await dialog.getByPlaceholder('File name').fill(name);
+    await dialog.getByRole('button', { name: 'Create file' }).click();
+    await expect(page.locator('.tree-row.file-row').filter({ hasText: name })).toBeVisible();
+  };
+
+  await createNote('workspace-alpha.md');
+
+  await page.locator('.workspace-switch-button').click();
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const workspaceDialog = page.getByRole('dialog');
+  await expect(workspaceDialog.getByRole('heading', { name: 'Create workspace' })).toBeVisible();
+  await workspaceDialog.getByPlaceholder('Workspace name').fill('E2E Workspace Beta');
+  await workspaceDialog.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(page.locator('.workspace-switch-button')).toContainText('E2E Workspace Beta');
+
+  await createNote('workspace-beta.md');
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-alpha.md' })).toHaveCount(0);
+
+  await page.locator('.workspace-switch-button').click();
+  await page.getByRole('button', { name: 'My Workspace', exact: true }).click();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-alpha.md' })).toBeVisible();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-beta.md' })).toHaveCount(0);
+
+  await page.locator('.workspace-switch-button').click();
+  await page.getByRole('button', { name: 'E2E Workspace Beta', exact: true }).click();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-beta.md' })).toBeVisible();
+  await expect(page.locator('.tree-row.file-row').filter({ hasText: 'workspace-alpha.md' })).toHaveCount(0);
+});
