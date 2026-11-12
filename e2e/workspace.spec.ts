@@ -184,7 +184,7 @@ test('imports a text file, edits it, saves it, and recovers the saved content', 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
 
-  await page.locator('input[type="file"]').first().setInputFiles({
+  await page.locator('input[type="file"]:not([accept])').first().setInputFiles({
     name: 'import-edit.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('original import content'),
@@ -239,7 +239,7 @@ test('exports and restores a backup through the browser workflow', async ({ page
   const backupPath = await download.path();
   expect(backupPath).not.toBeNull();
 
-  await page.locator('input[type="file"]').nth(2).setInputFiles(backupPath!);
+  await page.locator('input[type="file"][accept="application/json,.json"]').setInputFiles(backupPath!);
   const confirmDialog = page.getByRole('dialog');
   await expect(confirmDialog.getByRole('heading', { name: 'Restore workspace backup?' })).toBeVisible();
   await confirmDialog.getByRole('button', { name: 'Restore backup', exact: true }).click();
