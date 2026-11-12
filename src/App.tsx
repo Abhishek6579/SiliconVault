@@ -25,6 +25,7 @@ import WorkspaceDialog, { type WorkspaceDialogState } from './components/Workspa
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { fileText, formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
+import { restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -85,9 +86,19 @@ export default function App() {
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const restoreWorkspaceTabs = useCallback(async (workspaceId: string) => {
+    const restored = await restoreWorkspaceSession(db, workspaceId);
+    setTabs((current) => [
+      ...current.filter((tab) => tab.meta.workspaceId !== workspaceId),
+      ...restored.tabs,
+    ]);
+    setActiveTabId(restored.activeTabId);
+    return restored;
+  }, []);
   useWorkspaceInitialization({
     refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
     setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
+    restoreTabs: async (workspaceId) => { await restoreWorkspaceTabs(workspaceId); },
   });
   useGlobalShortcuts(setAppZoom);
 
@@ -174,6 +185,20 @@ export default function App() {
       setUpgrading(false);
     }
   }
+  const persistEditorViewState = useCallback((id: string, view: EditorView, preview: boolean) => {
+    const selection = view.state.selection.main;
+    const state: EditorViewState = {
+      anchor: selection.anchor,
+      head: selection.head,
+      scrollTop: view.scrollDOM.scrollTop,
+      scrollLeft: view.scrollDOM.scrollLeft,
+      preview,
+    };
+    void db.preferences.put({ key: `editor:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : 'Could not save editor position.');
+    });
+  }, [setError]);
+
   const updatePdfView = useCallback((id: string, state: PdfViewState) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, pdfState: state } : tab));
     void db.preferences.put({ key: `pdf:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
@@ -210,7 +235,21 @@ export default function App() {
   const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
   // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
   const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
+  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
   const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
+  const sessionSaveChain = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (loading || !activeWorkspaceId) return;
+    const workspaceId = activeWorkspaceId;
+    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
+    const timer = window.setTimeout(() => {
+      sessionSaveChain.current = sessionSaveChain.current
+        .catch(() => undefined)
+        .then(() => saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId))
+        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.'));
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [activeTabId, activeWorkspaceId, loading, setError, workspaceTabSignature]);
   const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus);
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
@@ -265,6 +304,7 @@ export default function App() {
     const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
     if (meta.workspaceId !== activeWorkspaceId) {
       await workspace.switchWorkspace(meta.workspaceId);
+      await restoreWorkspaceTabs(meta.workspaceId);
       setActiveProject(meta.projectId);
       setSelectedFolder(meta.parentFolderId);
       setView('workspace');
@@ -272,13 +312,31 @@ export default function App() {
     const existing = tabs.find((tab) => tab.id === meta.id);
     if (existing) {
       let data = existing.data;
-      if ((meta.kind === 'pdf' || meta.kind === 'viewer') && !data) {
+      let draft = existing.draft;
+      let dirty = existing.dirty;
+      let pdfState = existing.pdfState;
+      let editorState = existing.editorState;
+      if (data === undefined) {
         const content = await db.contents.get(meta.id);
         if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-        data = content.data;
+        data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob
+          ? await content.data.text() : content.data;
+        if (['markdown', 'code', 'text'].includes(meta.kind)) {
+          const savedDraftValue = (await db.preferences.get(`draft:${meta.id}`))?.value;
+          const hasRecoveredDraft = typeof savedDraftValue === 'string';
+          draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
+          dirty = hasRecoveredDraft;
+          if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
+          const savedEditorState = (await db.preferences.get(`editor:${meta.id}`))?.value as Partial<EditorViewState> | undefined;
+          editorState = normalizeEditorViewState(savedEditorState);
+        }
+        if (meta.kind === 'pdf') {
+          const savedPdfState = (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined;
+          pdfState = normalizePdfViewState(savedPdfState);
+        }
       }
       setTabs((current) => current.map((tab) => {
-        if (tab.id === meta.id) return data === undefined ? tab : { ...tab, data };
+        if (tab.id === meta.id) return { ...tab, data, draft, dirty, pdfState, editorState, preview: editorState?.preview ?? tab.preview };
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
@@ -297,23 +355,30 @@ export default function App() {
     const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
     if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
     const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
-    const pdfState = meta.kind === 'pdf' ? {
-      page: Number.isFinite(savedPdfState?.page) ? Math.max(1, Math.floor(savedPdfState!.page!)) : 1,
-      zoom: Number.isFinite(savedPdfState?.zoom) ? Math.max(.5, Math.min(2, savedPdfState!.zoom!)) : 1,
-      fit: typeof savedPdfState?.fit === 'boolean' ? savedPdfState.fit : true,
-    } : undefined;
+    const pdfState = meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : undefined;
+    const savedEditorState = ['markdown', 'code', 'text'].includes(meta.kind)
+      ? (await db.preferences.get(`editor:${meta.id}`))?.value as Partial<EditorViewState> | undefined
+      : undefined;
+    const editorState = normalizeEditorViewState(savedEditorState);
     setTabs((current) => [
       ...current.map((tab) => {
         if (!(tab.data instanceof Blob)) return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return withoutPdfData;
       }),
-      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: meta.kind === 'markdown', pdfState },
+      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: editorState?.preview ?? (meta.kind === 'markdown'), pdfState, editorState },
     ]);
     setActiveTabId(meta.id);
     if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
   }, [activeWorkspaceId, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
+
+  useEffect(() => {
+    if (!activeTab || activeTab.data !== undefined || loading) return;
+    void openFile(activeTab.meta).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
+    });
+  }, [activeTab, loading, openFile]);
 
   function createWorkspace() {
     requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
@@ -479,11 +544,15 @@ export default function App() {
   }
 
   async function switchWorkspace(workspaceId: string) {
+    if (!workspaces.some((item) => item.id === workspaceId)) return;
+    if (activeWorkspaceId) {
+      await saveWorkspaceSession(db, activeWorkspaceId, workspaceTabs.map((tab) => tab.id), activeTabId);
+    }
     await workspace.switchWorkspace(workspaceId);
+    await restoreWorkspaceTabs(workspaceId);
     setActiveProject(null);
     setSelectedFolder(null);
     setView('workspace');
-    setActiveTabId(null);
     setWorkspaceMenuOpen(false);
   }
 
@@ -856,7 +925,7 @@ export default function App() {
         )}
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
-            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
+            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
               code({ className, children, ...props }) {
                 const code = String(children).replace(/\n$/, '');
@@ -866,7 +935,7 @@ export default function App() {
             }}>{activeTab.draft}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? (
           <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
@@ -967,6 +1036,29 @@ export default function App() {
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
+}
+
+function normalizePdfViewState(state?: Partial<PdfViewState>): PdfViewState {
+  return {
+    page: Number.isFinite(state?.page) ? Math.max(1, Math.floor(state!.page!)) : 1,
+    zoom: Number.isFinite(state?.zoom) ? Math.max(.5, Math.min(2, state!.zoom!)) : 1,
+    fit: typeof state?.fit === 'boolean' ? state.fit : true,
+  };
+}
+
+function normalizeEditorViewState(state?: Partial<EditorViewState>): EditorViewState | undefined {
+  if (!state) return undefined;
+  const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  if (!finite(state.anchor) || !finite(state.head) || !finite(state.scrollTop) || !finite(state.scrollLeft)) return undefined;
+  return { anchor: state.anchor!, head: state.head!, scrollTop: state.scrollTop!, scrollLeft: state.scrollLeft!, preview: state.preview === true };
+}
+
+function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
+  if (!state) return;
+  const length = view.state.doc.length;
+  view.dispatch({ selection: { anchor: Math.min(state.anchor, length), head: Math.min(state.head, length) } });
+  view.scrollDOM.scrollTop = state.scrollTop;
+  view.scrollDOM.scrollLeft = state.scrollLeft;
 }
 
 function EmptyState({ title, message, icon, action }: { title: string; message: string; icon: ReactNode; action?: ReactNode }) {

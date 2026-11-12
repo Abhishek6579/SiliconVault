@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { DATABASE_NAME, DATABASE_VERSION, db, existingDatabaseVersion } from '../../../storage/database';
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
 import type { Workspace } from '../../../storage/types';
+import type { Tab } from '../../tabs/types';
 
 interface Options {
   refresh: () => Promise<void>;
@@ -15,13 +16,14 @@ interface Options {
   setDarkTheme: Dispatch<SetStateAction<boolean>>;
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>;
   setActiveWorkspaceId: Dispatch<SetStateAction<string | null>>;
+  restoreTabs: (workspaceId: string) => Promise<void>;
 }
 
 /** Opens the local database and restores persisted app and workspace selections. */
 export function useWorkspaceInitialization(options: Options) {
   const {
     refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
-    setPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
+    setPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId, restoreTabs,
   } = options;
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function useWorkspaceInitialization(options: Options) {
           setActiveWorkspaceId(selectedWorkspace);
         }
         if (alive && selectedWorkspace && !storedWorkspace) await db.preferences.put({ key: 'activeWorkspace', value: selectedWorkspace, updatedAt: Date.now() });
+        if (alive && selectedWorkspace) await restoreTabs(selectedWorkspace);
         if (alive) await refresh();
       } catch (reason) {
         if (alive) { setError(reason instanceof Error ? reason.message : 'Could not open the local workspace.'); setLoading(false); }
@@ -55,6 +58,6 @@ export function useWorkspaceInitialization(options: Options) {
     return () => { alive = false; };
   }, [
     refresh, setActiveWorkspaceId, setAppZoom, setDarkTheme, setEditorFontSize, setError,
-    setLoading, setMigrationBackup, setPreferencesReady, setWorkspaces,
+    setLoading, setMigrationBackup, setPreferencesReady, setWorkspaces, restoreTabs,
   ]);
 }
