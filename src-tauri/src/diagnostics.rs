@@ -8,7 +8,7 @@ impl DiagnosticsState { pub fn new() -> Self { Self { started: Instant::now() } 
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticsSnapshot {
     pub schema_version: u8, pub app_version: &'static str, pub platform: &'static str, pub architecture: &'static str,
-    pub uptime_seconds: u64, pub collected_at: String, pub system: SystemStats, pub logs: LogInventory, pub data_isolation: &'static str,
+    pub uptime_seconds: u64, pub collected_at: String, pub system: SystemStats, pub logs: LogInventory, pub previous_session_clean: Option<bool>, pub recovery_note: String, pub data_isolation: &'static str,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,12 +35,36 @@ pub fn log_frontend_event(logger: State<'_, Logger>, level: String, event: Strin
 }
 fn collect(app: &AppHandle, logger: &Logger, state: &DiagnosticsState, system: SystemStats) -> DiagnosticsSnapshot {
     if let Ok(cache) = app.path().app_cache_dir() { let _ = fs::create_dir_all(cache.join("diagnostics-tmp")); }
+    let startup = fs::read_to_string(logger.directory().join("startup.json")).ok()
+        .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok());
+    let previous_session_clean = startup.as_ref().and_then(|value| value.get("previousSessionClean").and_then(|item| item.as_bool()));
+    let recovery_note = startup.as_ref().and_then(|value| value.get("recoveryNote").and_then(|item| item.as_str()))
+        .unwrap_or("Startup recovery information is unavailable.").to_string();
     DiagnosticsSnapshot {
         schema_version: 1, app_version: env!("CARGO_PKG_VERSION"), platform: std::env::consts::OS, architecture: std::env::consts::ARCH,
         uptime_seconds: state.started.elapsed().as_secs(), collected_at: crate::logger::timestamp(), system,
         logs: LogInventory { app_log_bytes: logger.log_size("app.log"), crash_log_bytes: logger.log_size("crash.log"),
             startup_report_bytes: logger.log_size("startup.json"), diagnostics_directory: "app_log_dir/diagnostics".to_string() },
+        previous_session_clean, recovery_note,
         data_isolation: "Diagnostics use Tauri app log/cache directories; Dexie and user documents are not accessed.",
     }
 }
-#[cfg(test)] mod tests { #[test] fn diagnostics_schema_is_versioned() { assert_eq!(1, 1); } }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn diagnostics_snapshot_serializes_version_and_recovery_metadata() {
+        let snapshot = DiagnosticsSnapshot {
+            schema_version: 1, app_version: "test", platform: "test", architecture: "test",
+            uptime_seconds: 1, collected_at: "0".into(),
+            system: SystemStats { cpu: None, ram: None, gpu: None },
+            logs: LogInventory { app_log_bytes: 0, crash_log_bytes: 0, startup_report_bytes: 0, diagnostics_directory: "app_log_dir/diagnostics".into() },
+            previous_session_clean: Some(false), recovery_note: "Previous session did not shut down cleanly.".into(),
+            data_isolation: "Dexie is not accessed.",
+        };
+        let json = serde_json::to_value(snapshot).unwrap();
+        assert_eq!(json["schemaVersion"], 1);
+        assert_eq!(json["previousSessionClean"], false);
+        assert!(json["recoveryNote"].as_str().unwrap().contains("Previous session"));
+    }
+}
