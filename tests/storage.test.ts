@@ -157,6 +157,8 @@ describe('workspace storage', () => {
     expect(database.tables.map((table) => table.name).sort()).toEqual(['contents', 'files', 'folders', 'preferences', 'projects', 'workspaces']);
     expect(await database.workspaces.get(DEFAULT_WORKSPACE_ID)).toMatchObject({ name: 'My Workspace' });
     expect(database.files.schema.indexes.map((index) => index.name)).toContain('updatedAt');
+    expect(database.files.schema.indexes.map((index) => index.name)).toContain('[workspaceId+deletedAt]');
+    expect(database.files.schema.indexes.map((index) => index.name)).toContain('[projectId+deletedAt]');
   });
 
   it('round-trips text and binary content while preserving all metadata', async () => {
