@@ -25,7 +25,7 @@ import WorkspaceDialog, { type WorkspaceDialogState } from './components/Workspa
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { hydrateWorkspaceTab, restoreWorkspaceSession, saveWorkspaceSession } from './storage/tabSession';
+import { hydrateWorkspaceTab, saveWorkspaceSession } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -38,6 +38,7 @@ import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceInitialization } from './features/workspace/hooks/useWorkspaceInitialization';
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
+import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
@@ -62,8 +63,7 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession } = useWorkspaceTabs(activeWorkspaceId, loading, setError);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<'name' | 'type' | 'size' | 'updatedAt'>('name');
   const [sortDesc, setSortDesc] = useState(false);
@@ -86,20 +86,7 @@ export default function App() {
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  const restoreWorkspaceTabs = useCallback(async (workspaceId: string) => {
-    const restored = await restoreWorkspaceSession(db, workspaceId);
-    setTabs((current) => {
-      const existingTabs = new Map(
-        current.filter((tab) => tab.meta.workspaceId === workspaceId).map((tab) => [tab.id, tab]),
-      );
-      return [
-        ...current.filter((tab) => tab.meta.workspaceId !== workspaceId),
-        ...restored.tabs.map((tab) => existingTabs.get(tab.id) ?? tab),
-      ];
-    });
-    setActiveTabId(restored.activeTabId);
-    return restored;
-  }, []);
+
   useWorkspaceInitialization({
     refresh, setMigrationBackup, setLoading, setError, setAppZoom, setEditorFontSize,
     setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
@@ -242,35 +229,7 @@ export default function App() {
   const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
   const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
   const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
-  const sessionSaveChain = useRef<Promise<void>>(Promise.resolve());
-  const sessionSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  useEffect(() => {
-    if (loading || !activeWorkspaceId) return;
-    const workspaceId = activeWorkspaceId;
-    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
-    if (sessionSaveTimer.current !== null) window.clearTimeout(sessionSaveTimer.current);
-    sessionSaveTimer.current = window.setTimeout(() => {
-      sessionSaveTimer.current = null;
-      sessionSaveChain.current = sessionSaveChain.current
-        .catch(() => undefined)
-        .then(async () => { await saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId); })
-        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.'));
-    }, 120);
-    return () => {
-      if (sessionSaveTimer.current !== null) window.clearTimeout(sessionSaveTimer.current);
-      sessionSaveTimer.current = null;
-    };
-  }, [activeTabId, activeWorkspaceId, loading, setError, workspaceTabSignature]);
-  const flushWorkspaceSession = useCallback(async () => {
-    if (sessionSaveTimer.current !== null) {
-      window.clearTimeout(sessionSaveTimer.current);
-      sessionSaveTimer.current = null;
-    }
-    await sessionSaveChain.current.catch(() => undefined);
-    if (!activeWorkspaceId) return;
-    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
-    await saveWorkspaceSession(db, activeWorkspaceId, openFileIds, activeTabId);
-  }, [activeTabId, activeWorkspaceId, workspaceTabSignature]);
+
   const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
