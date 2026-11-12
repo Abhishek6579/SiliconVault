@@ -1,5 +1,3 @@
-/// <reference lib="webworker" />
-
 self.onmessage = async (event: MessageEvent<File>) => {
   try {
     const text = await event.data.text();
