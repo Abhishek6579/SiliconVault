@@ -777,6 +777,9 @@ button:disabled {
 }
 
 .list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   height: 39px;
   display: grid;
   grid-template-columns: minmax(260px, 1fr) 115px 95px 130px 32px;
@@ -2012,6 +2015,10 @@ button:disabled {
 .app-shell[data-theme="dark"] .list-header {
   border-color: #2d3137;
   color: #9ca3ad
+}
+
+.app-shell[data-theme="dark"] .list-header {
+  background: #111
 }
 
 .app-shell[data-theme="dark"] .file-list-row:hover {
