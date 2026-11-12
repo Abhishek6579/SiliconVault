@@ -49,7 +49,7 @@ const VERSION_THREE_STORES = {
   workspaces: '&id, name, createdAt, updatedAt',
 };
 
-// Compound indexes mirror the measured workspace-scoped Trash and project-archive query paths.
+// Compound indexes target workspace Trash scans and exact project-archive restore queries; CI records comparative timings.
 const VERSION_FOUR_STORES = {
   ...VERSION_THREE_STORES,
   files: '&id, workspaceId, kind, name, parentFolderId, projectId, createdAt, updatedAt, deletedAt, [workspaceId+deletedAt], [projectId+deletedAt]',
