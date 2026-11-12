@@ -7,16 +7,22 @@ static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
 pub struct Logger { directory: Arc<PathBuf>, write_lock: Arc<Mutex<()>> }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StartupReport { schema_version: u8, started_at: String, previous_startup: Option<String>, recovery_note: &'static str, app_version: &'static str, operating_system: &'static str, architecture: &'static str }
+struct StartupReport { schema_version: u8, started_at: String, previous_startup: Option<String>, previous_session_clean: Option<bool>, clean_shutdown: bool, recovery_note: &'static str, app_version: &'static str, operating_system: &'static str, architecture: &'static str }
 impl Logger {
     pub fn initialize(directory: PathBuf) -> Result<Self, String> {
         fs::create_dir_all(&directory).map_err(|e| format!("Cannot create diagnostics directory: {e}"))?;
         let logger = Self { directory: Arc::new(directory), write_lock: Arc::new(Mutex::new(())) };
-        let previous_startup = fs::read_to_string(logger.path("startup.json")).ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("startedAt").and_then(|x| x.as_str()).map(str::to_owned));
-        let report = StartupReport { schema_version: 1, started_at: timestamp(), previous_startup,
-            recovery_note: "A previous startup record exists; this alone does not prove a crash.",
+        let previous = fs::read_to_string(logger.path("startup.json")).ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+        let previous_startup = previous.as_ref().and_then(|v| v.get("startedAt").and_then(|x| x.as_str()).map(str::to_owned));
+        let previous_session_clean = previous.as_ref().and_then(|v| v.get("cleanShutdown").and_then(|x| x.as_bool()));
+        let recovery_note = match previous_session_clean {
+            Some(false) => "The previous session did not record a clean shutdown; review crash.log and app.log.",
+            Some(true) => "The previous session recorded a clean shutdown.",
+            None => "No previous shutdown status is available.",
+        };
+        let report = StartupReport { schema_version: 1, started_at: timestamp(), previous_startup, previous_session_clean, clean_shutdown: false,
+            recovery_note,
             app_version: env!("CARGO_PKG_VERSION"), operating_system: std::env::consts::OS, architecture: std::env::consts::ARCH };
         fs::write(logger.path("startup.json"), serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?)
             .map_err(|e| format!("Cannot write startup report: {e}"))?;
@@ -41,6 +47,17 @@ impl Logger {
     pub fn log_frontend(&self, level: &str, event: &str, message: &str) {
         let level = match level.to_ascii_lowercase().as_str() { "warn" | "warning" => "WARN", "error" => "ERROR", "debug" => "DEBUG", _ => "INFO" };
         self.write(level, event, message);
+        if level == "ERROR" { self.write_to("crash.log", "FRONTEND_ERROR", event, message); }
+    }
+    pub fn mark_clean_shutdown(&self) {
+        let path = self.path("startup.json");
+        if let Ok(contents) = fs::read_to_string(&path) {
+            if let Ok(mut report) = serde_json::from_str::<serde_json::Value>(&contents) {
+                report["cleanShutdown"] = serde_json::Value::Bool(true);
+                report["shutdownAt"] = serde_json::Value::String(timestamp());
+                if let Ok(serialized) = serde_json::to_vec_pretty(&report) { let _ = fs::write(path, serialized); }
+            }
+        }
     }
     pub fn directory(&self) -> &Path { self.directory.as_path() }
     pub fn log_size(&self, name: &str) -> u64 { fs::metadata(self.path(name)).map(|m| m.len()).unwrap_or(0) }
