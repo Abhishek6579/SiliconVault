@@ -13,7 +13,7 @@ on:
         default: "0.1.1-alpha.2"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -86,6 +86,8 @@ jobs:
 
   windows-release:
     name: Build and publish Windows installers
+    permissions:
+      contents: write
     needs:
       - release-provenance
       - frontend-validation
