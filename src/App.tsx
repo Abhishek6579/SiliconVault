@@ -345,33 +345,7 @@ export default function App() {
       newTab,
     ]);
     setActiveTabId(meta.id);
-      setError('');
-      return;
-    }
-    const content = await db.contents.get(meta.id);
-    if (!content) { setError(`The content for “${meta.name}” is missing.`); return; }
-    const data = (meta.kind === 'markdown' || meta.kind === 'code' || meta.kind === 'text') && content.data instanceof Blob ? await content.data.text() : content.data;
-    const savedDraftValue = ['markdown', 'code', 'text'].includes(meta.kind)
-      ? (await db.preferences.get(`draft:${meta.id}`))?.value
-      : undefined;
-    const hasRecoveredDraft = typeof savedDraftValue === 'string';
-    const draft = hasRecoveredDraft ? savedDraftValue : fileText(data);
-    if (hasRecoveredDraft) trackRecoveredDraft(meta.id, draft);
-    const savedPdfState = meta.kind === 'pdf' ? (await db.preferences.get(`pdf:${meta.id}`))?.value as Partial<PdfViewState> | undefined : undefined;
-    const pdfState = meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : undefined;
-    const editorState = ['markdown', 'code', 'text'].includes(meta.kind)
-      ? await loadEditorViewState(db, meta.id)
-      : undefined;
-    setTabs((current) => [
-      ...current.map((tab) => {
-        if (!(tab.data instanceof Blob)) return tab;
-        const { data: _released, ...withoutPdfData } = tab;
-        return withoutPdfData;
-      }),
-      { id: meta.id, meta, data, draft, dirty: hasRecoveredDraft, preview: editorState?.preview ?? (meta.kind === 'markdown'), pdfState, editorState },
-    ]);
-    setActiveTabId(meta.id);
-    if (hasRecoveredDraft) setStatus('Recovered an unsaved draft · Save to keep these changes');
+    if (newTab.dirty) setStatus('Recovered an unsaved draft · Save to keep these changes');
     setError('');
   }, [activeWorkspaceId, restoreWorkspaceTabs, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
 
