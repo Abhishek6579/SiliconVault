@@ -10,7 +10,7 @@ fn get_system_stats(monitor: tauri::State<'_, Mutex<SystemMonitor>>) -> SystemSt
     monitor.lock().unwrap_or_else(|p| p.into_inner()).sample()
 }
 fn main() {
-    tauri::Builder::default()
+    let mut app = tauri::Builder::default()
         .manage(Mutex::new(SystemMonitor::new()))
         .manage(diagnostics::DiagnosticsState::new())
         .plugin(tauri_plugin_dialog::init())
@@ -25,6 +25,14 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event])
-        .run(tauri::generate_context!())
-        .expect("failed to run SiliconVault");
+        .build(tauri::generate_context!())
+        .expect("failed to build SiliconVault");
+    app.run(|_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            if let Some(logger) = logger::global() {
+                logger.info("application.shutdown", "SiliconVault exited cleanly");
+                logger.mark_clean_shutdown();
+            }
+        }
+    });
 }
