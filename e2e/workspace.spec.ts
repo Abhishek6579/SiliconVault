@@ -29,6 +29,32 @@ test('restores open tabs and the active file after a browser reload', async ({ p
   await expect(tabs).toHaveCount(1);
   await expect(tabs.first()).toContainText('session-restore.md');
 
+  // The tab is only rendered after its session record has committed to IndexedDB.
+  await expect.poll(() => page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('engineering-workspace');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise<boolean>((resolve, reject) => {
+        const transaction = database.transaction('preferences', 'readonly');
+        const request = transaction.objectStore('preferences').get('session:workspace-default');
+        request.onsuccess = () => {
+          const session = request.result?.value;
+          resolve(Boolean(
+            session
+            && session.openFileIds?.length === 1
+            && session.activeFileId === session.openFileIds[0]
+          ));
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } finally {
+      database.close();
+    }
+  })).toBe(true);
+
   await page.reload();
 
   const restoredTabs = page.locator('.tab-strip .file-tab');

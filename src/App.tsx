@@ -336,6 +336,20 @@ export default function App() {
       setView('workspace');
     }
     const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
+    const persistOpenTabSession = async () => {
+      const currentWorkspaceTabs = (meta.workspaceId === activeWorkspaceId ? tabs : restoredTabs)
+        .filter((tab) => tab.meta.workspaceId === meta.workspaceId);
+      const openFileIds = [...new Set([...currentWorkspaceTabs.map((tab) => tab.id), meta.id])];
+      try {
+        // Commit the session before publishing the tab in React state. A page reload
+        // immediately after the tab appears must not race the debounced session effect.
+        await saveWorkspaceSession(db, meta.workspaceId, openFileIds, meta.id);
+        return true;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.');
+        return false;
+      }
+    };
     if (existing) {
       let hydrated: Tab;
       try {
@@ -345,6 +359,7 @@ export default function App() {
         return;
       }
       if (hydrated.dirty) trackRecoveredDraft(meta.id, hydrated.draft);
+      if (!(await persistOpenTabSession())) return;
       setTabs((current) => current.map((tab) => {
         if (tab.id === meta.id) return hydrated;
         if (!(tab.data instanceof Blob)) return tab;
@@ -369,6 +384,7 @@ export default function App() {
       return;
     }
     if (newTab.dirty) trackRecoveredDraft(meta.id, newTab.draft);
+    if (!(await persistOpenTabSession())) return;
     setTabs((current) => [
       ...current.map((tab) => {
         if (!(tab.data instanceof Blob)) return tab;
