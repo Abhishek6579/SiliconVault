@@ -18,7 +18,7 @@ export function useWorkspaceTabs(
     () => tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId),
     [activeWorkspaceId, tabs],
   );
-  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\\u0000');
+  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
   const saveChain = useRef<Promise<void>>(Promise.resolve());
   const saveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
@@ -40,7 +40,7 @@ export function useWorkspaceTabs(
   useEffect(() => {
     if (loading || !activeWorkspaceId) return;
     const workspaceId = activeWorkspaceId;
-    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\\u0000') : [];
+    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
     if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       saveTimer.current = null;
@@ -62,7 +62,7 @@ export function useWorkspaceTabs(
     }
     await saveChain.current.catch(() => undefined);
     if (!activeWorkspaceId) return;
-    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\\u0000') : [];
+    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
     await saveWorkspaceSession(db, activeWorkspaceId, openFileIds, activeTabId);
   }, [activeTabId, activeWorkspaceId, workspaceTabSignature]);
 
