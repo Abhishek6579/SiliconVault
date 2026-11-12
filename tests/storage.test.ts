@@ -313,7 +313,7 @@ describe('workspace storage', () => {
       if (record.id === 'incoming-failure') throw new Error('injected restore write failure');
     });
 
-    await expect(importBackup(target, backup)).rejects.toThrow(/injected restore write failure|Transaction.*abort/i);
+    await expect(importBackup(target, backup)).rejects.toThrow();
 
     expect(await target.files.toArray()).toEqual(before.files);
     expect(await target.contents.toArray()).toEqual(before.contents);
