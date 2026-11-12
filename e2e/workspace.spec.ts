@@ -69,7 +69,12 @@ test('keeps multiple open documents and the selected tab across reloads', async 
   await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
 
   const createNote = async (name: string) => {
-    await page.getByRole('button', { name: /Technical notes/ }).click();
+    if (name === 'first-session.md') {
+      await page.getByRole('button', { name: /Technical notes/ }).click();
+    } else {
+      await page.getByRole('button', { name: /^Import/ }).click();
+      await page.getByRole('button', { name: 'New note' }).click();
+    }
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Create note' })).toBeVisible();
     await dialog.getByPlaceholder('File name').fill(name);
