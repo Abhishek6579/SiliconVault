@@ -25,7 +25,7 @@ import WorkspaceDialog, { type WorkspaceDialogState } from './components/Workspa
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { hydrateWorkspaceTab, restoreWorkspaceSession, saveWorkspaceSession, type EditorViewState } from './storage/tabSession';
+import { hydrateWorkspaceTab, restoreWorkspaceSession, saveWorkspaceSession } from './storage/tabSession';
 import { createFolder, deleteWorkspace as removeWorkspace, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -38,7 +38,7 @@ import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceInitialization } from './features/workspace/hooks/useWorkspaceInitialization';
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
-import type { PdfViewState, Tab } from './features/tabs/types';
+import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -248,7 +248,7 @@ export default function App() {
       sessionSaveTimer.current = null;
       sessionSaveChain.current = sessionSaveChain.current
         .catch(() => undefined)
-        .then(() => saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId))
+        .then(async () => { await saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId); })
         .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.'));
     }, 120);
     return () => {
