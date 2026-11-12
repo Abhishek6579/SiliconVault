@@ -72,7 +72,7 @@ test('keeps multiple open documents and the selected tab across reloads', async 
     if (name === 'first-session.md') {
       await page.getByRole('button', { name: /Technical notes/ }).click();
     } else {
-      await page.getByRole('button', { name: /^Import/ }).click();
+      await page.getByRole('button', { name: 'Import', exact: true }).click();
       await page.getByRole('button', { name: 'New note' }).click();
     }
     const dialog = page.getByRole('dialog');
