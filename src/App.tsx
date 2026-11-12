@@ -238,19 +238,35 @@ export default function App() {
   const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
   const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
   const sessionSaveChain = useRef<Promise<void>>(Promise.resolve());
+  const sessionSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useEffect(() => {
     if (loading || !activeWorkspaceId) return;
     const workspaceId = activeWorkspaceId;
     const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
-    const timer = window.setTimeout(() => {
+    if (sessionSaveTimer.current !== null) window.clearTimeout(sessionSaveTimer.current);
+    sessionSaveTimer.current = window.setTimeout(() => {
+      sessionSaveTimer.current = null;
       sessionSaveChain.current = sessionSaveChain.current
         .catch(() => undefined)
         .then(() => saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId))
         .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.'));
     }, 120);
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (sessionSaveTimer.current !== null) window.clearTimeout(sessionSaveTimer.current);
+      sessionSaveTimer.current = null;
+    };
   }, [activeTabId, activeWorkspaceId, loading, setError, workspaceTabSignature]);
-  const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus);
+  const flushWorkspaceSession = useCallback(async () => {
+    if (sessionSaveTimer.current !== null) {
+      window.clearTimeout(sessionSaveTimer.current);
+      sessionSaveTimer.current = null;
+    }
+    await sessionSaveChain.current.catch(() => undefined);
+    if (!activeWorkspaceId) return;
+    const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
+    await saveWorkspaceSession(db, activeWorkspaceId, openFileIds, activeTabId);
+  }, [activeTabId, activeWorkspaceId, workspaceTabSignature]);
+  const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
     const restoredWorkspaces = await db.workspaces.toArray();

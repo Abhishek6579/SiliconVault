@@ -15,6 +15,7 @@ export function useAutosave(
   refresh: () => Promise<void>,
   setError: (message: string) => void,
   setStatus: (message: string) => void,
+  flushSession: () => Promise<void> = async () => undefined,
 ) {
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const draftRecoveryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -106,7 +107,8 @@ export function useAutosave(
   const flushPendingSaves = useCallback(async () => {
     await flushPendingAutosaves(pendingDrafts.current, saveTimers.current, persistDraft);
     await Promise.all([...saveChains.current.values()]);
-  }, [persistDraft]);
+    await flushSession();
+  }, [flushSession, persistDraft]);
 
   const trackRecoveredDraft = useCallback((id: string, draft: string) => {
     pendingDrafts.current.set(id, draft);
