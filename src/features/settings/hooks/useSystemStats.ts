@@ -12,9 +12,10 @@ export function useSystemStats() {
     if (!isDesktopApp()) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failureReported = false;
     const poll = async () => {
-      try { const next = await invoke<SystemStats>('get_system_stats'); if (active) setStats(next); }
-      catch (reason) { if (active) setStats(EMPTY_STATS); void logger.warn('system_monitor.sample_failed', reason instanceof Error ? reason.message : String(reason)); }
+      try { const next = await invoke<SystemStats>('get_system_stats'); if (active) setStats(next); failureReported = false; }
+      catch (reason) { if (active) setStats(EMPTY_STATS); if (!failureReported) void logger.warn('system_monitor.sample_failed', reason instanceof Error ? reason.message : String(reason)); failureReported = true; }
       if (active) timer = setTimeout(poll, 2500);
     };
     void poll();
