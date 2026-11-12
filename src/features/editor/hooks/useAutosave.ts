@@ -123,8 +123,17 @@ export function useAutosave(
         event.preventDefault();
         event.returnValue = '';
       };
+      const persistSessionBeforePageHide = () => {
+        void flushSession().catch((reason: unknown) => {
+          console.error('Could not persist the workspace tab session before page hide.', reason);
+        });
+      };
       window.addEventListener('beforeunload', warnBeforeUnload);
-      return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+      window.addEventListener('pagehide', persistSessionBeforePageHide);
+      return () => {
+        window.removeEventListener('beforeunload', warnBeforeUnload);
+        window.removeEventListener('pagehide', persistSessionBeforePageHide);
+      };
     }
 
     const currentWindow = getCurrentWindow();
@@ -161,7 +170,7 @@ export function useAutosave(
       disposed = true;
       unlisten?.();
     };
-  }, [flushPendingSaves, setError, setStatus]);
+  }, [flushPendingSaves, flushSession, setError, setStatus]);
 
   return { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave };
 }
