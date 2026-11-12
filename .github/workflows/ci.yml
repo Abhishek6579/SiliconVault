@@ -35,6 +35,22 @@ jobs:
 
 
 
+  performance-benchmarks:
+    name: Startup, query, and memory benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Measure database startup and indexed query workloads
+        run: npm run benchmark:storage
+      - name: Measure backup JSON parse memory
+        run: npm run benchmark:backup-memory
+
   dependency-audit:
     name: Dependency security audit
     runs-on: ubuntu-latest
