@@ -33,7 +33,7 @@ export default function DiagnosticsDashboard() {
       setError(message); void logger.error('diagnostics.refresh_failed', message);
     } finally { setLoading(false); }
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { void refresh(); const timer = window.setInterval(() => void refresh(), 5000); return () => window.clearInterval(timer); }, [refresh]);
 
   const exportReport = async () => {
     setExporting(true);
