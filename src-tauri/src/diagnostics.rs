@@ -1,4 +1,4 @@
-use crate::{logger::Logger, system_monitor::{SystemMonitor, SystemStats}};
+use crate::{error_handler::AppError, logger::Logger, system_monitor::{SystemMonitor, SystemStats}};
 use serde::Serialize;
 use std::{fs, sync::Mutex, time::Instant};
 use tauri::{AppHandle, Manager, State};
@@ -26,11 +26,11 @@ pub fn export_diagnostics(app: AppHandle, logger: State<'_, Logger>, state: Stat
     let crash_log = logger.read_recent("crash.log", 64 * 1024).unwrap_or_default();
     let payload = serde_json::json!({ "diagnostics": snapshot, "logs": { "app": app_log, "crashes": crash_log },
         "privacy": "Export excludes Dexie data, knowledge-base records, document contents, and user-selected files." });
-    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+    serde_json::to_string_pretty(&payload).map_err(|e| AppError::new("DIAGNOSTICS_SERIALIZATION_FAILED", e.to_string(), true).into_command_error())
 }
 #[tauri::command]
 pub fn log_frontend_event(logger: State<'_, Logger>, level: String, event: String, message: String) -> Result<(), String> {
-    if event.len() > 128 || message.len() > 2048 { return Err("Diagnostic event exceeds the allowed size.".into()); }
+    if event.len() > 128 || message.len() > 2048 { return Err(AppError::new("INVALID_DIAGNOSTIC_EVENT", "Diagnostic event exceeds the allowed size.", false).into_command_error()); }
     logger.log_frontend(&level, &event, &message); Ok(())
 }
 fn collect(app: &AppHandle, logger: &Logger, state: &DiagnosticsState, system: SystemStats) -> DiagnosticsSnapshot {
