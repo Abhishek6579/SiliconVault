@@ -4,7 +4,7 @@ This is a required installed-product release gate. A successful frontend test or
 
 ## Automated checks in pull-request CI
 
-The Windows desktop job builds both NSIS and MSI installers from the PR commit and uploads them as a 14-day artifact. CI also runs the browser persistence suite, which exercises IndexedDB reload behavior in Chromium. These checks validate packaging and browser persistence separately; they do not simulate an in-place installed MSI upgrade.
+The Windows desktop job compares the candidate Tauri application identifier and NSIS install scope against master, builds both NSIS and MSI installers from the PR commit, and uploads them as a 14-day artifact. CI also runs the browser persistence suite, which exercises IndexedDB reload behavior in Chromium. These checks validate packaging and browser persistence separately; they do not simulate an in-place installed MSI upgrade.
 
 ## Installed upgrade test matrix
 
