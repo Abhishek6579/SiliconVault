@@ -76,7 +76,9 @@ export async function softDeleteProject(database: WorkspaceDatabase, projectId: 
     const project = await database.projects.get(projectId);
     if (!project) throw new Error('The project does not exist.');
     const now = Date.now();
-    await database.files.where('[projectId+deletedAt]').equals([projectId, null]).modify({ deletedAt: now, updatedAt: now });
+    await database.files.where('projectId').equals(projectId)
+      .filter((file) => file.deletedAt === null)
+      .modify({ deletedAt: now, updatedAt: now });
     await database.projects.update(projectId, { archived: true, archivedAt: now, updatedAt: now });
   });
 }
