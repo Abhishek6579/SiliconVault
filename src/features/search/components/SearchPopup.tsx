@@ -1,9 +1,9 @@
-import type { ChangeEvent, KeyboardEvent, RefObject } from 'react';
+import type { ChangeEvent, KeyboardEvent, Ref } from 'react';
 import { Search, X } from 'lucide-react';
 
 interface Props {
   query: string;
-  inputRef: RefObject<HTMLInputElement | null>;
+  inputRef: Ref<HTMLInputElement>;
   onQueryChange: (value: string) => void;
   onClose: () => void;
 }
