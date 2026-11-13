@@ -59,7 +59,7 @@ function Get-IndexedDbSnapshot([string] $ProfileRoot) {
 
 $previous = Resolve-InputFile $PreviousMsi "Previous MSI"
 $candidate = Resolve-InputFile $CandidateMsi "Candidate MSI"
-$profile = [System.IO.Path]::GetFullPath($WebView2UserDataDirectory)
+$webView2Profile = [System.IO.Path]::GetFullPath($WebView2UserDataDirectory)
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 $evidence = (Resolve-Path -LiteralPath $EvidenceDirectory).Path
 $report = [ordered]@{
@@ -70,7 +70,7 @@ $report = [ordered]@{
     PreviousMsiSha256 = (Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash
     CandidateMsi = $candidate
     CandidateMsiSha256 = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash
-    ProfileDirectory = $profile
+    ProfileDirectory = $webView2Profile
     PreviousInstallerExitCode = $null
     CandidateInstallerExitCode = $null
     BeforeUpgrade = $null
@@ -81,12 +81,13 @@ Write-Host "Installing the previous MSI..." -ForegroundColor Cyan
 $report.PreviousInstallerExitCode = Invoke-MsiInstall $previous (Join-Path $evidence "previous-install.log")
 $installed = Get-SiliconVaultUninstallEntry
 if (-not $installed) { throw "Previous MSI completed but SiliconVault was not found in the uninstall registry." }
+if ($installed.RegistryPath -notlike "*HKEY_CURRENT_USER*") { throw "The previous installation is not registered as a per-user install." }
 $oldExecutable = Resolve-AppExecutable $installed
 Write-Host "Launching previous installation: $oldExecutable" -ForegroundColor Cyan
 Start-Process -FilePath $oldExecutable
 Read-Host "Create representative data (workspaces, folders, files, Trash, preferences, tabs, draft and PDF position). Close SiliconVault, then press Enter"
 Stop-SiliconVault
-$report.BeforeUpgrade = Get-IndexedDbSnapshot $profile
+$report.BeforeUpgrade = Get-IndexedDbSnapshot $webView2Profile
 if ($report.BeforeUpgrade.IndexedDbRootCount -lt 1 -or $report.BeforeUpgrade.FileCount -lt 1) { throw "No IndexedDB files found in supplied WebView2 profile. Verify profile path and seed data." }
 $report.PreviousVersion = $installed.DisplayVersion
 $report.PreviousInstallLocation = $installed.InstallLocation
@@ -96,6 +97,7 @@ Write-Host "Installing candidate MSI over the existing installation (no uninstal
 $report.CandidateInstallerExitCode = Invoke-MsiInstall $candidate (Join-Path $evidence "candidate-install.log")
 $upgraded = Get-SiliconVaultUninstallEntry
 if (-not $upgraded) { throw "Candidate MSI completed but SiliconVault is missing from the uninstall registry." }
+if ($upgraded.RegistryPath -notlike "*HKEY_CURRENT_USER*") { throw "The candidate installation is not registered as a per-user install." }
 $newExecutable = Resolve-AppExecutable $upgraded
 $report.CandidateVersion = $upgraded.DisplayVersion
 $report.CandidateInstallLocation = $upgraded.InstallLocation
