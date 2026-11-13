@@ -37,7 +37,7 @@ export default function WorkspaceSwitcher({ data, actions }: { data: Data; actio
   const { view, activeWorkspace, activeWorkspaceId, activeProjectRecord, activeProject, selectedFolder, folders, workspaces, activeProjects, trashedFiles, open, menuRef } = data;
   const { setOpen, switchWorkspace, createWorkspace, renameWorkspace, deleteCurrentWorkspace, switchProject, setView, setActiveTabId, createProject, doEmptyTrash, restoreProject, deleteProject, deleteFolder } = actions;
   return (
-    <div className="workspace-switcher" ref={menuRef}>
+    <div className="workspace-switcher" ref={menuRef as RefObject<HTMLDivElement>}>
       <button className="workspace-switch-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
         <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
         {selectedFolder && view === 'workspace' && <small> / {folders.find((folder) => folder.id === selectedFolder)?.name}</small>}
