@@ -1,13 +1,12 @@
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readDir, readFile, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { assertBackupFileSize, assertImportFileSize } from '../storage/limits';
+import type { PlatformAdapter } from './types';
 
-export function isDesktopApp(): boolean {
-  return isTauri();
-}
-
-export async function* iterateDesktopFiles(): AsyncGenerator<File> {
+async function* iterateDesktopFiles(): AsyncGenerator<File> {
   const paths = await open({ multiple: true, title: 'Import files' });
   if (!paths) return;
   const selected = Array.isArray(paths) ? paths : [paths];
@@ -22,7 +21,7 @@ export async function* iterateDesktopFiles(): AsyncGenerator<File> {
   }
 }
 
-export async function* iterateDesktopFolder(): AsyncGenerator<File> {
+async function* iterateDesktopFolder(): AsyncGenerator<File> {
   const root = await open({ directory: true, recursive: true, title: 'Import folder' });
   if (!root) return;
   async function* visit(directory: string, relative = ''): AsyncGenerator<File> {
@@ -46,7 +45,7 @@ export async function* iterateDesktopFolder(): AsyncGenerator<File> {
 }
 
 
-export async function chooseBackupToRestore(): Promise<File | null> {
+async function chooseBackupToRestore(): Promise<File | null> {
   const path = await open({ multiple: false, title: 'Restore workspace backup', filters: [{ name: 'SiliconVault backup', extensions: ['json'] }] });
   if (!path || Array.isArray(path)) return null;
   const info = await stat(path);
@@ -55,7 +54,7 @@ export async function chooseBackupToRestore(): Promise<File | null> {
   return new File([bytes], path.split(/[\\\\/]/).pop() || 'backup.json', { type: 'application/json' });
 }
 
-export async function saveBackupToDesktop(content: string | ReadableStream<Uint8Array>): Promise<boolean> {
+async function saveBackupToDesktop(content: string | ReadableStream<Uint8Array>): Promise<boolean> {
   const path = await save({ title: 'Save workspace backup', defaultPath: `silicon-vault-${new Date().toISOString().slice(0, 10)}.json`, filters: [{ name: 'SiliconVault backup', extensions: ['json'] }] });
   if (!path) return false;
   await writeFile(path, typeof content === 'string' ? new TextEncoder().encode(content) : content);
@@ -71,7 +70,7 @@ function mimeType(name: string): string {
 }
 
 
-export async function saveDiagnosticsExport(content: string): Promise<boolean> {
+async function saveDiagnosticsExport(content: string): Promise<boolean> {
   const path = await save({
     title: 'Export SiliconVault diagnostics',
     defaultPath: `silicon-vault-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
@@ -81,3 +80,24 @@ export async function saveDiagnosticsExport(content: string): Promise<boolean> {
   await writeFile(path, new TextEncoder().encode(content));
   return true;
 }
+
+export const desktopPlatform: PlatformAdapter = {
+  kind: 'desktop',
+  log: (level, event, message) => invoke('log_frontend_event', { level, event, message }),
+  getSystemStats: () => invoke('get_system_stats'),
+  getDiagnostics: () => invoke('get_diagnostics'),
+  exportDiagnostics: () => invoke('export_diagnostics'),
+  convertOfficeToPdf: async (bytes, extension) => new Uint8Array(await invoke<number[]>('convert_office_to_pdf', { bytes: Array.from(bytes), extension })),
+  checkForUpdate: () => invoke('check_for_update'),
+  installUpdate: () => invoke('install_update'),
+  listen: async (event, handler) => listen(event, (payload) => handler(payload.payload as never)),
+  onCloseRequested: async (handler) => getCurrentWindow().onCloseRequested(async (event) => {
+    event.preventDefault();
+    await handler(() => getCurrentWindow().destroy());
+  }),
+  saveBackup: saveBackupToDesktop,
+  saveDiagnostics: saveDiagnosticsExport,
+  chooseBackup: chooseBackupToRestore,
+  chooseFiles: iterateDesktopFiles,
+  chooseFolderFiles: iterateDesktopFolder,
+};

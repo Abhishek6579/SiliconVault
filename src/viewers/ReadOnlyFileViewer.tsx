@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
-import { isDesktopApp } from '../platform/desktop';
+import { isDesktopApp, platform } from '../platform';
 import OfficeOoxmlViewer from './OfficeOoxmlViewer';
 import type { PdfViewState, ViewerViewState } from '../features/tabs/types';
 
@@ -116,12 +115,9 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     }
 
     data.arrayBuffer()
-      .then((buffer) => invoke<number[]>('convert_office_to_pdf', {
-        bytes: Array.from(new Uint8Array(buffer)),
-        extension: ext,
-      }))
+      .then((buffer) => platform.convertOfficeToPdf(new Uint8Array(buffer), ext))
       .then((bytes) => {
-        if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+        if (active) setOfficePdf(new Blob([Uint8Array.from(bytes)], { type: 'application/pdf' }));
       })
       .catch((reason: unknown) => {
         if (!active) return;

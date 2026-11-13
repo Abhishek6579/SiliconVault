@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
-import { isDesktopApp } from './platform/desktop';
+import { isDesktopApp } from './platform';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
@@ -36,7 +36,7 @@ import Sidebar from './features/workspace/components/sidebar/Sidebar';
 import ProjectTree from './features/workspace/components/sidebar/ProjectTree';
 import { useWorkspaceNav } from './features/workspace/context/WorkspaceNavContext';
 import { DialogHost, useDialog } from './features/workspace/context/DialogContext';
-import { useImportActions, type ImportTarget } from './features/workspace/hooks/useImportActions';
+import { useImportActions } from './features/workspace/hooks/useImportActions';
 import { useItemActions, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
 import { useProjectActions } from './features/workspace/hooks/useProjectActions';
 import { useFolderActions } from './features/workspace/hooks/useFolderActions';
@@ -80,12 +80,9 @@ export default function AppShell() {
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
-  const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
   const editorWorkspaceRef = useRef<HTMLDivElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -179,10 +176,10 @@ export default function AppShell() {
     currentWorkspaceId, selectedFolder, activeProject, view, setView, requestInput, refresh, openFile, setExpanded,
   });
 
-  const { handleImport, startImportInto, startImportFolderInto, handleFolderImport } = useImportActions({
+  const { handleImport, startImportInto, startImportFolderInto } = useImportActions({
     openFile, refresh, selectedFolder, activeProject, currentWorkspaceId,
-    setError, setImporting, setImportTarget, setSelectedFolder, setActiveProject,
-    setView, setExpanded, setStatus, fileInput, folderInput,
+    setError, setImporting, setSelectedFolder, setActiveProject,
+    setView, setExpanded, setStatus,
   });
   const { handleDrop } = useDragAndDrop({ activeProject, currentWorkspaceId, handleImport, refresh, setError });
   const { showContextMenu, switchProject, switchWorkspace } = useWorkspaceNavigationActions({
@@ -259,8 +256,6 @@ export default function AppShell() {
 
 
 
-      <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
-      <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleFolderImport(event.target.files, target); }} />
 
       <ErrorBanner message={error} onDismiss={() => setError('')} />
 

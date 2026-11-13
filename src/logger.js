@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { platform } from './platform/index.ts';
 
 const LEVELS = new Set(['debug', 'info', 'warn', 'error']);
 const MAX_MESSAGE_LENGTH = 2048;
@@ -18,7 +18,7 @@ export async function log(level, event, message, context = undefined) {
     const method = normalizedLevel === 'debug' ? 'debug' : normalizedLevel;
     console[method]('[SiliconVault:' + safeEvent + ']', line);
   }
-  try { await invoke('log_frontend_event', { level: normalizedLevel, event: safeEvent, message: line }); } catch { /* logging must not interrupt workspace workflows */ }
+  try { await platform.log(normalizedLevel, safeEvent, line); } catch { /* logging must not interrupt workspace workflows */ }
 }
 
 export const logger = Object.freeze({

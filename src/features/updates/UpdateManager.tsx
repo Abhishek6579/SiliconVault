@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { isDesktopApp } from '../../platform/desktop';
+import { isDesktopApp, platform } from '../../platform';
 
 interface UpdateInfo {
   version: string;
@@ -32,7 +30,7 @@ export default function UpdateManager() {
     busyRef.current = true;
     setChecking(true);
     try {
-      const result = await invoke<UpdateInfo | null>('check_for_update');
+      const result = await platform.checkForUpdate();
       setUpdate(result);
       if (result) setVisible(true);
       setMessage(result ? '' : manual ? 'SiliconVault is up to date.' : '');
@@ -50,15 +48,15 @@ export default function UpdateManager() {
     let unlistenProgress: (() => void) | undefined;
     let unlistenReleaseNotes: (() => void) | undefined;
 
-    void listen<UpdateProgress>('siliconvault-update-progress', (event) => {
-      if (!disposed) setProgress(event.payload);
+    void platform.listen<UpdateProgress>('siliconvault-update-progress', (payload) => {
+      if (!disposed) setProgress(payload);
     }).then((stop) => {
       if (disposed) stop();
       else unlistenProgress = stop;
     }).catch(() => undefined);
 
-    void listen<UpdateInfo>('siliconvault-release-notes', (event) => {
-      if (!disposed) setReleaseNotes(event.payload);
+    void platform.listen<UpdateInfo>('siliconvault-release-notes', (payload) => {
+      if (!disposed) setReleaseNotes(payload);
     }).then((stop) => {
       if (disposed) stop();
       else unlistenReleaseNotes = stop;
@@ -81,7 +79,7 @@ export default function UpdateManager() {
     setProgress({ downloaded: 0, contentLength: null, finished: false });
     setMessage('Preparing update…');
     try {
-      await invoke('install_update');
+      await platform.installUpdate();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
       busyRef.current = false;

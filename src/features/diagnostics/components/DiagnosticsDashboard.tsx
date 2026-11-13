@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Activity, AlertTriangle, Download, FileText, RefreshCw, ShieldCheck } from 'lucide-react';
-import { isDesktopApp, saveDiagnosticsExport } from '../../../platform/desktop';
+import { isDesktopApp, platform } from '../../../platform';
 import { logger } from '../../../logger.js';
 
 interface DiagnosticsSnapshot {
@@ -27,7 +26,7 @@ export default function DiagnosticsDashboard() {
   const refresh = useCallback(async () => {
     if (!isDesktopApp()) { setError('System diagnostics are available in the desktop application.'); setLoading(false); return; }
     setLoading(true);
-    try { setSnapshot(await invoke<DiagnosticsSnapshot>('get_diagnostics')); setError(''); }
+    try { setSnapshot(await platform.getDiagnostics() as DiagnosticsSnapshot); setError(''); }
     catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(message); void logger.error('diagnostics.refresh_failed', message);
@@ -38,8 +37,8 @@ export default function DiagnosticsDashboard() {
   const exportReport = async () => {
     setExporting(true);
     try {
-      const report = await invoke<string>('export_diagnostics');
-      await saveDiagnosticsExport(report);
+      const report = await platform.exportDiagnostics();
+      await platform.saveDiagnostics(report);
       void logger.info('diagnostics.exported', 'Diagnostic report export requested');
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);

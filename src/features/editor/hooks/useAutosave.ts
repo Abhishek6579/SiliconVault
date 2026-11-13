@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { flushPendingAutosaves } from '../../../storage/autosave';
 import { db } from '../../../storage/database';
 import { saveFileText } from '../../../storage/files';
-import { isDesktopApp } from '../../../platform/desktop';
+import { isDesktopApp, platform } from '../../../platform';
 import type { Tab } from '../../tabs/types';
 
 type SetTabs = Dispatch<SetStateAction<Tab[]>>;
@@ -136,22 +135,18 @@ export function useAutosave(
       };
     }
 
-    const currentWindow = getCurrentWindow();
     let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    void currentWindow.onCloseRequested(async (event) => {
+    void platform.onCloseRequested(async (retryClose) => {
       // Ignore a second close request while the first is still saving.
       if (closeInProgress.current) {
-        event.preventDefault();
         return;
       }
-      event.preventDefault();
       closeInProgress.current = true;
       try {
         await flushPendingSaves();
-        // destroy() closes the window without emitting another close request.
-        await currentWindow.destroy();
+        await retryClose();
       } catch (reason) {
         closeInProgress.current = false;
         console.error('Close cancelled: save failed.', reason);

@@ -1,8 +1,9 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { db } from '../../../storage/database';
 import { createFolder } from '../../../storage/hierarchy';
 import { importFile } from '../../../storage/files';
-import { isDesktopApp, iterateDesktopFiles, iterateDesktopFolder } from '../../../platform/desktop';
+import { normalizeRelativePath } from '../../../shared/utils/relativePath';
+import { platform } from '../../../platform';
 import { OPENABLE_KINDS } from '../../../shared/constants/fileKinds';
 import type { FileMeta } from '../../../storage/types';
 
@@ -20,28 +21,25 @@ interface UseImportActionsOptions {
   currentWorkspaceId: string;
   setError: (message: string) => void;
   setImporting: Dispatch<SetStateAction<boolean>>;
-  setImportTarget: Dispatch<SetStateAction<ImportTarget | null>>;
   setSelectedFolder: (id: string | null) => void;
   setActiveProject: (id: string | null) => void;
   setView: (view: 'workspace' | 'recent' | 'trash') => void;
   setExpanded: Dispatch<SetStateAction<Set<string>>>;
   setStatus: (status: string) => void;
-  fileInput: MutableRefObject<HTMLInputElement | null>;
-  folderInput: MutableRefObject<HTMLInputElement | null>;
 }
 
 export function useImportActions(options: UseImportActionsOptions) {
   const {
     openFile, refresh, selectedFolder, activeProject, currentWorkspaceId,
-    setError, setImporting, setImportTarget, setSelectedFolder, setActiveProject,
-    setView, setExpanded, setStatus, fileInput, folderInput,
+    setError, setImporting, setSelectedFolder, setActiveProject,
+    setView, setExpanded, setStatus,
   } = options;
 
   async function importFolderFiles(selectedFiles: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     const folderIds = new Map<string, string>();
     let imported = 0;
     for await (const file of selectedFiles) {
-      const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.replaceAll('\\\\', '/') ?? file.name;
+      const relativePath = normalizeRelativePath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name);
       const segments = relativePath.split('/').filter(Boolean);
       const directorySegments = segments.slice(0, -1);
       let parentFolderId = target.folderId;
@@ -82,7 +80,6 @@ export function useImportActions(options: UseImportActionsOptions) {
       setError(reason instanceof Error ? reason.message : 'Could not import the selected file.');
     } finally {
       setImporting(false);
-      if (fileInput.current) fileInput.current.value = '';
     }
   }
 
@@ -102,50 +99,22 @@ export function useImportActions(options: UseImportActionsOptions) {
   }
 
   function startImportInto(target: ImportTarget) {
-    setImportTarget(target);
-    if (isDesktopApp()) {
-      void handlePickedImport(iterateDesktopFiles(), target).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.'));
-      return;
-    }
-    fileInput.current?.click();
+    void handlePickedImport(platform.chooseFiles(), target).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not open the file picker.'));
   }
 
   function startImportFolderInto(target: ImportTarget) {
-    setImportTarget(target);
-    if (isDesktopApp()) {
-      setImporting(true);
-      void (async () => {
-        try {
-          await importFolderFiles(iterateDesktopFolder(), target);
-          await refresh();
-        } catch (reason) {
-          setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.');
-        } finally {
-          setImporting(false);
-          setImportTarget(null);
-        }
-      })();
-      return;
-    }
-    folderInput.current?.setAttribute('webkitdirectory', '');
-    folderInput.current?.setAttribute('directory', '');
-    folderInput.current?.click();
-  }
-
-  async function handleFolderImport(fileList: FileList | null, target: ImportTarget) {
-    if (!fileList?.length) return;
     setImporting(true);
-    try {
-      await importFolderFiles(Array.from(fileList), target);
-      await refresh();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not import this folder.');
-    } finally {
-      setImporting(false);
-      setImportTarget(null);
-      if (folderInput.current) folderInput.current.value = '';
-    }
+    void (async () => {
+      try {
+        await importFolderFiles(platform.chooseFolderFiles(), target);
+        await refresh();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not import the selected folder.');
+      } finally {
+        setImporting(false);
+      }
+    })();
   }
 
-  return { handleImport, handlePickedImport, startImportInto, startImportFolderInto, handleFolderImport };
+  return { handleImport, handlePickedImport, startImportInto, startImportFolderInto };
 }
