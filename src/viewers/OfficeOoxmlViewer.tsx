@@ -69,7 +69,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
       host.removeEventListener('wheel', handleWheel, true);
       host.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [scale]);
+  }, [scale, onStateChange]);
 
   useEffect(() => {
     let active = true;
