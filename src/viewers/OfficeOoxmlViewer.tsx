@@ -35,7 +35,11 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
     const viewer = viewerRef.current;
     if (!viewer) return;
     const bounded = Math.min(4, Math.max(0.1, Math.round(next * 100) / 100));
+    const host = hostRef.current;
+    const top = host?.scrollTop ?? 0;
+    const left = host?.scrollLeft ?? 0;
     viewer.setScale(bounded);
+    if (host) { host.scrollTop = top; host.scrollLeft = left; }
     setScale(viewer.getScale());
     onStateChange(viewer.getScale());
   };
@@ -140,7 +144,11 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
     const viewer = viewerRef.current;
     if (!viewer) return;
     if (Math.abs(viewer.getScale() - zoom) > 0.005) {
+      const host = hostRef.current;
+      const top = host?.scrollTop ?? 0;
+      const left = host?.scrollLeft ?? 0;
       viewer.setScale(zoom);
+      if (host) { host.scrollTop = top; host.scrollLeft = left; }
       setScale(viewer.getScale());
     }
   }, [zoom]);
