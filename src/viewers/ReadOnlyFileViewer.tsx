@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
-import PdfReader from '../PdfReader';
 import { isDesktopApp, platform } from '../platform';
-import OfficeOoxmlViewer from './OfficeOoxmlViewer';
 import type { PdfViewState, ViewerViewState } from '../features/tabs/types';
+
+const PdfReader = lazy(() => import('../PdfReader'));
+const OfficeOoxmlViewer = lazy(() => import('./OfficeOoxmlViewer'));
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; tabId: string; initialState?: ViewerViewState; initialPdfState?: PdfViewState; onStateChange: (tabId: string, state: ViewerViewState) => void; onPdfStateChange: (tabId: string, state: PdfViewState) => void; }
 
@@ -305,14 +306,14 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
   if (isOffice) return <div ref={rootRef} className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {officePdf
-      ? <PdfReader data={officePdf} title={fileName} tabId={tabId} initialState={initialPdfState} onStateChange={onPdfStateChange} />
+      ? <Suspense fallback={<div className="loading-state">Loading PDF preview…</div>}><PdfReader data={officePdf} title={fileName} tabId={tabId} initialState={initialPdfState} onStateChange={onPdfStateChange} /></Suspense>
       : isBrowserOoxml && !hasOfficeRenderFailure
         ? <>
             <div className="office-viewer-toolbar">
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} tabId={tabId} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
+              ? <Suspense fallback={<div className="loading-state">Loading Office preview…</div>}><OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} tabId={tabId} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} /></Suspense>
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
