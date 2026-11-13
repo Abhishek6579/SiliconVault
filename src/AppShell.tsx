@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { File, HardDrive, Search, X } from 'lucide-react';import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
+import { File, HardDrive, Search, X } from 'lucide-react';
+import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
 import { formatSize } from './utils/format';
 import { saveWorkspaceSession } from './storage/tabSession';
