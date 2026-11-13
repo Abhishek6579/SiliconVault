@@ -22,7 +22,7 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 }
 
 
-export default function ReadOnlyFileViewer({ fileName, data, mimeType, maximized, onToggleMaximize }: Props) {
+export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
