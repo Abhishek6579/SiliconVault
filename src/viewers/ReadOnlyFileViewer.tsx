@@ -160,7 +160,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
     else if (event.key === '-') { event.preventDefault(); zoomOut(); }
-    else if (event.key === '0') { event.preventDefault(); setZoom(1); }
+    else if (event.key === '0') { event.preventDefault(); applyZoom(1); }
   };
   const controls = <div className="viewer-zoom-controls" role="toolbar" aria-label="Viewer zoom controls">
     <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Ctrl+-)" onClick={zoomOut} disabled={zoom <= 0.4}><ZoomOut size={15} /></button>
@@ -200,7 +200,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     {controls}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
-      <div className="viewer-table-scroll"><table><thead><tr><th>Identifier</th><th>Width</th><th>Signal</th></tr></thead><tbody>{signals.map((v, i) => <tr key={i}><td>{v[2]}</td><td>{v[1]}</td><td>{v[3]}</td></tr>)}</tbody></table></div>
+      <div className="viewer-table-scroll" data-viewer-scroll><table><thead><tr><th>Identifier</th><th>Width</th><th>Signal</th></tr></thead><tbody>{signals.map((v, i) => <tr key={i}><td>{v[2]}</td><td>{v[1]}</td><td>{v[3]}</td></tr>)}</tbody></table></div>
       <p className="viewer-note">Signal metadata is shown here. Interactive timing traces are not part of this initial viewer.</p>
     </div>
   </div>;
