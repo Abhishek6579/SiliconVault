@@ -34,7 +34,9 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const findInputRef = useRef<HTMLInputElement>(null);
-  const findCursorRef = useRef({ query: '', index: -1 });
+  const findCursorRef = useRef({ query: '', offset: -1 });
+  const textIndexRef = useRef<{ text: string; lower: string; segments: Array<{ node: Text; start: number; end: number }> } | null>(null);
+  const findTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const changeScale = (next: number) => {
     const viewer = viewerRef.current;
@@ -53,41 +55,62 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     const host = hostRef.current;
     const needle = query.trim().toLocaleLowerCase();
     if (!host) return;
-    if (!needle) { window.getSelection()?.removeAllRanges(); return; }
-    const segments: Array<{ node: Text; start: number; end: number }> = [];
-    let combined = '';
-    let previousBlock: Element | null = null;
-    const walker = window.document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-    let current = walker.nextNode();
-    while (current) {
-      const node = current as Text;
-      const parent = node.parentElement;
-      const block = parent?.closest('p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
-      if (block && previousBlock && block !== previousBlock) combined += '\n';
-      const value = node.textContent ?? '';
-      if (value) {
-        segments.push({ node, start: combined.length, end: combined.length + value.length });
-        combined += value;
+    if (!needle) { window.getSelection()?.removeAllRanges(); findCursorRef.current = { query: '', offset: -1 }; return; }
+
+    // Build the DOM text index once. The previous implementation rebuilt it and
+    // collected every occurrence on each keystroke; a one-character query in a
+    // large workbook/document could allocate millions of offsets and freeze UI.
+    let index = textIndexRef.current;
+    if (!index) {
+      const segments: Array<{ node: Text; start: number; end: number }> = [];
+      let combined = '';
+      let previousBlock: Element | null = null;
+      const walker = window.document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        const node = current as Text;
+        const parent = node.parentElement;
+        const block = parent?.closest('p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
+        if (block && previousBlock && block !== previousBlock) combined += '\\n';
+        const value = node.textContent ?? '';
+        if (value) {
+          segments.push({ node, start: combined.length, end: combined.length + value.length });
+          combined += value;
+        }
+        previousBlock = block ?? previousBlock;
+        current = walker.nextNode();
       }
-      previousBlock = block ?? previousBlock;
-      current = walker.nextNode();
+      index = { text: combined, lower: combined.toLocaleLowerCase(), segments };
+      textIndexRef.current = index;
     }
-    const matches: number[] = [];
-    const lower = combined.toLocaleLowerCase();
-    let offset = lower.indexOf(needle);
-    while (offset >= 0) { matches.push(offset); offset = lower.indexOf(needle, offset + Math.max(1, needle.length)); }
-    if (!matches.length) return;
-    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, index: -1 };
-    const nextIndex = (findCursorRef.current.index + direction + matches.length) % matches.length;
-    findCursorRef.current.index = nextIndex;
-    const startOffset = matches[nextIndex];
-    const endOffset = startOffset + needle.length;
-    const startSegment = segments.find((segment) => startOffset >= segment.start && startOffset < segment.end);
-    const endSegment = segments.find((segment) => endOffset > segment.start && endOffset <= segment.end);
+
+    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, offset: -1 };
+    const from = direction > 0
+      ? findCursorRef.current.offset + 1
+      : Math.max(0, findCursorRef.current.offset - 1);
+    let matchOffset = direction > 0 ? index.lower.indexOf(needle, from) : index.lower.lastIndexOf(needle, from);
+    if (matchOffset < 0) matchOffset = direction > 0 ? index.lower.indexOf(needle) : index.lower.lastIndexOf(needle);
+    if (matchOffset < 0) return;
+    findCursorRef.current = { query: needle, offset: matchOffset };
+
+    const locate = (offset: number) => {
+      let low = 0;
+      let high = index!.segments.length - 1;
+      while (low <= high) {
+        const middle = (low + high) >>> 1;
+        const segment = index!.segments[middle];
+        if (offset < segment.start) high = middle - 1;
+        else if (offset >= segment.end) low = middle + 1;
+        else return segment;
+      }
+      return null;
+    };
+    const startSegment = locate(matchOffset);
+    const endSegment = locate(matchOffset + needle.length - 1);
     if (!startSegment || !endSegment) return;
     const range = window.document.createRange();
-    range.setStart(startSegment.node, startOffset - startSegment.start);
-    range.setEnd(endSegment.node, endOffset - endSegment.start);
+    range.setStart(startSegment.node, matchOffset - startSegment.start);
+    range.setEnd(endSegment.node, matchOffset + needle.length - endSegment.start);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
@@ -142,6 +165,8 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     let viewer: ViewerHandle | null = null;
     const host = hostRef.current;
     setLoading(true);
+    textIndexRef.current = null;
+    findCursorRef.current = { query: '', offset: -1 };
     setScale(zoom);
     viewerRef.current = null;
 
@@ -249,7 +274,7 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
   return (
     <div className="office-ooxml-viewer">
       <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document controls">
-        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', index: -1 }; findInDocument(next); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
+        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInDocument(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
         <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => changeScale(scale - 0.1)} disabled={scale <= 0.1}><ZoomOut size={15} /></button>
         <span aria-live="polite">{Math.round(scale * 100)}%</span>
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
