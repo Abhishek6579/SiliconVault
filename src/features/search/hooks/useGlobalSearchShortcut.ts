@@ -32,16 +32,21 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       if (key !== 'k' && key !== 'f') return;
       event.preventDefault();
       event.stopPropagation();
+      const target = event.target instanceof Element ? event.target : null;
+      const focusedSurface = target?.closest('.pdf-shell') ? 'pdf'
+        : target?.closest('.code-editor, .markdown-preview') ? 'editor'
+        : target?.closest('.office-viewer, .file-viewer') ? 'document'
+        : lastFocusedSurfaceRef.current;
       if (key === 'f') {
-        if (lastFocusedSurfaceRef.current === 'pdf') {
+        if (focusedSurface === 'pdf') {
           window.dispatchEvent(new Event('siliconvault:open-file-search'));
           return;
         }
-        if (lastFocusedSurfaceRef.current === 'editor') {
+        if (focusedSurface === 'editor') {
           const view = editorViewRef.current;
           if (view?.dom.isConnected) { openSearchPanel(view); return; }
         }
-        if (lastFocusedSurfaceRef.current === 'document') {
+        if (focusedSurface === 'document') {
           window.dispatchEvent(new Event('siliconvault:open-document-search'));
           return;
         }
