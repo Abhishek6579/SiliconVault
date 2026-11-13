@@ -52,6 +52,8 @@ import { useWorkspaceNav } from './features/workspace/context/WorkspaceNavContex
 import { DialogHost, useDialog } from './features/workspace/context/DialogContext';
 import { useImportActions, type ImportTarget } from './features/workspace/hooks/useImportActions';
 import { useItemActions, type ContextItemType, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
+import { useProjectActions } from './features/workspace/hooks/useProjectActions';
+import { useFolderActions } from './features/workspace/hooks/useFolderActions';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
@@ -223,6 +225,13 @@ export default function AppShell() {
     setStatus,
   });
 
+  const { createProject } = useProjectActions({
+    currentWorkspaceId, requestInput, refresh, setActiveProject, setSelectedFolder, setActiveTabId, setView,
+  });
+  const { createFolderInCurrent, createNewFile } = useFolderActions({
+    currentWorkspaceId, selectedFolder, activeProject, requestInput, refresh, openFile, setExpanded,
+  });
+
   const { handleImport, startImportInto, startImportFolderInto, handleFolderImport } = useImportActions({
     openFile, refresh, selectedFolder, activeProject, currentWorkspaceId,
     setError, setImporting, setImportTarget, setSelectedFolder, setActiveProject,
@@ -248,34 +257,6 @@ export default function AppShell() {
       setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
     });
   }, [activeTab, loading, openFile]);
-
-  function createProject() {
-    requestInput('Create project', '', 'Project name', 'Create project', async (name) => {
-      const now = Date.now();
-      const project: Project = { id: crypto.randomUUID(), workspaceId: currentWorkspaceId, name: name.trim(), archived: false, createdAt: now, updatedAt: now };
-      await db.projects.add(project);
-      await refresh();
-      setActiveProject(project.id); setSelectedFolder(null); setActiveTabId(null); setView('workspace');
-    });
-  }
-
-  function createFolderInCurrent() {
-    requestInput('Create folder', '', 'Folder name', 'Create folder', async (name) => {
-      const folder = await createFolder(db, name.trim(), selectedFolder, activeProject, currentWorkspaceId);
-      setExpanded((current) => new Set(current).add(folder.id));
-      await refresh();
-    });
-  }
-
-  function createNewFile(kind: 'markdown' | 'code') {
-    const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.ts';
-    requestInput(kind === 'markdown' ? 'Create note' : 'Create code file', initial, 'File name', 'Create file', async (name) => {
-      const text = kind === 'markdown' ? `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n` : '';
-      const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId, kind });
-      await refresh();
-      await openFile(meta);
-    });
-  }
 
   function showContextMenu(type: ContextItemType, id: string, event: ReactMouseEvent) {
     event.preventDefault();
