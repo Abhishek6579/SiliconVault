@@ -1,18 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
-import { markdown } from '@codemirror/lang-markdown';
-import { StreamLanguage } from '@codemirror/language';
-import { verilog } from '@codemirror/legacy-modes/mode/verilog';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
 import { openSearchPanel } from '@codemirror/search';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 import {
   Activity, Archive, ArrowDownUp, BookOpen, Check, ChevronDown, ChevronRight, Code2, Command, Download,
   Ellipsis, File, FileCode2, FilePlus2, FileText, Folder, FolderPlus, FolderTree, HardDrive,
@@ -20,7 +9,6 @@ import {
   Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
-import MermaidDiagram from './components/MermaidDiagram';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
 import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
@@ -43,6 +31,7 @@ import { useWorkspaceInitialization } from './features/workspace/hooks/useWorksp
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
+import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { EditorViewState, PdfViewState, Tab, ViewerViewState } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
@@ -55,19 +44,6 @@ interface ContextMenuState { type: ContextItemType; id: string; x: number; y: nu
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
 interface SearchResult { file: FileMeta; text: string; }
-
-// Accept Markdown's $...$ syntax and common LaTeX \( ... \) / \[ ... \] delimiters.
-// The conversion affects preview rendering only; the original Markdown remains unchanged.
-function normalizeMarkdownMath(source: string): string {
-  const normalized = source
-    .replace(/\\{1,2}\(/g, () => '$')
-    .replace(/\\{1,2}\)/g, () => '$')
-    .replace(/\\{1,2}\[/g, () => '$$')
-    .replace(/\\{1,2}\]/g, () => '$$');
-  return normalized.replace(/(\${1,2})([\s\S]*?)\1/g, (_match, delimiter: string, expression: string) =>
-    delimiter + expression.replace(/\\_/g, '_') + delimiter,
-  );
-}
 
 export default function App() {
   useEffect(() => collectFrontendDiagnostics(), []);
@@ -150,36 +126,6 @@ export default function App() {
     return () => window.removeEventListener('wheel', handleWheel, true);
   }, [activeTabId, setEditorFontSize, setAppZoom]);
 
-
-  // Fixed near-black editor theme inspired by the supplied reference.
-  const editorTheme = useMemo(() => EditorView.theme({
-    '&': { height: '100%', backgroundColor: '#111111', color: '#e6e6e6' },
-    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
-    '.cm-content': { caretColor: '#f2f2f2', fontSize: `${editorFontSize}px` },
-    '.cm-line': { padding: '0 4px' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#f2f2f2' },
-    '.cm-gutters': { backgroundColor: '#111111', color: '#777777', border: 'none', borderRight: '1px solid #242424', fontSize: `${editorFontSize}px` },
-    '.cm-lineNumbers .cm-gutterElement': { minWidth: '3.5em', padding: '0 12px 0 10px' },
-    '.cm-activeLine': { backgroundColor: '#191919' },
-    '.cm-activeLineGutter': { backgroundColor: '#191919', color: '#d8d8d8' },
-    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#343b4a' },
-    '.cm-selectionMatch': { backgroundColor: '#292f3a' },
-    '.cm-focused .cm-matchingBracket': { backgroundColor: '#292f3a', outline: '1px solid #59677f' },
-    '.cm-searchMatch': { backgroundColor: '#51421f', outline: '1px solid #8a7134' },
-    '.cm-searchMatch-selected': { backgroundColor: '#6a5526' },
-    '.cm-tooltip': { backgroundColor: '#1b1b1b', color: '#e6e6e6', border: '1px solid #383838' },
-    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30343d', color: '#ffffff' },
-    '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
-  }, { dark: true }), [editorFontSize]);
-  const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
-    { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#c586c0' },
-    { tag: [tags.typeName, tags.className], color: '#4ec9b0' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#dcdcaa' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#ce9178' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#b5cea8' },
-    { tag: tags.operator, color: '#d4d4d4' },
-  ])), []);
 
   function requestInput(title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) {
     setDialog({ mode: 'input', title, value: initialValue, placeholder, confirmLabel, onConfirm, message });
@@ -980,21 +926,19 @@ export default function App() {
             </div>
           </div>
         )}
-        {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
-          <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
-            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => { editorViewRef.current = view; restoreEditorViewState(view, activeTab.editorState); }} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
-            <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
-              code({ className, children, ...props }) {
-                const code = String(children).replace(/\n$/, '');
-                if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
-                return <code className={className} {...props}>{children}</code>;
-              }
-            }}>{normalizeMarkdownMath(activeTab.draft)}</ReactMarkdown></article></div>
-          </div>
-        ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
-        ) : activeTab.meta.kind === 'viewer' ? null
-        : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
+        {activeTab.meta.kind === 'pdf' || activeTab.meta.kind === 'viewer' ? null : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown' ? (
+          <WorkspaceEditor
+            kind={activeTab.meta.kind}
+            name={activeTab.meta.name}
+            value={activeTab.draft}
+            fontSize={editorFontSize}
+            preview={activeTab.preview}
+            editorState={activeTab.editorState}
+            editorViewRef={activeTab.meta.kind === 'markdown' ? editorViewRef : undefined}
+            onChange={(value) => updateDraft(activeTab.id, value)}
+            onViewStateChange={(view, preview) => persistEditorViewState(activeTab.id, view, preview)}
+          />
+        ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         {workspaceTabs.filter((tab) => tab.meta.kind === 'viewer' && tab.data instanceof Blob).map((tab) => (
           <div key={tab.id} className="persistent-viewer-panel" style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}>
             <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}>
@@ -1113,14 +1057,6 @@ export default function App() {
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
-}
-
-function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
-  if (!state) return;
-  const length = view.state.doc.length;
-  view.dispatch({ selection: { anchor: Math.min(state.anchor, length), head: Math.min(state.head, length) } });
-  view.scrollDOM.scrollTop = state.scrollTop;
-  view.scrollDOM.scrollLeft = state.scrollLeft;
 }
 
 function EmptyState({ title, message, icon, action }: { title: string; message: string; icon: ReactNode; action?: ReactNode }) {
