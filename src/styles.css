@@ -4293,3 +4293,55 @@ body,
 .app-shell[data-theme="dark"] .file-find-bar input { background: #17191d; border-color: #3b414b; color: #e0e4ea; }
 .app-shell[data-theme="dark"] .editor-find-bar .icon-button:hover,
 .app-shell[data-theme="dark"] .file-find-bar .icon-button:hover { background: #303640; color: #f0f2f5; }
+
+
+/* Floating-card workbench layout: separate the major workspace regions. */
+.app-shell {
+  --workbench-gap: 10px;
+  gap: var(--workbench-gap);
+  padding: var(--workbench-gap);
+  background: #eef0f4;
+}
+.app-shell .sidebar,
+.app-shell .main-area,
+.app-shell .right-panel {
+  min-height: 0;
+  border: 1px solid #e1e4e9;
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px #1d29390a;
+}
+.app-shell .sidebar {
+  flex-shrink: 0;
+}
+.app-shell .main-area {
+  min-width: 0;
+}
+.app-shell .right-panel {
+  flex: 0 0 280px;
+}
+.app-shell .topbar {
+  border-bottom: 1px solid var(--line);
+}
+.app-shell[data-theme="dark"] {
+  background: #14161a;
+}
+.app-shell[data-theme="dark"] .sidebar,
+.app-shell[data-theme="dark"] .main-area,
+.app-shell[data-theme="dark"] .right-panel {
+  border-color: #30343c;
+  box-shadow: 0 2px 10px #0003;
+}
+.app-shell[data-theme="dark"] .main-area,
+.app-shell[data-theme="dark"] .workspace-body {
+  background: #1b1e23;
+}
+.app-shell[data-theme="light"] .sidebar,
+.app-shell[data-theme="light"] .main-area,
+.app-shell[data-theme="light"] .right-panel {
+  background: #fff;
+}
+@media (max-width: 1100px) {
+  .app-shell { --workbench-gap: 7px; }
+  .app-shell .right-panel { flex-basis: 250px; }
+}
