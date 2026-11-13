@@ -82,7 +82,7 @@ export default function WorkspaceEditor({
         while (!last.done) { result = last; last = wrap.next(); }
       }
     }
-    if (result.done) return;
+    if (!result || result.done) return;
     const match = result.value;
     findPositionRef.current = direction > 0 ? match.to : match.from;
     view.dispatch({
