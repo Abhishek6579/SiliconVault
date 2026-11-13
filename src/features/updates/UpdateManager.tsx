@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { isDesktopApp } from '../../platform/desktop';
@@ -6,7 +6,6 @@ import { isDesktopApp } from '../../platform/desktop';
 interface UpdateInfo {
   version: string;
   notes?: string | null;
-  date?: string | null;
 }
 
 interface UpdateProgress {
@@ -21,9 +20,11 @@ export default function UpdateManager() {
   const [installing, setInstalling] = useState(false);
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
+  const busyRef = useRef(false);
 
   const checkForUpdates = useCallback(async (manual = false) => {
-    if (!isDesktopApp() || checking || installing) return;
+    if (!isDesktopApp() || busyRef.current) return;
+    busyRef.current = true;
     setChecking(true);
     if (manual) setMessage('Checking for updates…');
     try {
@@ -33,9 +34,10 @@ export default function UpdateManager() {
     } catch (error) {
       if (manual) setMessage(error instanceof Error ? error.message : String(error));
     } finally {
+      busyRef.current = false;
       setChecking(false);
     }
-  }, [checking, installing]);
+  }, []);
 
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -59,6 +61,7 @@ export default function UpdateManager() {
   }, [checkForUpdates]);
 
   const install = async () => {
+    busyRef.current = true;
     setInstalling(true);
     setProgress({ downloaded: 0, contentLength: null, finished: false });
     setMessage('Preparing update…');
@@ -66,6 +69,7 @@ export default function UpdateManager() {
       await invoke('install_update');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
+      busyRef.current = false;
       setInstalling(false);
       setProgress(null);
     }
