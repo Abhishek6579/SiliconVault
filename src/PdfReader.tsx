@@ -148,6 +148,20 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     return cleanup;
   }, [source]);
 
+  // Use a non-passive native listener so Ctrl/Cmd+wheel prevents WebView/browser zoom.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      setFit(false);
+      setZoom((value) => Math.max(.5, Math.min(2, Math.round((value + (event.deltaY < 0 ? .1 : -.1)) * 100) / 100)));
+    };
+    host.addEventListener('wheel', handleWheel, { passive: false });
+    return () => host.removeEventListener('wheel', handleWheel);
+  }, []);
+
   // Track container width. A zero width means the tab is hidden; remember that
   // so we re-anchor when it becomes visible again.
   useEffect(() => {
