@@ -69,4 +69,19 @@ describe('file import services', () => {
     expect(openFile.mock.calls[0][0]).toMatchObject({ name: 'note.md', kind: 'markdown', parentFolderId: folder.id });
     expect((await database.files.toArray()).every((file) => file.parentFolderId === folder.id)).toBe(true);
   });
+
+  it('does not open every editor tab during a multi-file import', async () => {
+    const database = createDatabase();
+    await database.open();
+    const openFile = vi.fn(async (_file: FileMeta) => undefined);
+    await importFiles(
+      database,
+      [new File(['a'], 'one.md'), new File(['b'], 'two.sv'), new File(['c'], 'three.txt')],
+      { folderId: null, projectId: null, workspaceId: DEFAULT_WORKSPACE_ID },
+      openFile,
+    );
+    expect(await database.files.count()).toBe(3);
+    expect(openFile).toHaveBeenCalledTimes(1);
+    expect(openFile.mock.calls[0][0]).toMatchObject({ name: 'one.md' });
+  });
 });

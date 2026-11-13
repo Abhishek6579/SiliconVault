@@ -18,6 +18,7 @@ export async function importFiles(
 ): Promise<number> {
   let imported = 0;
   let total = getKnownTotal(files);
+  let openedFirstFile = false;
   onProgress?.({ completed: 0, total, fileName: '' });
   for await (const file of files) {
     total = total ?? getKnownTotal(files);
@@ -27,7 +28,13 @@ export async function importFiles(
       projectId: target.projectId,
       workspaceId: target.workspaceId,
     });
-    if (OPENABLE_KINDS.has(meta.kind)) await openFile(meta);
+    // Opening every imported text file creates a large number of editor tabs
+    // during bulk imports. Keep the workspace responsive by opening only the first
+    // supported file; the remaining files are still imported and searchable.
+    if (!openedFirstFile && OPENABLE_KINDS.has(meta.kind)) {
+      await openFile(meta);
+      openedFirstFile = true;
+    }
     imported += 1;
     onProgress?.({ completed: imported, total, fileName: file.name });
   }

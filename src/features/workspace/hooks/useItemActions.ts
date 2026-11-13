@@ -5,7 +5,7 @@ import { moveFile, moveFolder, renameFolder, restoreProject as unarchiveProject,
 import { countFolderItems, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from '../../../storage/files';
 import type { FileMeta, Folder as FolderRecord, Project } from '../../../storage/types';
 import type { Tab } from '../../tabs/types';
-import type { ImportTarget } from '../../../services/importFolder';
+import type { ImportTarget } from '../../../services/importTypes';
 
 type View = 'workspace' | 'recent' | 'trash';
 export type ContextItemType = 'file' | 'folder' | 'project';
