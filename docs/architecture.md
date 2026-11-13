@@ -81,4 +81,4 @@ Tauri capabilities currently grant core defaults, dialog open/save, and selected
 - No interactive VCD waveform viewer.
 - No verified packaged Windows data-path or memory baseline documented.
 - Windows NSIS packaging is configured, but install/upgrade/uninstall persistence needs Windows validation.
-- No application license has been granted in the repository.
+- Application source is licensed under Apache-2.0; third-party dependencies retain their own licenses.
