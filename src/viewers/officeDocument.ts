@@ -161,3 +161,149 @@ export async function extractOfficeText(file: Blob, extension: string): Promise<
 
   throw new Error('Only DOCX/DOCM and PPTX/PPTM Open XML files are supported. Convert legacy DOC/PPT files to the newer format to preview them.');
 }
+
+
+export interface OfficeRun {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  color?: string;
+  highlight?: string;
+  fontSize?: number;
+  verticalAlign?: 'superscript' | 'subscript';
+}
+
+export interface OfficeBlock {
+  type: 'paragraph' | 'table';
+  text?: string;
+  runs?: OfficeRun[];
+  styleName?: string;
+  alignment?: 'left' | 'center' | 'right' | 'justify';
+  indentLeft?: number;
+  indentFirstLine?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
+  rows?: OfficeBlock[][][];
+}
+
+function propertyEnabled(parent: Element | null, name: string): boolean {
+  if (!parent) return false;
+  const property = Array.from(parent.children).find((child) => child.localName === name);
+  if (!property) return false;
+  return property.getAttribute('val') !== '0' && property.getAttribute('val') !== 'false';
+}
+
+function parseOfficeRun(run: Element): OfficeRun {
+  const properties = Array.from(run.children).find((child) => child.localName === 'rPr') ?? null;
+  const color = properties && Array.from(properties.children).find((child) => child.localName === 'color')?.getAttribute('val');
+  const highlight = properties && Array.from(properties.children).find((child) => child.localName === 'highlight')?.getAttribute('val');
+  const size = properties && Array.from(properties.children).find((child) => child.localName === 'sz')?.getAttribute('val');
+  const vertical = properties && Array.from(properties.children).find((child) => child.localName === 'vertAlign')?.getAttribute('val');
+  return {
+    text: collectParagraphText(run),
+    bold: propertyEnabled(properties, 'b'),
+    italic: propertyEnabled(properties, 'i'),
+    underline: propertyEnabled(properties, 'u') && properties?.querySelector('u')?.getAttribute('val') !== 'none',
+    strike: propertyEnabled(properties, 'strike') || propertyEnabled(properties, 'dstrike'),
+    ...(color && color !== 'auto' ? { color: `#${color}` } : {}),
+    ...(highlight && highlight !== 'none' ? { highlight: highlight === 'yellow' ? '#ffff00' : highlight } : {}),
+    ...(size && Number.isFinite(Number(size)) ? { fontSize: Number(size) / 2 } : {}),
+    ...(vertical === 'superscript' || vertical === 'subscript' ? { verticalAlign: vertical } : {}),
+  };
+}
+
+function parseOfficeParagraph(paragraph: Element): OfficeBlock {
+  const properties = Array.from(paragraph.children).find((child) => child.localName === 'pPr') ?? null;
+  const styleName = properties && Array.from(properties.children).find((child) => child.localName === 'pStyle')?.getAttribute('val') ?? undefined;
+  const alignmentValue = properties && Array.from(properties.children).find((child) => child.localName === 'jc')?.getAttribute('val');
+  const indentation = properties && Array.from(properties.children).find((child) => child.localName === 'ind');
+  const spacing = properties && Array.from(properties.children).find((child) => child.localName === 'spacing');
+  const runs: OfficeRun[] = [];
+  const collectRuns = (node: Element) => {
+    for (const child of Array.from(node.children)) {
+      if (child.localName === 'r') {
+        const parsed = parseOfficeRun(child);
+        if (parsed.text) runs.push(parsed);
+      } else if (child.localName === 'hyperlink' || child.localName === 'sdt' || child.localName === 'smartTag') {
+        collectRuns(child);
+      }
+    }
+  };
+  collectRuns(paragraph);
+  const numbering = properties && Array.from(properties.children).find((child) => child.localName === 'numPr');
+  if (numbering && runs.length) runs.unshift({ text: '• ' });
+  const text = runs.map((run) => run.text).join('');
+  return {
+    type: 'paragraph',
+    text,
+    runs,
+    ...(styleName ? { styleName } : {}),
+    ...(alignmentValue === 'center' || alignmentValue === 'right' || alignmentValue === 'both'
+      ? { alignment: alignmentValue === 'both' ? 'justify' as const : alignmentValue }
+      : {}),
+    ...(indentation?.getAttribute('left') ? { indentLeft: Number(indentation.getAttribute('left')) / 20 } : {}),
+    ...(indentation?.getAttribute('firstLine') ? { indentFirstLine: Number(indentation.getAttribute('firstLine')) / 20 } : {}),
+    ...(spacing?.getAttribute('before') ? { spaceBefore: Number(spacing.getAttribute('before')) / 20 } : {}),
+    ...(spacing?.getAttribute('after') ? { spaceAfter: Number(spacing.getAttribute('after')) / 20 } : {}),
+  };
+}
+
+function parseOfficeBlocks(parent: Element): OfficeBlock[] {
+  const blocks: OfficeBlock[] = [];
+  for (const child of Array.from(parent.children)) {
+    if (child.localName === 'p') {
+      const paragraph = parseOfficeParagraph(child);
+      if (paragraph.text || paragraph.styleName) blocks.push(paragraph);
+    } else if (child.localName === 'tbl') {
+      const rows: OfficeBlock[][][] = [];
+      for (const row of Array.from(child.children).filter((element) => element.localName === 'tr')) {
+        const cells = Array.from(row.children).filter((element) => element.localName === 'tc')
+          .map((cell) => parseOfficeBlocks(cell));
+        rows.push(cells);
+      }
+      blocks.push({ type: 'table', rows });
+    }
+  }
+  return blocks;
+}
+
+export function officeBlocksToText(blocks: OfficeBlock[]): string {
+  return blocks.map((block) => block.type === 'paragraph'
+    ? block.text ?? ''
+    : (block.rows ?? []).map((row) => row.map((cell) => officeBlocksToText(cell)).join('\\t')).join('\\n')
+  ).join('\\n');
+}
+
+export async function extractOfficeDocument(file: Blob, extension: string): Promise<OfficeBlock[]> {
+  if (file.size > MAX_ARCHIVE_BYTES) throw new Error('Office preview is limited to 100 MB per file.');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const entries = readZipEntries(view, bytes);
+
+  if (extension === 'docx' || extension === 'docm') {
+    const documentEntry = entries.find((entry) => entry.name === 'word/document.xml');
+    if (!documentEntry) throw new Error('The Word document does not contain its main document body.');
+    const xml = xmlDocument(await readZipEntry(view, bytes, documentEntry));
+    const body = xml.getElementsByTagNameNS('*', 'body')[0];
+    if (!body) throw new Error('The Word document body is empty or invalid.');
+    const blocks = parseOfficeBlocks(body);
+    return blocks.length ? blocks : [{ type: 'paragraph', text: 'This document contains no extractable text.', runs: [{ text: 'This document contains no extractable text.' }] }];
+  }
+
+  if (extension === 'pptx' || extension === 'pptm') {
+    const slides = entries.filter((entry) => /^ppt\\/slides\\/slide\\d+\\.xml$/i.test(entry.name))
+      .sort((left, right) => slideNumber(left.name) - slideNumber(right.name));
+    if (!slides.length) throw new Error('The PowerPoint file does not contain readable slides.');
+    const blocks: OfficeBlock[] = [];
+    for (let index = 0; index < slides.length; index += 1) {
+      const slideXml = await readZipEntry(view, bytes, slides[index]);
+      const slideText = paragraphsFromXml(slideXml, 'p');
+      blocks.push({ type: 'paragraph', styleName: 'Title', text: `Slide ${index + 1}`, runs: [{ text: `Slide ${index + 1}`, bold: true, fontSize: 20 }] });
+      blocks.push(...slideText.split('\\n').filter(Boolean).map((line) => ({ type: 'paragraph' as const, text: line, runs: [{ text: line }] })));
+    }
+    return blocks;
+  }
+  throw new Error('Only DOCX/DOCM and PPTX/PPTM Open XML files are supported. Convert legacy DOC/PPT files to the newer format to preview them.');
+}
