@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
 import { isDesktopApp } from '../platform/desktop';
-import { extractOfficeDocument, officeBlocksToText, type OfficeBlock } from './officeDocument';
+import OfficeOoxmlViewer from './OfficeOoxmlViewer';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
 
@@ -22,58 +22,30 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 }
 
 
-function renderOfficeBlocks(blocks: OfficeBlock[], prefix = 'block'): ReactNode {
-  return blocks.map((block, index) => {
-    const key = `${prefix}-${index}`;
-    if (block.type === 'table') {
-      return <table className="office-document-table" key={key}><tbody>
-        {(block.rows ?? []).map((row, rowIndex) => <tr key={`${key}-row-${rowIndex}`}>
-          {row.map((cell, cellIndex) => <td key={`${key}-cell-${cellIndex}`}>{renderOfficeBlocks(cell, `${key}-${rowIndex}-${cellIndex}`)}</td>)}
-        </tr>)}
-      </tbody></table>;
-    }
-    const styleClass = block.styleName?.replace(/[^a-z0-9_-]/gi, '') ?? '';
-    const style: CSSProperties = {
-      textAlign: block.alignment,
-      marginTop: block.spaceBefore === undefined ? undefined : `${block.spaceBefore}pt`,
-      marginBottom: block.spaceAfter === undefined ? undefined : `${block.spaceAfter}pt`,
-      marginLeft: block.indentLeft === undefined ? undefined : `${block.indentLeft}pt`,
-      textIndent: block.indentFirstLine === undefined ? undefined : `${block.indentFirstLine}pt`,
-    };
-    return <p key={key} className={`office-document-paragraph ${styleClass ? `office-style-${styleClass}` : ''}`} style={style}>
-      {(block.runs ?? [{ text: block.text ?? '' }]).map((run, runIndex) => <span key={`${key}-run-${runIndex}`} style={{
-        fontWeight: run.bold ? 700 : undefined,
-        fontStyle: run.italic ? 'italic' : undefined,
-        textDecoration: [run.underline ? 'underline' : '', run.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
-        color: run.color,
-        backgroundColor: run.highlight,
-        fontSize: run.fontSize ? `${run.fontSize}pt` : undefined,
-        verticalAlign: run.verticalAlign === 'superscript' ? 'super' : run.verticalAlign === 'subscript' ? 'sub' : undefined,
-      }}>{run.text}</span>)}
-    </p>;
-  });
-}
-
 export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
   const officePdfExtensions = ['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'rtf', 'odt', 'fodt', 'xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'fodp'];
-  const structuredOfficeExtensions = ['docx', 'docm', 'pptx', 'pptm'];
+  const browserOoxmlExtensions = ['docx', 'docm', 'xlsx', 'xlsm', 'pptx', 'pptm'];
   const isOffice = officePdfExtensions.includes(ext);
+  const isBrowserOoxml = browserOoxmlExtensions.includes(ext);
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(1);
-  const [officeText, setOfficeText] = useState('');
-  const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
   const [officePdf, setOfficePdf] = useState<Blob | null>(null);
-  const [officeFallbackMessage, setOfficeFallbackMessage] = useState('');
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
-  const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
-  const [copyError, setCopyError] = useState('');
-  const officeContentRef = useRef<HTMLDivElement>(null);
+  const [officeRenderFailure, setOfficeRenderFailure] = useState<{ data: Blob; extension: string; message: string } | null>(null);
+  const hasOfficeRenderFailure = data instanceof Blob
+    && officeRenderFailure?.data === data
+    && officeRenderFailure.extension === ext;
+  const handleOfficeRenderError = useCallback((reason: Error) => {
+    if (data instanceof Blob) {
+      setOfficeRenderFailure({ data, extension: ext, message: reason.message });
+    }
+  }, [data, ext]);
 
   useEffect(() => {
     setError(''); setText(''); setUrl(''); setZoom(1);
@@ -93,63 +65,51 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   useEffect(() => {
     if (!isOffice) return;
     let active = true;
-    setOfficeText('');
-    setOfficeBlocks([]);
     setOfficePdf(null);
-    setOfficeFallbackMessage('');
     setOfficeError('');
-    setCopyError('');
+
+    const requiresConversion = !isBrowserOoxml || hasOfficeRenderFailure;
+    if (!requiresConversion) {
+      setOfficeLoading(false);
+      return () => { active = false; };
+    }
+
     setOfficeLoading(true);
-    setCopied(null);
     if (!(data instanceof Blob)) {
       setOfficeError('The Office document data is unavailable.');
       setOfficeLoading(false);
-      return;
+      return () => { active = false; };
     }
-    const desktop = isDesktopApp();
-    if (desktop) {
-      data.arrayBuffer()
-        .then((buffer) => invoke<number[]>('convert_office_to_pdf', {
-          bytes: Array.from(new Uint8Array(buffer)),
-          extension: ext,
-        }))
-        .then((bytes) => {
-          if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
-        })
-        .catch(async (reason: unknown) => {
-          const conversionError = reason instanceof Error ? reason.message : 'Could not convert this Office document to PDF.';
-          if (!active) return;
-          if (!structuredOfficeExtensions.includes(ext)) {
-            setOfficeError(`PDF conversion failed: ${conversionError} Configure a licensed ONLYOFFICE Document Builder runtime or install LibreOffice to preview this file in SiliconVault.`);
-            return;
-          }
-          try {
-            const blocks = await extractOfficeDocument(data, ext);
-            if (active) {
-              setOfficeBlocks(blocks);
-              setOfficeText(officeBlocksToText(blocks));
-              const formatName = ext.startsWith('ppt') ? 'PowerPoint' : 'Word';
-              setOfficeFallbackMessage(`PDF conversion unavailable (${conversionError}). Showing the basic ${formatName} preview instead; embedded images and complex layout or equations may not be preserved.`);
-            }
-          } catch (fallbackReason) {
-            if (active) {
-              const fallbackError = fallbackReason instanceof Error ? fallbackReason.message : 'Unknown preview error.';
-              setOfficeError(`PDF conversion failed: ${conversionError} The basic Office preview also failed: ${fallbackError}`);
-            }
-          }
-        })
-        .finally(() => { if (active) setOfficeLoading(false); });
-    } else if (structuredOfficeExtensions.includes(ext)) {
-      extractOfficeDocument(data, ext)
-        .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
-        .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
-        .finally(() => { if (active) setOfficeLoading(false); });
-    } else {
-      setOfficeError('This Office format requires the desktop app with an Office conversion engine configured. Configure ONLYOFFICE Document Builder or LibreOffice, then reopen the file.');
+
+    if (!isDesktopApp()) {
+      const message = hasOfficeRenderFailure
+        ? `The browser Office renderer failed: ${officeRenderFailure?.message ?? 'Unknown rendering error.'}`
+        : 'This legacy Office format requires the desktop app with LibreOffice or ONLYOFFICE Document Builder configured.';
+      setOfficeError(message);
       setOfficeLoading(false);
+      return () => { active = false; };
     }
+
+    data.arrayBuffer()
+      .then((buffer) => invoke<number[]>('convert_office_to_pdf', {
+        bytes: Array.from(new Uint8Array(buffer)),
+        extension: ext,
+      }))
+      .then((bytes) => {
+        if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        const conversionError = reason instanceof Error ? reason.message : 'Could not convert this Office document to PDF.';
+        const rendererDetail = hasOfficeRenderFailure
+          ? ` The browser renderer also failed: ${officeRenderFailure?.message ?? 'Unknown rendering error.'}`
+          : '';
+        setOfficeError(`Office-to-PDF conversion failed: ${conversionError}.${rendererDetail} Configure ONLYOFFICE Document Builder or install LibreOffice to preview this file.`);
+      })
+      .finally(() => { if (active) setOfficeLoading(false); });
+
     return () => { active = false; };
-  }, [data, ext, isOffice]);
+  }, [data, ext, isOffice, isBrowserOoxml, hasOfficeRenderFailure, officeRenderFailure]);
 
   const table = useMemo(() => ['csv', 'tsv'].includes(ext) ? rowsFrom(text, ext === 'tsv' ? '\t' : ',') : [], [ext, text]);
   const signals = useMemo(() => ext === 'vcd' ? [...text.matchAll(/^\s*\$var\s+\S+\s+(\d+)\s+(\S+)\s+(.+?)\s+\$end/gm)].slice(0, 500) : [], [ext, text]);
@@ -160,23 +120,6 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
     else if (event.key === '-') { event.preventDefault(); zoomOut(); }
     else if (event.key === '0') { event.preventDefault(); setZoom(1); }
-  };
-  const copyOfficeText = async (selectionOnly: boolean) => {
-    const selected = window.getSelection()?.toString().trim() ?? '';
-    const selection = selected && officeContentRef.current?.contains(window.getSelection()?.anchorNode ?? null) ? selected : '';
-    setCopyError('');
-    if (selectionOnly && !selection) {
-      setCopyError('Select text in the preview first, or use Copy all text.');
-      return;
-    }
-    const value = selectionOnly ? selection : officeText;
-    if (!value || officeLoading) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(selectionOnly && selection ? 'selection' : 'all');
-    } catch {
-      setCopyError('Clipboard access was blocked. Select the text and use Ctrl+C / Cmd+C instead.');
-    }
   };
   const controls = <div className="viewer-zoom-controls" role="toolbar" aria-label="Viewer zoom controls">
     <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Ctrl+-)" onClick={zoomOut} disabled={zoom <= 0.4}><ZoomOut size={15} /></button>
@@ -192,20 +135,22 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     </div></div>
   </div>;
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
-  if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
-    {controls}
-    {officePdf ? <PdfReader data={officePdf} title={fileName} tabId={`office-preview-${fileName}`} /> : <>
-    <div className="office-viewer-toolbar">
-      <span>Read-only {ext.startsWith('ppt') ? 'presentation' : 'document'} preview · Text is selectable</span>
-      <div>
-        <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(true)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'selection' ? <><Check size={13} /> Copied selection</> : 'Copy selection'}</button>
-        <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(false)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'all' ? <><Check size={13} /> Copied all</> : 'Copy all text'}</button>
-      </div>
-      {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
-    </div>
-    {officeFallbackMessage && <div className="viewer-meta" role="status">{officeFallbackMessage}</div>}
-    {officeLoading ? <div className="loading-state">Preparing Office document preview…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
-    </>}
+  if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0}>
+    {officePdf
+      ? <PdfReader data={officePdf} title={fileName} tabId={`office-preview-${fileName}`} />
+      : isBrowserOoxml && !hasOfficeRenderFailure
+        ? <>
+            <div className="office-viewer-toolbar">
+              <span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span>
+              <span>Rendered locally · No document upload</span>
+            </div>
+            {data instanceof Blob
+              ? <OfficeOoxmlViewer key={`${fileName}-${ext}`} data={data} extension={ext} onError={handleOfficeRenderError} />
+              : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
+          </>
+        : officeLoading
+          ? <div className="loading-state">Converting Office document to PDF…</div>
+          : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError || 'The Office document could not be rendered.'}</p></div>}
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
