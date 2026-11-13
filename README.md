@@ -13,6 +13,7 @@ SiliconVault is a desktop-first, local-first engineering workspace built with Re
 - CodeMirror source editing, including Verilog and SystemVerilog.
 - PDF reader with continuous scrolling, navigation, zoom, and text search.
 - Image previews; CSV/TSV table previews; basic VCD declaration/activity inspection.
+- Read-only DOCX/DOCM and PPTX/PPTM text previews with copy-all and copy-selection actions.
 - JSON backup/restore with SHA-256 integrity checks.
 - Multiple open tabs and local save workflows.
 
