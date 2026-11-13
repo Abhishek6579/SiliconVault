@@ -4215,3 +4215,31 @@ body,
 .app-shell[data-theme="dark"] .danger-outline { color: #e29a9a; border-color: #704747; }
 .app-shell[data-theme="dark"] .danger-outline:hover { background: #382626; }
 
+
+
+/* Workspace search results are anchored to the top-bar field, not the right sidebar. */
+.global-search-anchor { position: relative; flex: 0 0 220px; width: 220px; }
+.global-search-anchor .global-search-inline { width: 220px; min-width: 220px; }
+.global-search-dropdown {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 7px);
+  right: 0;
+  width: 220px;
+  max-height: min(62vh, 480px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px #11182724, 0 2px 7px #11182712;
+}
+.global-search-dropdown .search-results-panel { padding: 5px; max-height: min(62vh, 480px); overflow: auto; }
+.global-search-dropdown .search-placeholder { height: 112px; gap: 6px; }
+.global-search-dropdown .search-placeholder svg { width: 17px; height: 17px; }
+.global-search-dropdown .search-result { padding: 8px 7px; gap: 4px; }
+.global-search-dropdown .search-result-title { width: 100%; min-width: 0; }
+.global-search-dropdown .search-result-title b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-search-dropdown .search-result-location,
+.global-search-dropdown .search-result-snippet { padding-left: 22px; overflow-wrap: anywhere; }
+.global-search-dropdown .search-count { padding: 7px; }
+.app-shell[data-theme="dark"] .global-search-dropdown { border-color: #383d45; box-shadow: 0 12px 32px #0008; }
