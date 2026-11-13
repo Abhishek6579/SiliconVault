@@ -4,11 +4,12 @@ import type { EditorView } from '@codemirror/view';
 import FileKindIcon from '../../../components/FileKindIcon';
 import { formatSize } from '../../../utils/format';
 import { isEditableKind } from '../../../shared/constants/fileKinds';
-import WorkspaceEditor from '../../editor/components/WorkspaceEditor';
 import TabStrip from './TabStrip';
 import EditorTitlebar from './EditorTitlebar';
 import type { Tab, PdfViewState, ViewerViewState } from '../types';
 import type { Folder } from '../../../storage/types';
+
+const WorkspaceEditor = lazy(() => import('../../editor/components/WorkspaceEditor'));
 
 const PdfReader = lazy(() => import('../../../PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('../../../viewers/ReadOnlyFileViewer'));
@@ -62,6 +63,7 @@ export default function EditorSurface({ data, actions }: { data: Data; actions: 
       </Suspense> : <div className="loading-state">Preparing PDF…</div>}
     </div></div>}
     {activeTab.meta.kind === 'pdf' || activeTab.meta.kind === 'viewer' ? null : isEditableKind(activeTab.meta.kind) ? (
+      <Suspense fallback={<div className="loading-state">Loading editor…</div>}>
       <WorkspaceEditor
         kind={activeTab.meta.kind}
         name={activeTab.meta.name}
@@ -74,6 +76,7 @@ export default function EditorSurface({ data, actions }: { data: Data; actions: 
         onChange={(value) => actions.updateDraft(activeTab.id, value)}
         onViewStateChange={(view, preview) => actions.persistEditorViewState(activeTab.id, view, preview)}
       />
+      </Suspense>
     ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
     {workspaceTabs.filter((tab) => tab.meta.kind === 'viewer' && tab.data instanceof Blob).map((tab) => (
       <div key={tab.id} className="persistent-viewer-panel" style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}>
