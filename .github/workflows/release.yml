@@ -10,7 +10,7 @@ on:
         description: "SemVer version to publish from the selected master commit (without the v prefix)"
         required: true
         type: string
-        default: "0.2.0-beta.1"
+        default: "0.2.0-beta.2"
 
 permissions:
   contents: read
@@ -115,11 +115,12 @@ jobs:
           }
           $package = Get-Content package.json -Raw | ConvertFrom-Json
           $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
           $cargo = Get-Content src-tauri/Cargo.toml -Raw
           $match = [regex]::Match($cargo, '(?ms)^\[package\]\s.*?^version\s*=\s*"([^"]+)"')
           if (-not $match.Success) { throw "Could not read [package].version from Cargo.toml" }
-          $versions = @($package.version, $tauri.version, $lock.version, $lock.packages."".version, $match.Groups[1].Value)
+          $lockRootVersion = $lock.packages[""].version
+          $versions = @($package.version, $tauri.version, $lock.version, $lockRootVersion, $match.Groups[1].Value)
           if ($versions | Where-Object { $_ -ne $tagVersion }) {
             throw "Tag v$tagVersion must match package.json, package-lock.json, tauri.conf.json, and Cargo.toml. Found: $($versions -join ', ')"
           }
@@ -183,7 +184,7 @@ jobs:
           name: SiliconVault ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          body_path: release-notes/v0.2.0-beta.1.md
+          body_path: release-notes/${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}.md
           generate_release_notes: false
           prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name, '-') }}
           fail_on_unmatched_files: true
