@@ -42,6 +42,7 @@ import { useWorkspaceInitialization } from './features/workspace/hooks/useWorksp
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
+import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
@@ -225,14 +226,14 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', closeMenus);
   }, []);
 
-  const activeProjectRecord = projects.find((project) => project.id === activeProject) ?? null;
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
-  const activeProjects = projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId);
-  const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
-  // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
-  const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
-  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
-  const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
+  const {
+    activeProjectRecord, activeWorkspace, activeProjects, generalRootFolders,
+    workspaceTabs, workspaceTabSignature, activeTab, liveFiles, storedBytes,
+    workspaceHasContent, trashedFiles, rootFiles, currentFolders,
+  } = useMemo(() => selectWorkspaceViewState({
+    files, folders, projects, workspaces, tabs,
+    activeWorkspaceId, activeProjectId: activeProject, selectedFolderId: selectedFolder, activeTabId,
+  }), [files, folders, projects, workspaces, tabs, activeWorkspaceId, activeProject, selectedFolder, activeTabId]);
 
   const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
   const onBackupRestored = useCallback(async () => {
@@ -253,16 +254,6 @@ export default function App() {
   });
   const { createWorkspace, renameWorkspace, deleteCurrentWorkspace } = workspaceActions;
 
-    // Memoized so the array keeps its identity between renders. Without this, the search effect reruns on every render.
-  const liveFiles = useMemo(
-    () => files.filter((file) => file.deletedAt === null && file.workspaceId === activeWorkspaceId),
-    [files, activeWorkspaceId],
-  );
-  const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
-  const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
-  const trashedFiles = files.filter((file) => file.workspaceId === activeWorkspaceId && file.deletedAt !== null).sort((a, b) => b.deletedAt! - a.deletedAt!);
-  const rootFiles = liveFiles.filter((file) => file.parentFolderId === null && file.projectId === activeProject);
-  const currentFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.parentFolderId === selectedFolder && folder.projectId === activeProject);
   const tree = useMemo(() => buildWorkspaceTree(folders, liveFiles, null, activeProject, activeWorkspaceId), [folders, liveFiles, activeProject, activeWorkspaceId]);
   const excludedMoveFolders = useMemo(() => {
     const ids = new Set<string>();
