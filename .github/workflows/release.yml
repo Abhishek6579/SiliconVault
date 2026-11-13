@@ -125,16 +125,26 @@ jobs:
           if ($tagVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
             throw "Tag is not valid SemVer: $tagVersion"
           }
+      - name: Verify updater signing secret
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw "TAURI_SIGNING_PRIVATE_KEY is not configured in GitHub Actions secrets."
+          }
       - name: Install dependencies
         run: npm ci
-      - name: Build Windows installers
+      - name: Build signed Windows installers
         run: npm run tauri:build
-      - name: Generate SHA-256 checksums
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - name: Generate signed updater manifest and SHA-256 checksums
         shell: pwsh
         run: |
           $nsis = @(Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File -ErrorAction SilentlyContinue)
           $msi = @(Get-ChildItem -Path "src-tauri/target/release/bundle/msi" -Filter "*.msi" -File -ErrorAction SilentlyContinue)
-
           if ($nsis.Count -eq 0) { throw "NSIS installer was not generated." }
           if ($msi.Count -eq 0) { throw "MSI installer was not generated." }
 
@@ -145,6 +155,9 @@ jobs:
           }
           $lines | Set-Content -Encoding ascii SHA256SUMS.txt
 
+          $updaterInstaller = $nsis | Select-Object -First 1
+          $signaturePath = "$($updaterInstaller.FullName).sig"
+          if (-not (Test-Path $signaturePath)) { throw "NSIS updater signature was not generated: $signaturePath" }
           $tagVersion = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.version }}" } else { "${{ github.ref_name }}".Substring(1) }
           $signature = (Get-Content $signaturePath -Raw).Trim()
           $assetUrl = "https://github.com/Abhishek6579/SiliconVault/releases/download/v$tagVersion/$($updaterInstaller.Name)"
@@ -160,6 +173,23 @@ jobs:
             }
           } | ConvertTo-Json -Depth 6
           $manifest | Set-Content -Encoding utf8 latest.json
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: SiliconVault ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.exe.sig
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/msi/*.msi.sig
+            SHA256SUMS.txt
+            latest.json
       - name: Publish rolling updater manifest to slave
         uses: actions/github-script@v7
         env:
@@ -188,16 +218,3 @@ jobs:
               ...(sha ? { sha } : {}),
             });
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          name: SiliconVault ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
-          target_commitish: ${{ github.sha }}
-          generate_release_notes: true
-          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name, '-') }}
-          fail_on_unmatched_files: true
-          files: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
-            SHA256SUMS.txt
