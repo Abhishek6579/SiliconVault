@@ -186,13 +186,15 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
 
   useEffect(() => {
     if (!isTextPreview) return;
-    const openFind = () => {
+    const openFind = (event: Event) => {
+      const requestedTabId = (event as CustomEvent<{ tabId?: string }>).detail?.tabId;
+      if (requestedTabId && requestedTabId !== tabId) return;
       setFindOpen(true);
       window.setTimeout(() => findInputRef.current?.focus(), 0);
     };
     window.addEventListener('siliconvault:open-document-search', openFind);
     return () => window.removeEventListener('siliconvault:open-document-search', openFind);
-  }, [isTextPreview]);
+  }, [isTextPreview, tabId]);
 
   const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', index: -1 }; findInViewer(next); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
   const applyZoom = (next: number) => {
@@ -246,7 +248,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
+              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} tabId={tabId} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
