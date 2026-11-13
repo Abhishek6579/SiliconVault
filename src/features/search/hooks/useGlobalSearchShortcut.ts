@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, type MutableRefObject, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { openSearchPanel } from '@codemirror/search';
 
@@ -8,11 +8,12 @@ interface GlobalSearchShortcutOptions {
   lastFocusedSurfaceRef: MutableRefObject<FocusedSurface>;
   editorViewRef: MutableRefObject<EditorView | null>;
   activeTabId: string | null;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   setSearchPopupOpen: Dispatch<SetStateAction<boolean>>;
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
 }
 
-export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, activeTabId, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
+export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, activeTabId, searchInputRef, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -54,6 +55,8 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       }
       setSearchPopupOpen(true);
       setRightPanel('search');
+      // The input is mounted by the state update; explicitly focus it after React commits.
+      window.setTimeout(() => searchInputRef.current?.focus(), 0);
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('keydown', handleShortcut, true);
@@ -61,5 +64,5 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       document.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('keydown', handleShortcut, true);
     };
-  }, [lastFocusedSurfaceRef, editorViewRef, activeTabId, setRightPanel, setSearchPopupOpen]);
+  }, [lastFocusedSurfaceRef, editorViewRef, activeTabId, searchInputRef, setRightPanel, setSearchPopupOpen]);
 }
