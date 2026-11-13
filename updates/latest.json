@@ -1,11 +1,11 @@
 {
-  "version": "0.1.1-alpha.3",
-  "notes": "SiliconVault 0.1.1-alpha.3 update. See the GitHub release notes for details.",
+  "notes": "# SiliconVault v0.2.0-beta.2\r\n\r\nThis release republishes the Beta 1 feature set with a corrected and more reliable Windows release pipeline.\r\n\r\n## What's included\r\n\r\n- **Release notes after updates:** after an in-app update and restart, SiliconVault displays the release notes for the installed version.\r\n- **Better workspace search:** filename search supports matching text within names, not only from the beginning.\r\n- **Broader in-document Find:** search is available across text-oriented files, including Markdown and source files.\r\n- **Improved Find navigation:** Find Next and Find Previous behavior and editor focus handling have been refined.\r\n- **Workspace refinements:** tab groups resize more consistently, and the Trash includes an empty-trash action.\r\n- **Editor usability:** zoom behavior and general workspace interactions have received further fixes.\r\n\r\n## Release pipeline fixes\r\n\r\n- Correctly parse the npm lockfile root package version during Windows release validation.\r\n- Resolve the release-notes file from the release tag/version instead of a hardcoded version.\r\n- Publish signed updater metadata and SHA-256 checksums with the Windows installers.\r\n\r\n## Packaging\r\n\r\n- Windows NSIS (.exe) and MSI (.msi) installers.\r\n- Signed updater artifacts and updater manifest.\r\n- SHA-256 checksums for release installers.\r\n\r\n## Beta notice\r\n\r\nThis is a beta release. Back up important workspace data before upgrading. Workspace backups are not encrypted by SiliconVault; store exported backups securely.\r\n",
+  "version": "0.2.0-beta.2",
+  "pub_date": "2026-11-13T16:00:30.0961845Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmsxd1QzVHNJZVp1SDJESmRhMnBTN2wycTlVZlNCaVprSWpDZ1VlQlAvb2VuSVg0b3VrOTFXSjluQ1k1dWU3cG0zQVpEKzFWeFlUV2lQQjhIajZTM21HZFJhL1BrR0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NTY4OTQ1CWZpbGU6U2lsaWNvblZhdWx0XzAuMS4xLWFscGhhLjNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLWFscGhhLjMKbFRxV3A0M1plWXFFRU85a09CYjFvZTFLQjkvdW9xMEY1dWE2Si9LWnNqa2tiUHBhT2VVTlozaHFjK0hzVmE3K1ZuUldwWUkzZUZURlBPKy9aMFVaRHc9PQo=",
-      "url": "https://github.com/Abhishek6579/SiliconVault/releases/download/v0.1.1-alpha.3/SiliconVault_0.1.1-alpha.3_x64-setup.exe"
+      "url": "https://github.com/Abhishek6579/SiliconVault/releases/download/v0.2.0-beta.2/SiliconVault_0.2.0-beta.2_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmsxd1QzVHNJZVdVQ2hKTTg1alRwN20zY0k4Wk1jcURaNG5OZ0JnR1RNQTU3VmxVM0lXZmtRZXZGSFdjR0tUNWFtcXlJYk9kUkFvdTlNMGF0YjRoTUVEbk9pWW9QbWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NTg1NjI5CWZpbGU6U2lsaWNvblZhdWx0XzAuMi4wLWJldGEuMl94NjQtc2V0dXAuZXhlCXZlcnNpb246MC4yLjAtYmV0YS4yClNuenlERUo1ci94N01maCtORDU4MHc4UWdobVBHRFZvZlRrRHo2QmNKR2wwbzlJajBPNFZMTHA4bzZVbHZEbGV4YUJWOHdlM05DUHdKdGs4Rkd6Q0RRPT0K"
     }
-  },
-  "pub_date": "2026-11-13T11:22:26.3084490Z"
+  }
 }
