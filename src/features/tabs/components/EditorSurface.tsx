@@ -18,7 +18,7 @@ interface Data {
   workspaceTabs: Tab[];
   activeTabId: string | null;
   editorFontSize: number;
-  editorWorkspaceRef: Ref<HTMLDivElement>;
+  editorWorkspaceRef: RefObject<HTMLDivElement | null>;
   editorViewRef: RefObject<EditorView | null>;
   folders: Folder[];
   getProjectName: (id: string | null) => string | undefined;
@@ -41,7 +41,7 @@ interface Actions {
 }
 export default function EditorSurface({ data, actions }: { data: Data; actions: Actions }) {
   const { activeTab, workspaceTabs, activeTabId, editorFontSize, editorWorkspaceRef, editorViewRef, folders, getProjectName, focusMode } = data;
-  return <div ref={editorWorkspaceRef} className="editor-workspace">
+  return <div ref={editorWorkspaceRef as RefObject<HTMLDivElement>} className="editor-workspace">
     <TabStrip tabs={workspaceTabs} activeTabId={activeTabId} onOpen={actions.onOpenTab} onClose={actions.onCloseTab} onImport={actions.onImport} />
     <EditorTitlebar
       activeTab={activeTab}
