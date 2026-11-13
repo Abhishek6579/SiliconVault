@@ -1908,17 +1908,14 @@ button:disabled {
 
 .app-shell[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #d8dce2;
-  --muted: #929aa5;
-  --line: #2b2f33;
-  --panel: #202224;
-  --soft: #25282b;
-  --sidebar: #17191b;
-  --accent: #78a9d6;
-  --accent-soft: #283744;
-  --green: #82b995;
-  background: #1b1d1f;
-  color: #d4d9df
+  --ink: #e1e3e6;
+  --muted: #9ba1aa;
+  --line: #30343a;
+  --panel: #202328;
+  --soft: #24272c;
+  --sidebar: #1d2024;
+  background: #191b1f;
+  color: #d8dbe0
 }
 
 .app-shell[data-theme="dark"] .sidebar {
@@ -4160,52 +4157,3 @@ body,
 .app-shell[data-theme="dark"] .danger-outline { color: #e29a9a; border-color: #704747; }
 .app-shell[data-theme="dark"] .danger-outline:hover { background: #382626; }
 
-
-/* Reference-inspired charcoal theme: subdued chrome, cool blue accents, readable code. */
-.app-shell[data-theme="dark"] .sidebar { background: #17191b; border-color: #292d30; }
-.app-shell[data-theme="dark"] .main-area,
-.app-shell[data-theme="dark"] .workspace-body { background: #1b1d1f; }
-.app-shell[data-theme="dark"] .topbar,
-.app-shell[data-theme="dark"] .content-toolbar,
-.app-shell[data-theme="dark"] .editor-titlebar,
-.app-shell[data-theme="dark"] .right-panel,
-.app-shell[data-theme="dark"] .right-panel-header { background: #202224; border-color: #2b2f33; }
-.app-shell[data-theme="dark"] .tab-strip,
-.app-shell[data-theme="dark"] .editor-footer,
-.app-shell[data-theme="dark"] .sidebar-bottom { background: #191b1d; border-color: #2b2f33; }
-.app-shell[data-theme="dark"] .nav-item.active,
-.app-shell[data-theme="dark"] .tree-row.selected { background: #293744; color: #b9d3eb; }
-.app-shell[data-theme="dark"] .nav-item.active svg { color: #8eb7df; }
-.app-shell[data-theme="dark"] .nav-item:hover,
-.app-shell[data-theme="dark"] .tree-row:hover,
-.app-shell[data-theme="dark"] .icon-button:hover,
-.app-shell[data-theme="dark"] .mini-action:hover { background: #292d31; color: #dce4ec; }
-.app-shell[data-theme="dark"] .file-tab.active { background: #202224; box-shadow: inset 0 2px #78a9d6; }
-.app-shell[data-theme="dark"] .feature-card,
-.app-shell[data-theme="dark"] .details-card { background: #25282b; border-color: #34393e; }
-.app-shell[data-theme="dark"] .feature-card:hover { border-color: #59758f; }
-.app-shell[data-theme="dark"] .code-editor { background: #1b1d1f; }
-.app-shell[data-theme="dark"] .markdown-preview { background: #202326; }
-.app-shell[data-theme="dark"] .markdown-editor { border-color: #30353a; }
-.app-shell[data-theme="dark"] .preview-label { background: #202326; border-color: #30353a; color: #9ba5b0; }
-.app-shell[data-theme="dark"] .prose { color: #cbd2da; }
-.app-shell[data-theme="dark"] .prose h1,
-.app-shell[data-theme="dark"] .prose h2,
-.app-shell[data-theme="dark"] .prose h3 { color: #e0e6ed; }
-.app-shell[data-theme="dark"] .prose a { color: #8db9e3; }
-.app-shell[data-theme="dark"] .prose pre,
-.app-shell[data-theme="dark"] .prose th { background: #272b2f; border-color: #3a4148; }
-.app-shell[data-theme="dark"] .prose code { background: #30363c; color: #dce5ef; }
-.app-shell[data-theme="dark"] .pdf-shell { background: #1b1d1f; }
-.app-shell[data-theme="dark"] .pdf-toolbar,
-.app-shell[data-theme="dark"] .pdf-search-results { background: #202326; border-color: #30353a; }
-.app-shell[data-theme="dark"] .pdf-find { background: #191c1f; border-color: #353b42; }
-.app-shell[data-theme="dark"] .search-result:hover,
-.app-shell[data-theme="dark"] .outline-button:hover { background: #2c3238; }
-.app-shell[data-theme="dark"] .global-search-trigger { background: #202326; border-color: #353b42; color: #aab5c1; }
-.app-shell[data-theme="dark"] .search-popup { background: #25282b; border-color: #3a4148; }
-.app-shell[data-theme="dark"] .search-popup-input input { color: #e0e6ed; }
-.app-shell[data-theme="dark"] .search-popup-scope { border-color: #353b42; color: #9ba5b0; }
-.app-shell[data-theme="dark"] .primary-button { background: #3679ad; border-color: #4389bd; }
-.app-shell[data-theme="dark"] .primary-button:hover { background: #4389bd; }
-.app-shell[data-theme="dark"] .text-button.selected { background: #293744; color: #b9d3eb; }
