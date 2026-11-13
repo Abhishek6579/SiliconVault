@@ -1,11 +1,8 @@
-import { useEffect, type MutableRefObject, type RefObject, type Dispatch, type SetStateAction } from 'react';
-import { openSearchPanel } from '@codemirror/search';
-import type { EditorView } from '@codemirror/view';
+import { useEffect, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
 
 type FocusedSurface = 'pdf' | 'editor' | null;
 
 interface GlobalSearchShortcutOptions {
-  editorViewRef: RefObject<EditorView | null>;
   lastFocusedSurfaceRef: MutableRefObject<FocusedSurface>;
   setSearchPopupOpen: Dispatch<SetStateAction<boolean>>;
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
@@ -29,21 +26,9 @@ export function useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, 
       }
       if (event.key.toLowerCase() !== 'k' && event.key.toLowerCase() !== 'f') return;
       event.preventDefault();
-      const target = event.target instanceof Element ? event.target : null;
-      const pdfFocused = target?.closest('.pdf-shell') || lastFocusedSurfaceRef.current === 'pdf';
-      const editorFocused = target?.closest('.code-editor, .markdown-preview') || lastFocusedSurfaceRef.current === 'editor';
-      if (event.key.toLowerCase() === 'f' && pdfFocused) {
-        window.dispatchEvent(new Event('siliconvault:open-file-search'));
-      } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current?.dom.isConnected) {
-        openSearchPanel(editorViewRef.current);
-        window.setTimeout(() => {
-          const searchField = document.querySelector<HTMLInputElement>('.cm-search input');
-          if (searchField) searchField.placeholder = 'Find in current file…';
-        }, 0);
-      } else {
-        setSearchPopupOpen(true);
-        setRightPanel('search');
-      }
+      event.preventDefault();
+      setSearchPopupOpen(true);
+      setRightPanel('search');
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('keydown', handleShortcut);
@@ -51,5 +36,5 @@ export function useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, 
       document.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('keydown', handleShortcut);
     };
-  }, [editorViewRef, lastFocusedSurfaceRef, setRightPanel, setSearchPopupOpen]);
+  }, [lastFocusedSurfaceRef, setRightPanel, setSearchPopupOpen]);
 }
