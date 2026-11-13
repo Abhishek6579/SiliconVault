@@ -69,7 +69,7 @@ export default function EditorSurface({ data, actions }: { data: Data; actions: 
         fontSize={editorFontSize}
         preview={activeTab.preview}
         editorState={activeTab.editorState}
-        editorViewRef={activeTab.meta.kind === 'markdown' ? editorViewRef : undefined}
+        editorViewRef={editorViewRef}
         onChange={(value) => actions.updateDraft(activeTab.id, value)}
         onViewStateChange={(view, preview) => actions.persistEditorViewState(activeTab.id, view, preview)}
       />
