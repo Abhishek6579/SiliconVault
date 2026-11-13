@@ -55,11 +55,19 @@ interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
 interface SearchResult { file: FileMeta; text: string; }
 
-// Accept both Markdown's $...$ syntax and the common LaTeX \\( ... \\) / \\[ ... \\] delimiters.
-// Normalize only the math delimiters and escaped subscripts inside math spans; the stored note stays untouched.
+// Accept Markdown's $...$ syntax and common LaTeX \( ... \) / \[ ... \] delimiters.
+// The conversion affects preview rendering only; the original Markdown remains unchanged.
 function normalizeMarkdownMath(source: string): string {
   const normalized = source
-    .replace(/\\\\\\\\?\\(/g, '
+    .replace(/\\{1,2}\(/g, () => '$')
+    .replace(/\\{1,2}\)/g, () => '$')
+    .replace(/\\{1,2}\[/g, () => '$$')
+    .replace(/\\{1,2}\]/g, () => '$$');
+  return normalized.replace(/(\${1,2})([\s\S]*?)\1/g, (_match, delimiter: string, expression: string) =>
+    delimiter + expression.replace(/\\_/g, '_') + delimiter,
+  );
+}
+
 export default function App() {
   useEffect(() => collectFrontendDiagnostics(), []);
   const [loading, setLoading] = useState(true);
