@@ -151,9 +151,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     event.preventDefault();
     applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
   };
-  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
-    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-viewer-scroll]');
-    if (!target) return;
+  const handleScroll = (event: UIEvent<HTMLElement>) => {
+    const target = event.currentTarget;
     emitViewState({ scrollTop: target.scrollTop, scrollLeft: target.scrollLeft });
   };
   const handleZoomKeys = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -171,7 +170,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
 
   if (isImage) return <div ref={rootRef} className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}
-    <div className="image-viewer-viewport" data-viewer-scroll><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
+    <div className="image-viewer-viewport" data-viewer-scroll onScroll={handleScroll}><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
       {url ? <img src={url} alt={fileName} /> : <div className="loading-state">Loading image…</div>}
     </div></div>
   </div>;
@@ -185,7 +184,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onError={handleOfficeRenderError} />
+              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
@@ -194,19 +193,19 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div ref={rootRef} className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
-    <div className="viewer-table-scroll" data-viewer-scroll><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
+    <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
   </div>;
   if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
-      <div className="viewer-table-scroll" data-viewer-scroll><table><thead><tr><th>Identifier</th><th>Width</th><th>Signal</th></tr></thead><tbody>{signals.map((v, i) => <tr key={i}><td>{v[2]}</td><td>{v[1]}</td><td>{v[3]}</td></tr>)}</tbody></table></div>
+      <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><table><thead><tr><th>Identifier</th><th>Width</th><th>Signal</th></tr></thead><tbody>{signals.map((v, i) => <tr key={i}><td>{v[2]}</td><td>{v[1]}</td><td>{v[3]}</td></tr>)}</tbody></table></div>
       <p className="viewer-note">Signal metadata is shown here. Interactive timing traces are not part of this initial viewer.</p>
     </div>
   </div>;
   if (['fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
   return <div ref={rootRef} className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
-    <pre data-viewer-scroll style={{ zoom }}>{text || 'No text content.'}</pre>
+    <pre data-viewer-scroll onScroll={handleScroll} style={{ zoom }}>{text || 'No text content.'}</pre>
   </div>;
 }
