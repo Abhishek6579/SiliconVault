@@ -285,6 +285,39 @@ describe('workspace storage', () => {
     expect(streamed.files[0].content).toMatchObject({ encoding: 'text', value: 'stream payload' });
   });
 
+  it('splits large binary backup records into bounded byte chunks', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    const bytes = new Uint8Array(1024 * 1024).fill(7);
+    await database.files.add({
+      id: 'large-binary', workspaceId: DEFAULT_WORKSPACE_ID, kind: 'pdf', name: 'large.pdf',
+      parentFolderId: null, projectId: null, size: bytes.byteLength, mimeType: 'application/pdf',
+      createdAt: now, updatedAt: now, deletedAt: null,
+    });
+    await database.contents.add({ fileId: 'large-binary', data: new Blob([bytes], { type: 'application/pdf' }) });
+
+    const reader = exportBackupStream(database).getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    let maxChunkBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalBytes += value.byteLength;
+      maxChunkBytes = Math.max(maxChunkBytes, value.byteLength);
+    }
+    const serialized = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) { serialized.set(chunk, offset); offset += chunk.byteLength; }
+    const backup = JSON.parse(new TextDecoder().decode(serialized)) as Awaited<ReturnType<typeof exportBackup>>;
+
+    expect(maxChunkBytes).toBeLessThanOrEqual(64 * 1024);
+    expect(backup.files).toHaveLength(1);
+    expect(backup.files[0].content.encoding).toBe('base64');
+  });
+
   it('rejects an invalid version and checksum before changing stored data', async () => {
     const database = createDatabase();
     await database.open();

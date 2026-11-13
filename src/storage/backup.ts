@@ -6,6 +6,7 @@ import { MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_RECORDS, MAX_BACKUP_TOTAL_
 const FORMAT = 'engineering-workspace-backup';
 const VERSION = 1;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
+const BACKUP_STREAM_CHUNK_BYTES = 64 * 1024;
 
 type BackupDatabase = Pick<WorkspaceDatabase, 'files' | 'contents' | 'folders' | 'projects'> & {
   preferences?: Table<WorkspacePreference, string>;
@@ -186,17 +187,27 @@ async function* backupJsonChunks(database: BackupDatabase): AsyncGenerator<strin
 
 export function exportBackupStream(database: BackupDatabase): ReadableStream<Uint8Array> {
   const iterator = backupJsonChunks(database);
+  const encoder = new TextEncoder();
+  let pending: Uint8Array | null = null;
+  let offset = 0;
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        const next = await iterator.next();
-        if (next.done) controller.close();
-        else controller.enqueue(new TextEncoder().encode(next.value));
+        if (!pending) {
+          const next = await iterator.next();
+          if (next.done) { controller.close(); return; }
+          pending = encoder.encode(next.value);
+          offset = 0;
+        }
+        const end = Math.min(offset + BACKUP_STREAM_CHUNK_BYTES, pending.length);
+        controller.enqueue(pending.subarray(offset, end));
+        offset = end;
+        if (offset >= pending.length) { pending = null; offset = 0; }
       } catch (error) {
         controller.error(error);
       }
     },
-    cancel() { void iterator.return?.(undefined); },
+    cancel() { pending = null; void iterator.return?.(undefined); },
   });
   return stream;
 }
