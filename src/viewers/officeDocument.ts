@@ -69,7 +69,26 @@ async function readZipEntry(view: DataView, bytes: Uint8Array, entry: ZipEntry):
   else if (entry.method === 8) {
     if (typeof DecompressionStream === 'undefined') throw new Error('This runtime cannot decompress Office documents.');
     const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    content = new Uint8Array(await new Response(stream).arrayBuffer());
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_XML_BYTES) {
+          await reader.cancel();
+          throw new Error('This Office document contains an XML part that is too large to preview.');
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    content = new Uint8Array(total);
+    let cursor = 0;
+    for (const chunk of chunks) { content.set(chunk, cursor); cursor += chunk.byteLength; }
   } else throw new Error(`Office compression method ${entry.method} is not supported.`);
   if (content.byteLength > MAX_XML_BYTES) throw new Error('This Office document contains an XML part that is too large to preview.');
   return new TextDecoder('utf-8').decode(content);
