@@ -247,10 +247,12 @@ export default function AppShell() {
           switchProject, setView, setActiveTabId, createProject: () => void createProject(), doEmptyTrash,
           restoreProject, deleteProject, deleteFolder,
         }}
-        actionsData={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status, searchOpen: searchPopupOpen, query, searchInputRef }}
+        actionsData={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status, searchOpen: searchPopupOpen, query, searchInputRef, searchResults, folderSearchResults, getProjectName }}
         actions={{
           setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent: () => void createFolderInCurrent(),
           createWorkspaceFile, setSearchPopupOpen, setQuery, setRightPanel, toggleTheme,
+          openSearchFile: (file) => { void openFile(file); setSearchPopupOpen(false); setQuery(''); },
+          openSearchFolder: (folder) => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); setQuery(''); },
           setDetailsOpen: () => setRightPanel((current) => current === 'details' ? null : 'details'),
         }}
       />
