@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { FileKindIcon } from '../../../components/FileKindIcon';
+import FileKindIcon from '../../../components/FileKindIcon';
 import { Maximize2, Minimize2, Pencil, Save, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { isEditableKind } from '../../../shared/constants/fileKinds';
 import type { Folder } from '../../../storage/types';
