@@ -4042,3 +4042,72 @@ body,
 .app-shell.focus-mode .editor-titlebar {
   flex: none;
 }
+
+
+/* Consistent native scrollbars for every read-only preview surface. */
+.file-viewer,
+.file-viewer * {
+  scrollbar-width: thin;
+  scrollbar-color: #737b8b transparent;
+}
+.file-viewer :where([style*="overflow"], pre),
+.image-viewer-viewport,
+.viewer-table-scroll,
+.pdf-page-host,
+.office-ooxml-host,
+.office-ooxml-host * {
+  scrollbar-width: thin;
+  scrollbar-color: #737b8b transparent;
+}
+.file-viewer ::-webkit-scrollbar,
+.office-ooxml-host *::-webkit-scrollbar {
+  display: block !important;
+  width: 9px !important;
+  height: 9px !important;
+}
+.file-viewer ::-webkit-scrollbar-track,
+.office-ooxml-host *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.file-viewer ::-webkit-scrollbar-thumb,
+.office-ooxml-host *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: #737b8b80;
+  background-clip: content-box;
+}
+
+.office-ooxml-viewer {
+  flex-direction: column;
+}
+
+.office-ooxml-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 38px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--border, #292929);
+  background: var(--panel, #111);
+}
+
+.office-ooxml-toolbar span {
+  min-width: 42px;
+  color: var(--muted, #aaa);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.office-ooxml-toolbar .icon-button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.office-ooxml-host {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
