@@ -3,7 +3,6 @@ import { useCallback } from 'react';
 import { db } from '../../../storage/database';
 import { moveFile, moveFolder } from '../../../storage/hierarchy';
 import { readDragPayload } from '../../../shared/utils/dragPayload';
-import type { ImportTarget } from './useImportActions';
 
 interface Options {
   activeProject: string | null;
