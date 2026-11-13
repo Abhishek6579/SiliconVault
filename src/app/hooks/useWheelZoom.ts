@@ -18,6 +18,8 @@ export function useWheelZoom(
           : null;
       const overPdf = Boolean(target?.closest('.pdf-shell'));
       const overEditor = Boolean(target?.closest('.code-editor, .markdown-preview'));
+      // Read-only document viewers own their Ctrl+wheel zoom. Do not zoom the app shell as well.
+      if (!overPdf && target?.closest('.file-viewer')) return;
       if (overPdf) {
         if (target?.closest('.pdf-page-host')) return;
         event.preventDefault();
