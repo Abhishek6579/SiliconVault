@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { Dispatch, Ref, SetStateAction } from 'react';
 import { Code2, ChevronDown, FilePlus2, FileText, FolderPlus, Import } from 'lucide-react';
 
 interface Target { folderId: string | null; projectId: string | null; workspaceId: string; }
@@ -9,7 +9,7 @@ interface Data {
   activeProject: string | null;
   currentWorkspaceId: string;
   open: boolean;
-  menuRef: RefObject<HTMLDivElement | null>;
+  menuRef: Ref<HTMLDivElement>;
 }
 interface Actions {
   setOpen: Dispatch<SetStateAction<boolean>>;
