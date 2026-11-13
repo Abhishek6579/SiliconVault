@@ -87,8 +87,8 @@ function collectParagraphText(paragraph: Element): string {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const element = node as Element;
       if (element.localName === 't') { result += element.textContent ?? ''; return; }
-      if (element.localName === 'tab') { result += '\\t'; return; }
-      if (element.localName === 'br' || element.localName === 'cr') { result += '\\n'; return; }
+      if (element.localName === 'tab') { result += '\t'; return; }
+      if (element.localName === 'br' || element.localName === 'cr') { result += '\n'; return; }
     }
     for (const child of Array.from(node.childNodes)) visit(child);
   };
@@ -101,11 +101,11 @@ function paragraphsFromXml(source: string, paragraphTag: string): string {
   return Array.from(document.getElementsByTagNameNS('*', paragraphTag))
     .map(collectParagraphText)
     .filter((paragraph) => paragraph.length > 0)
-    .join('\\n');
+    .join('\n');
 }
 
 function slideNumber(name: string): number {
-  return Number(name.match(/slide(\\d+)\\.xml$/i)?.[1] ?? 0);
+  return Number(name.match(/slide(\d+)\.xml$/i)?.[1] ?? 0);
 }
 
 export async function extractOfficeText(file: Blob, extension: string): Promise<string> {
@@ -123,16 +123,16 @@ export async function extractOfficeText(file: Blob, extension: string): Promise<
 
   if (extension === 'pptx' || extension === 'pptm') {
     const slides = entries
-      .filter((entry) => /^ppt\\/slides\\/slide\\d+\\.xml$/i.test(entry.name))
+      .filter((entry) => /^ppt\/slides\/slide\d+\.xml$/i.test(entry.name))
       .sort((left, right) => slideNumber(left.name) - slideNumber(right.name));
     if (!slides.length) throw new Error('The PowerPoint file does not contain readable slides.');
     const text: string[] = [];
     for (let index = 0; index < slides.length; index += 1) {
       const slideXml = await readZipEntry(view, bytes, slides[index]);
       const slideText = paragraphsFromXml(slideXml, 'p');
-      text.push(`Slide ${index + 1}\\n${slideText || '(No extractable text)'}`);
+      text.push(`Slide ${index + 1}\n${slideText || '(No extractable text)'}`);
     }
-    return text.join('\\n\\n');
+    return text.join('\n\n');
   }
 
   throw new Error('Only DOCX/DOCM and PPTX/PPTM Open XML files are supported. Convert legacy DOC/PPT files to the newer format to preview them.');
