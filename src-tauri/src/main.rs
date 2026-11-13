@@ -44,7 +44,27 @@ fn find_libreoffice() -> Option<PathBuf> {
         }
     }
 
-    Some(PathBuf::from(if cfg!(target_os = "windows") { "soffice.exe" } else { "soffice" }))
+    let executable_name = if cfg!(target_os = "windows") { "soffice.exe" } else { "soffice" };
+    let path_variable = std::env::var_os("PATH")?;
+    std::env::split_paths(&path_variable)
+        .map(|directory| directory.join(executable_name))
+        .find(|candidate| candidate.is_file())
+}
+
+fn path_to_file_url(path: &Path) -> String {
+    let normalized = path.to_string_lossy().replace('\\\\', "/");
+    let encoded: String = normalized.bytes().map(|byte| {
+        if byte.is_ascii_alphanumeric() || b"/-_.~:".contains(&byte) {
+            (byte as char).to_string()
+        } else {
+            format!("%{byte:02X}")
+        }
+    }).collect();
+    if cfg!(target_os = "windows") {
+        format!("file:///{encoded}")
+    } else {
+        format!("file://{encoded}")
+    }
 }
 
 fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>, String> {
@@ -66,7 +86,8 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
         let input = directory.join(format!("source.{extension}"));
         fs::write(&input, bytes).map_err(|error| format!("Could not stage the Word document: {error}"))?;
         let profile = directory.join("lo-profile");
-        let profile_url = format!("file://{}", profile.to_string_lossy().replace('\\\\', "/"));
+        fs::create_dir_all(&profile).map_err(|error| format!("Could not create a LibreOffice profile: {error}"))?;
+        let profile_url = path_to_file_url(&profile);
         let output = Command::new(&executable)
             .arg("--headless")
             .arg("--nologo")
