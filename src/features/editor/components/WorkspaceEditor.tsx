@@ -104,18 +104,19 @@ export default function WorkspaceEditor({
         result = new SearchCursor(view.state.doc, needle, 0, start).next();
       }
     } else {
-      const upper = Math.max(0, findPositionRef.current - 1);
-      const cursor = new SearchCursor(view.state.doc, needle, 0, upper);
-      let previous = cursor.next();
-      while (!previous.done) {
-        result = previous;
-        previous = cursor.next();
+      // Search the full document and retain the last match strictly before
+      // the current match. If none exists (including the first match at 0),
+      // wrap to the final occurrence.
+      const cursor = new SearchCursor(view.state.doc, needle, 0, view.state.doc.length);
+      let candidate: ReturnType<SearchCursor['next']> | undefined;
+      let last: ReturnType<SearchCursor['next']> | undefined;
+      let current = cursor.next();
+      while (!current.done) {
+        last = current;
+        if (current.value.from < findPositionRef.current) candidate = current;
+        current = cursor.next();
       }
-      if (result === undefined) {
-        const wrap = new SearchCursor(view.state.doc, needle, 0, view.state.doc.length);
-        let last = wrap.next();
-        while (!last.done) { result = last; last = wrap.next(); }
-      }
+      result = candidate ?? last;
     }
     if (!result || result.done) return;
     const match = result.value;
