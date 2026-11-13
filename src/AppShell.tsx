@@ -28,6 +28,7 @@ import { useWorkspaceInitialization } from './features/workspace/hooks/useWorksp
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
+import { useTabLifecycle } from './features/tabs/hooks/useTabLifecycle';
 import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
 import { isEditableKind } from './shared/constants/fileKinds';
 import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
@@ -37,7 +38,7 @@ import BusyPill from './shared/ui/BusyPill';
 import StartupScreen from './shared/ui/StartupScreen';
 import WelcomePage from './features/workspace/components/WelcomePage';
 import { useClickOutside } from './shared/hooks/useClickOutside';
-import { readDragPayload } from './shared/utils/dragPayload';
+
 import { useOpenFile } from './features/tabs/hooks/useOpenFile';
 import MoveDialog from './features/workspace/components/dialogs/MoveDialog';
 import MigrationDialog from './features/workspace/components/dialogs/MigrationDialog';
@@ -172,6 +173,7 @@ export default function AppShell() {
   }), [files, folders, projects, workspaces, tabs, activeWorkspaceId, activeProject, selectedFolder, activeTabId]);
 
   const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
+  const { closeTab } = useTabLifecycle({ tabs, activeTabId, setTabs, setActiveTabId, requestConfirmation, persistDraft });
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
     const restoredWorkspaces = await db.workspaces.toArray();
@@ -301,23 +303,6 @@ export default function AppShell() {
     setSelectedFolder(null);
     setView('workspace');
     setWorkspaceMenuOpen(false);
-  }
-
-  function closeTab(id: string) {
-    const tab = tabs.find((item) => item.id === id);
-    const close = () => {
-      const remaining = tabs.filter((item) => item.id !== id);
-      setTabs(remaining);
-      if (activeTabId === id) setActiveTabId(remaining.at(-1)?.id ?? null);
-    };
-    if (tab?.dirty) {
-      requestConfirmation('Save before closing?', `“${tab.meta.name}” has unsaved changes. Save them before closing this tab?`, 'Save & close', async () => {
-        await persistDraft(id, tab.draft);
-        close();
-      });
-      return;
-    }
-    close();
   }
 
   async function createWorkspaceFile(kind: 'markdown' | 'code') {
