@@ -39,7 +39,9 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const findInputRef = useRef<HTMLInputElement>(null);
-  const findCursorRef = useRef({ query: '', index: -1 });
+  const findCursorRef = useRef({ query: '', offset: -1 });
+  const findTextIndexRef = useRef<{ lower: string; segments: Array<{ node: Text; start: number; end: number }> } | null>(null);
+  const findTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const stateTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const latestState = useRef<ViewerViewState>({ zoom: initialState?.zoom ?? 1, scrollTop: initialState?.scrollTop ?? 0, scrollLeft: initialState?.scrollLeft ?? 0 });
   const [officePdf, setOfficePdf] = useState<Blob | null>(null);
@@ -148,49 +150,69 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     };
   }, [tabId]);
   useEffect(() => {
+    findTextIndexRef.current = null;
+    findCursorRef.current = { query: '', offset: -1 };
     if (text) restoreScrollPosition();
   }, [text, tabId]);
   const findInViewer = (query: string, direction: 1 | -1 = 1) => {
     const root = rootRef.current;
     const needle = query.trim().toLocaleLowerCase();
     if (!root) return;
-    if (!needle) { window.getSelection()?.removeAllRanges(); return; }
-    const segments: Array<{ node: Text; start: number; end: number }> = [];
-    let combined = '';
-    let previousBlock: Element | null = null;
-    const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let current = walker.nextNode();
-    while (current) {
-      const node = current as Text;
-      const parent = node.parentElement;
-      if (!parent?.closest('.viewer-zoom-controls, .viewer-meta, .viewer-find')) {
-        const block = parent?.closest('pre, p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
-        if (block && previousBlock && block !== previousBlock) combined += '\n';
-        const value = node.textContent ?? '';
-        if (value) {
-          segments.push({ node, start: combined.length, end: combined.length + value.length });
-          combined += value;
+    if (!needle) { window.getSelection()?.removeAllRanges(); findCursorRef.current = { query: '', offset: -1 }; return; }
+
+    // Index the rendered text once instead of walking the full DOM and
+    // allocating every one-character match on every input event.
+    let index = findTextIndexRef.current;
+    if (!index) {
+      const segments: Array<{ node: Text; start: number; end: number }> = [];
+      let combined = '';
+      let previousBlock: Element | null = null;
+      const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        const node = current as Text;
+        const parent = node.parentElement;
+        if (!parent?.closest('.viewer-zoom-controls, .viewer-meta, .viewer-find')) {
+          const block = parent?.closest('pre, p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
+          if (block && previousBlock && block !== previousBlock) combined += '\n';
+          const value = node.textContent ?? '';
+          if (value) {
+            segments.push({ node, start: combined.length, end: combined.length + value.length });
+            combined += value;
+          }
+          previousBlock = block ?? previousBlock;
         }
-        previousBlock = block ?? previousBlock;
+        current = walker.nextNode();
       }
-      current = walker.nextNode();
+      index = { lower: combined.toLocaleLowerCase(), segments };
+      findTextIndexRef.current = index;
     }
-    const matches: number[] = [];
-    const lower = combined.toLocaleLowerCase();
-    let offset = lower.indexOf(needle);
-    while (offset >= 0) { matches.push(offset); offset = lower.indexOf(needle, offset + Math.max(1, needle.length)); }
-    if (!matches.length) return;
-    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, index: -1 };
-    const nextIndex = (findCursorRef.current.index + direction + matches.length) % matches.length;
-    findCursorRef.current.index = nextIndex;
-    const startOffset = matches[nextIndex];
-    const endOffset = startOffset + needle.length;
-    const startSegment = segments.find((segment) => startOffset >= segment.start && startOffset < segment.end);
-    const endSegment = segments.find((segment) => endOffset > segment.start && endOffset <= segment.end);
+
+    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, offset: -1 };
+    const from = direction > 0 ? findCursorRef.current.offset + 1 : Math.max(0, findCursorRef.current.offset - 1);
+    let matchOffset = direction > 0 ? index.lower.indexOf(needle, from) : index.lower.lastIndexOf(needle, from);
+    if (matchOffset < 0) matchOffset = direction > 0 ? index.lower.indexOf(needle) : index.lower.lastIndexOf(needle);
+    if (matchOffset < 0) return;
+    findCursorRef.current = { query: needle, offset: matchOffset };
+
+    const locate = (offset: number) => {
+      let low = 0;
+      let high = index!.segments.length - 1;
+      while (low <= high) {
+        const middle = (low + high) >>> 1;
+        const segment = index!.segments[middle];
+        if (offset < segment.start) high = middle - 1;
+        else if (offset >= segment.end) low = middle + 1;
+        else return segment;
+      }
+      return null;
+    };
+    const startSegment = locate(matchOffset);
+    const endSegment = locate(matchOffset + needle.length - 1);
     if (!startSegment || !endSegment) return;
     const range = window.document.createRange();
-    range.setStart(startSegment.node, startOffset - startSegment.start);
-    range.setEnd(endSegment.node, endOffset - endSegment.start);
+    range.setStart(startSegment.node, matchOffset - startSegment.start);
+    range.setEnd(endSegment.node, matchOffset + needle.length - endSegment.start);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
@@ -209,7 +231,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     return () => window.removeEventListener('siliconvault:open-document-search', openFind);
   }, [isTextPreview, tabId]);
 
-  const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', index: -1 }; findInViewer(next); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
+  const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInViewer(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
   const applyZoom = (next: number) => {
     const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
     setZoom(bounded);
