@@ -51,7 +51,8 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
   const findInDocument = (query: string, direction: 1 | -1 = 1) => {
     const host = hostRef.current;
     const needle = query.trim().toLocaleLowerCase();
-    if (!host || !needle) return;
+    if (!host) return;
+    if (!needle) { window.getSelection()?.removeAllRanges(); return; }
     const matches: Array<{ node: Text; start: number }> = [];
     const walker = window.document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
     let current = walker.nextNode();
@@ -232,7 +233,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
   return (
     <div className="office-ooxml-viewer">
       <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document controls">
-        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findCursorRef.current = { query: '', index: -1 }; }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
+        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', index: -1 }; findInDocument(next); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
         <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => changeScale(scale - 0.1)} disabled={scale <= 0.1}><ZoomOut size={15} /></button>
         <span aria-live="polite">{Math.round(scale * 100)}%</span>
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
