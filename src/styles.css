@@ -2547,6 +2547,7 @@ button:disabled {
 }
 
 .pdf-page-wrap {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: flex-start;
