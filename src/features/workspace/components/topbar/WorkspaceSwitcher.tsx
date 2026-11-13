@@ -1,4 +1,4 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { Dispatch, Ref, SetStateAction } from 'react';
 import { Archive, Check, ChevronDown, Clock3, Layers, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from '../../../../storage/types';
 
@@ -15,7 +15,7 @@ interface Data {
   activeProjects: Project[];
   trashedFiles: FileMeta[];
   open: boolean;
-  menuRef: RefObject<HTMLDivElement | null>;
+  menuRef: Ref<HTMLDivElement>;
 }
 interface Actions {
   setOpen: Dispatch<SetStateAction<boolean>>;
