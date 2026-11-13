@@ -2,6 +2,8 @@
 name = "silicon-vault"
 version = "0.1.1-alpha.2"
 description = "Local-first engineering workspace"
+license = "Apache-2.0"
+license-file = "../LICENSE"
 authors = ["SiliconVault"]
 edition = "2021"
 
