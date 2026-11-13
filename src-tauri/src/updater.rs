@@ -10,7 +10,6 @@ const PROGRESS_EVENT: &str = "siliconvault-update-progress";
 pub struct UpdateInfo {
     version: String,
     notes: Option<String>,
-    date: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,7 +27,6 @@ pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, Stri
     Ok(update.map(|update| UpdateInfo {
         version: update.version,
         notes: update.body,
-        date: update.date.map(|date| date.to_rfc3339()),
     }))
 }
 
