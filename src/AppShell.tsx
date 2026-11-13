@@ -51,6 +51,7 @@ import { useWorkspaceNav } from './features/workspace/context/WorkspaceNavContex
 import { DialogHost, useDialog } from './features/workspace/context/DialogContext';
 import { useImportActions, type ImportTarget } from './features/workspace/hooks/useImportActions';
 import { useItemActions, type ContextItemType, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
+import FileList from './features/workspace/components/file-list/FileList';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
@@ -225,7 +226,7 @@ export default function AppShell() {
   });
 
   const {
-    moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject,
+    moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject, restoreTrashedFile,
     doEmptyTrash, runContextAction,
   } = useItemActions({
     files, folders, projects, tabs, activeProject, selectedFolder, activeTabId,
@@ -513,25 +514,10 @@ export default function AppShell() {
             {activeProjects.length > 0 && <><h2>Projects</h2><div className="overview-card-grid">{activeProjects.map((project) => <button className="overview-card" key={project.id} onClick={() => void switchProject(project.id)}><span className="overview-card-icon project-card-icon"><Layers size={17} /></span><b>{project.name}</b><small>{liveFiles.filter((file) => file.projectId === project.id).length} files · {folders.filter((folder) => folder.projectId === project.id).length} folders</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
             {generalRootFolders.length > 0 && <><h2>General folders</h2><div className="overview-card-grid">{generalRootFolders.map((folder) => <button className="overview-card" key={folder.id} onClick={() => { setSelectedFolder(folder.id); setActiveProject(null); setActiveTabId(null); }}><span className="overview-card-icon folder-card-icon"><Folder size={17} /></span><b>{folder.name}</b><small>General workspace folder</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
           </section>}
-          <div className="file-list-scroll">
-            {view === 'workspace' && currentFolders.length > 0 && <>
-              {selectedFolder && <div className="folder-contents-heading"><Folder size={14} /> Folders</div>}
-              {currentFolders.sort((a, b) => a.name.localeCompare(b.name)).map((folder) => <div className="file-list-row folder-list-row" key={folder.id} draggable onContextMenu={(event) => showContextMenu('folder', folder.id, event)} onDragStart={(event) => writeDragPayload(event.dataTransfer, { id: folder.id, type: 'folder' })} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.id, folder.projectId, folder.workspaceId)}>
-                <button className="file-name-button" onClick={() => { setSelectedFolder(folder.id); setActiveTabId(null); }}><Folder size={17} className="folder-icon" /><span>{folder.name}</span><small>Folder</small></button><span className="kind-cell">Folder</span><span className="size-cell">—</span><span className="date-cell">{new Date(folder.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.id, event)}><Ellipsis size={16} /></button>
-              </div>)}
-            </>}
-            {/* {view === 'workspace' && !activeProject && !selectedFolder && <div className="workspace-files-heading"><span>{visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'}</span></div>} */}
-            {view === 'trash' && trashedFiles.length > 0 && <div className="trash-actions"><span>{trashedFiles.length} item{trashedFiles.length === 1 ? '' : 's'} in Trash</span><button className="outline-button danger-outline" onClick={() => void doEmptyTrash()}><Trash2 size={14} /> Empty Trash</button></div>}
-            <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
-            {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-              <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
-            </div>) : view === 'recent' ? sortedVisible.length === 0 ? <EmptyState title="No recent files" message="Open a file or import one to start building your workspace." icon={<Clock3 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{getProjectName(file.projectId) ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
-            </div>) : sortedVisible.length === 0 && currentFolders.length === 0 && !(view === 'workspace' && !activeProject && activeProjects.length > 0) ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => writeDragPayload(event.dataTransfer, { id: file.id, type: 'file' })}>
-              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? getProjectName(file.projectId) : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
-            </div>)}
-            {view === 'workspace' && <div className="root-drop-hint"><Import size={14} /> Drop files here to import them into {selectedFolder ? 'this folder' : activeProjectRecord?.name ?? 'the workspace'}</div>}
-          </div>
+          <FileList
+            data={{ view, sortDesc, currentFolders, selectedFolder, activeProject, activeProjectRecord, activeProjects, currentWorkspaceId, trashedFiles, sortedVisible, getProjectName }}
+            actions={{ setSelectedFolder, setActiveTabId, setSort, setSortDesc, showContextMenu, handleDrop, doEmptyTrash, restoreTrashedFile, openFile, deleteFile, createWorkspaceFile, startImportInto }}
+          />
         </div>}
       </div>}
     </main>
