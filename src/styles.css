@@ -4130,27 +4130,29 @@ body,
 
 
 /* Contextual search popup and explicit Trash action. */
-.global-search-trigger {
-  display: inline-flex; align-items: center; gap: 9px; min-width: 220px; height: 31px;
-  padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer;
+.global-search-trigger,
+.global-search-inline {
+  display: inline-flex; align-items: center; gap: 9px; width: 220px; min-width: 220px; height: 31px;
+  box-sizing: border-box; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel); color: var(--muted); font-size: 11px;
 }
+.global-search-trigger { cursor: pointer; }
 .global-search-trigger span { flex: 1; text-align: left; }
-.global-search-trigger kbd, .search-popup kbd {
+.global-search-inline { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #6488c7) 25%, transparent); }
+.global-search-inline input {
+  flex: 1; width: 100%; min-width: 0; padding: 0; border: 0; outline: 0;
+  background: transparent; color: var(--text); font: inherit; font-size: 11px;
+}
+.global-search-inline input::placeholder { color: var(--muted); }
+.global-search-trigger kbd, .global-search-inline kbd {
   padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px;
-  color: var(--muted); font-size: 9px; line-height: 1.4;
+  color: var(--muted); font-size: 9px; line-height: 1.4; white-space: nowrap;
 }
-.search-popup-backdrop {
-  position: fixed; inset: 0; z-index: 12000; display: flex; justify-content: center;
-  align-items: flex-start; padding: 15vh 18px 18px; background: #080b1280;
+.global-search-close {
+  display: inline-grid; place-items: center; flex: 0 0 auto; padding: 2px; border: 0;
+  background: transparent; color: var(--muted); cursor: pointer;
 }
-.search-popup {
-  width: min(620px, 100%); overflow: hidden; border: 1px solid var(--line);
-  border-radius: 11px; background: var(--panel); box-shadow: 0 22px 70px #0005;
-}
-.search-popup-input { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-.search-popup-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; }
-.search-popup-scope { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.global-search-close:hover { color: var(--text); }
 .trash-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px; color: var(--muted); font-size: 11px; }
 .danger-outline { color: #b94d4d; border-color: #d7a4a4; }
 .danger-outline:hover { background: #fff1f1; }
