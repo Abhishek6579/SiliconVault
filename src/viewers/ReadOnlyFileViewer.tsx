@@ -92,6 +92,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     let active = true;
     setOfficeText('');
     setOfficeBlocks([]);
+    setOfficePdf(null);
     setOfficeError('');
     setCopyError('');
     setOfficeLoading(true);
