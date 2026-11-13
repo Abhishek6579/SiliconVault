@@ -4,6 +4,7 @@ import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 interface Props {
   data: Blob;
   extension: string;
+  tabId: string;
   onError: (error: Error) => void;
   zoom: number;
   initialScrollTop: number;
@@ -25,7 +26,7 @@ function asError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error('The Office renderer could not open this document.');
 }
 
-export default function OfficeOoxmlViewer({ data, extension, onError, zoom, initialScrollTop, initialScrollLeft, onStateChange, onScrollStateChange }: Props) {
+export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoom, initialScrollTop, initialScrollLeft, onStateChange, onScrollStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(zoom);
@@ -81,13 +82,15 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
   };
 
   useEffect(() => {
-    const openFind = () => {
+    const openFind = (event: Event) => {
+      const requestedTabId = (event as CustomEvent<{ tabId?: string }>).detail?.tabId;
+      if (requestedTabId && requestedTabId !== tabId) return;
       setFindOpen(true);
       window.setTimeout(() => findInputRef.current?.focus(), 0);
     };
     window.addEventListener('siliconvault:open-document-search', openFind);
     return () => window.removeEventListener('siliconvault:open-document-search', openFind);
-  }, []);
+  }, [tabId]);
   // OOXML renders into its own scrolling host. Handle zoom here in capture
   // phase so embedded document elements cannot swallow Ctrl/Cmd zoom input.
   useEffect(() => {
