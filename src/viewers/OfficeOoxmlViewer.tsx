@@ -188,7 +188,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
         <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom" onClick={() => changeScale(1)} disabled={scale === 1}><RotateCcw size={13} /></button>
       </div>
-      <div className="office-ooxml-host" data-viewer-scroll ref={hostRef} onScroll={(event) => onScrollStateChange(event.currentTarget.scrollTop, event.currentTarget.scrollLeft)} aria-label={`${extension.toUpperCase()} read-only preview`} />
+      <div className="office-ooxml-host" data-viewer-scroll ref={hostRef} tabIndex={0} onScroll={(event) => onScrollStateChange(event.currentTarget.scrollTop, event.currentTarget.scrollLeft)} aria-label={`${extension.toUpperCase()} read-only preview`} />
       {loading && <div className="office-ooxml-loading" role="status">Rendering Office document…</div>}
     </div>
   );
