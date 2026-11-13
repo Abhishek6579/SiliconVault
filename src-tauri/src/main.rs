@@ -3,6 +3,7 @@ mod diagnostics;
 mod error_handler;
 mod logger;
 mod system_monitor;
+mod updater;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -241,6 +242,7 @@ fn main() {
         .manage(diagnostics::DiagnosticsState::new())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let directory = app.path().app_log_dir()?.join("diagnostics");
             let logger = logger::Logger::initialize(directory).map_err(std::io::Error::other)?;
@@ -250,7 +252,7 @@ fn main() {
             app.manage(logger);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, convert_office_to_pdf])
+        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, convert_office_to_pdf, updater::check_for_update, updater::install_update])
         .build(tauri::generate_context!())
         .expect("failed to build SiliconVault");
     app.run(|_handle, event| {
