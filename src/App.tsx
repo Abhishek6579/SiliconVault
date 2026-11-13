@@ -42,6 +42,7 @@ import { useWorkspaceInitialization } from './features/workspace/hooks/useWorksp
 import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
+import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
@@ -53,6 +54,19 @@ interface ContextMenuState { type: ContextItemType; id: string; x: number; y: nu
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
 interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
 interface SearchResult { file: FileMeta; text: string; }
+
+// Accept Markdown's $...$ syntax and common LaTeX \( ... \) / \[ ... \] delimiters.
+// The conversion affects preview rendering only; the original Markdown remains unchanged.
+function normalizeMarkdownMath(source: string): string {
+  const normalized = source
+    .replace(/\\{1,2}\(/g, () => '$')
+    .replace(/\\{1,2}\)/g, () => '$')
+    .replace(/\\{1,2}\[/g, () => '$$')
+    .replace(/\\{1,2}\]/g, () => '$$');
+  return normalized.replace(/(\${1,2})([\s\S]*?)\1/g, (_match, delimiter: string, expression: string) =>
+    delimiter + expression.replace(/\\_/g, '_') + delimiter,
+  );
+}
 
 export default function App() {
   useEffect(() => collectFrontendDiagnostics(), []);
@@ -225,14 +239,14 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', closeMenus);
   }, []);
 
-  const activeProjectRecord = projects.find((project) => project.id === activeProject) ?? null;
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
-  const activeProjects = projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId);
-  const generalRootFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.projectId === null && folder.parentFolderId === null);
-  // Keep each workspace's tabs in memory, but only expose the active workspace's tabs in its UI.
-  const workspaceTabs = tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId);
-  const workspaceTabSignature = workspaceTabs.map((tab) => tab.id).join('\u0000');
-  const activeTab = workspaceTabs.find((tab) => tab.id === activeTabId) ?? null;
+  const {
+    activeProjectRecord, activeWorkspace, activeProjects, generalRootFolders,
+    workspaceTabs, workspaceTabSignature, activeTab, liveFiles, storedBytes,
+    workspaceHasContent, trashedFiles, rootFiles, currentFolders,
+  } = useMemo(() => selectWorkspaceViewState({
+    files, folders, projects, workspaces, tabs,
+    activeWorkspaceId, activeProjectId: activeProject, selectedFolderId: selectedFolder, activeTabId,
+  }), [files, folders, projects, workspaces, tabs, activeWorkspaceId, activeProject, selectedFolder, activeTabId]);
 
   const { updateDraft, persistDraft, flushPendingSaves, trackRecoveredDraft, waitForSave } = useAutosave(activeTab, setTabs, refresh, setError, setStatus, flushWorkspaceSession);
   const onBackupRestored = useCallback(async () => {
@@ -253,16 +267,6 @@ export default function App() {
   });
   const { createWorkspace, renameWorkspace, deleteCurrentWorkspace } = workspaceActions;
 
-    // Memoized so the array keeps its identity between renders. Without this, the search effect reruns on every render.
-  const liveFiles = useMemo(
-    () => files.filter((file) => file.deletedAt === null && file.workspaceId === activeWorkspaceId),
-    [files, activeWorkspaceId],
-  );
-  const storedBytes = files.reduce((sum, item) => sum + item.size, 0);
-  const workspaceHasContent = activeProjects.length > 0 || generalRootFolders.length > 0 || liveFiles.some((file) => file.projectId === null);
-  const trashedFiles = files.filter((file) => file.workspaceId === activeWorkspaceId && file.deletedAt !== null).sort((a, b) => b.deletedAt! - a.deletedAt!);
-  const rootFiles = liveFiles.filter((file) => file.parentFolderId === null && file.projectId === activeProject);
-  const currentFolders = folders.filter((folder) => folder.workspaceId === activeWorkspaceId && folder.parentFolderId === selectedFolder && folder.projectId === activeProject);
   const tree = useMemo(() => buildWorkspaceTree(folders, liveFiles, null, activeProject, activeWorkspaceId), [folders, liveFiles, activeProject, activeWorkspaceId]);
   const excludedMoveFolders = useMemo(() => {
     const ids = new Set<string>();
@@ -701,7 +705,7 @@ export default function App() {
     const filesAtRoot = liveFiles.filter((file) => file.projectId === project.id && file.parentFolderId === null);
     return <div key={project.id}>
       <div className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => showContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, null, project.id, project.workspaceId)}>
-        <button className="tree-main" onClick={() => { setActiveProject(project.id); setSelectedFolder(null); setView('workspace'); setActiveTabId(null); }}>
+        <button className="tree-main" aria-expanded={open} onClick={() => { setActiveProject((current) => current === project.id ? null : project.id); setSelectedFolder(null); setView('workspace'); setActiveTabId(null); }}>
           <span className="twisty">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
           <span className="project-dot" />
           <span className="truncate" title={project.name}>{project.name}</span>
@@ -894,7 +898,7 @@ export default function App() {
                 if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
                 return <code className={className} {...props}>{children}</code>;
               }
-            }}>{activeTab.draft}</ReactMarkdown></article></div>
+            }}>{normalizeMarkdownMath(activeTab.draft)}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
           <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>

@@ -13,6 +13,7 @@ SiliconVault is a desktop-first, local-first engineering workspace built with Re
 - CodeMirror source editing, including Verilog and SystemVerilog.
 - PDF reader with continuous scrolling, navigation, zoom, and text search.
 - Image previews; CSV/TSV table previews; basic VCD declaration/activity inspection.
+- Read-only DOCX/DOCM and PPTX/PPTM text previews with copy-all and copy-selection actions.
 - JSON backup/restore with SHA-256 integrity checks.
 - Multiple open tabs and local save workflows.
 
@@ -81,4 +82,4 @@ Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync
 
 ## License
 
-No software license has been selected or granted. The root [LICENSE.md](LICENSE.md) is a status notice, not a license grant. See [License status](docs/license-status.md); do not assume that public repository access grants reuse or redistribution rights.
+SiliconVault is licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify, and distribute the project under those terms. See [NOTICE](NOTICE) for project attribution and [License status](docs/license-status.md) for third-party dependency and distribution guidance.
