@@ -52,7 +52,7 @@ fn find_libreoffice() -> Option<PathBuf> {
 }
 
 fn path_to_file_url(path: &Path) -> String {
-    let normalized = path.to_string_lossy().replace('\\\\', "/");
+    let normalized = path.to_string_lossy().replace('\\', "/");
     let encoded: String = normalized.bytes().map(|byte| {
         if byte.is_ascii_alphanumeric() || b"/-_.~:".contains(&byte) {
             (byte as char).to_string()
