@@ -3988,20 +3988,112 @@ body,
   cursor: not-allowed;
 }
 
-.office-document-content {
+.office-document-viewport {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  margin: 0;
-  padding: 24px clamp(18px, 5vw, 72px);
-  color: var(--ink);
-  background: var(--panel);
-  font: 13px/1.75 Inter, ui-sans-serif, system-ui, sans-serif;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
+  padding: 34px 24px 56px;
+  background: #e8eaed;
+  overscroll-behavior: contain;
 }
 
+.office-document-page {
+  width: 816px;
+  min-height: 1056px;
+  margin: 0 auto 28px;
+  padding: 92px 96px;
+  background: #fff;
+  color: #202124;
+  box-shadow: 0 2px 12px #20212420, 0 0 0 1px #0000000b;
+  font-family: Calibri, Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
+  user-select: text;
+  transform-origin: top center;
+}
+
+.office-document-paragraph {
+  min-height: 1em;
+  margin: 0 0 8pt;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.office-document-page .office-style-Title,
+.office-document-page .office-style-title {
+  margin: 0 0 12pt;
+  font-size: 26pt;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #202124;
+}
+
+.office-document-page .office-style-Subtitle,
+.office-document-page .office-style-subtitle {
+  margin: 0 0 10pt;
+  color: #666;
+  font-size: 15pt;
+}
+
+.office-document-page .office-style-Heading1,
+.office-document-page .office-style-heading1 {
+  margin-top: 18pt;
+  margin-bottom: 8pt;
+  font-size: 16pt;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.office-document-page .office-style-Heading2,
+.office-document-page .office-style-heading2 {
+  margin-top: 14pt;
+  margin-bottom: 6pt;
+  font-size: 13pt;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.office-document-page .office-style-Heading3,
+.office-document-page .office-style-heading3 {
+  margin-top: 10pt;
+  margin-bottom: 5pt;
+  font-size: 12pt;
+  font-weight: 700;
+}
+
+.office-document-table {
+  width: 100%;
+  margin: 8pt 0 12pt;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: inherit;
+}
+
+.office-document-table td {
+  min-width: 20px;
+  padding: 5pt 7pt;
+  border: 1px solid #9b9b9b;
+  vertical-align: top;
+}
+
+.office-document-table p {
+  margin: 0 0 3pt;
+}
+
+.office-document-table p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .office-document-viewport { padding: 18px 10px 36px; }
+  .office-document-page { width: min(816px, 100%); min-height: 1056px; padding: 64px clamp(28px, 8vw, 96px); }
+}
+
+@media print {
+  .office-document-viewport { overflow: visible; padding: 0; background: #fff; }
+  .office-document-page { width: 100%; margin: 0; box-shadow: none; }
+}
 .office-viewer .unsupported-file {
   flex: 1;
   padding: 24px;
