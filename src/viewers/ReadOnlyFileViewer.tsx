@@ -80,7 +80,11 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const copyOfficeText = async (selectionOnly: boolean) => {
     const selected = window.getSelection()?.toString().trim() ?? '';
     const selection = selected && officeContentRef.current?.contains(window.getSelection()?.anchorNode ?? null) ? selected : '';
-    const value = selectionOnly && selection ? selection : officeText;
+    if (selectionOnly && !selection) {
+      setOfficeError('Select text in the preview first, then use Copy selection. You can also use Copy all text.');
+      return;
+    }
+    const value = selectionOnly ? selection : officeText;
     if (!value || officeLoading) return;
     try {
       await navigator.clipboard.writeText(value);
