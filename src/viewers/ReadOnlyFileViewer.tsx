@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent, type WheelEvent } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
 import { isDesktopApp } from '../platform/desktop';
 import OfficeOoxmlViewer from './OfficeOoxmlViewer';
+import type { PdfViewState, ViewerViewState } from '../features/tabs/types';
 
-interface Props { fileName: string; data?: Blob | string; mimeType: string; maximized: boolean; onToggleMaximize: () => void; }
+interface Props { fileName: string; data?: Blob | string; mimeType: string; tabId: string; initialState?: ViewerViewState; initialPdfState?: PdfViewState; onStateChange: (tabId: string, state: ViewerViewState) => void; onPdfStateChange: (tabId: string, state: PdfViewState) => void; }
 
 export function rowsFrom(source: string, delimiter: string): string[][] {
   const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
@@ -22,7 +23,7 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 }
 
 
-export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
+export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, initialState, initialPdfState, onStateChange, onPdfStateChange }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
@@ -33,7 +34,10 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(initialState?.zoom ?? 1);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stateTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const latestState = useRef<ViewerViewState>({ zoom: initialState?.zoom ?? 1, scrollTop: initialState?.scrollTop ?? 0, scrollLeft: initialState?.scrollLeft ?? 0 });
   const [officePdf, setOfficePdf] = useState<Blob | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
@@ -48,7 +52,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   }, [data, ext]);
 
   useEffect(() => {
-    setError(''); setText(''); setUrl(''); setZoom(1);
+    setError(''); setText(''); setUrl('');
     if (!(data instanceof Blob)) { setText(typeof data === 'string' ? data : ''); return; }
     if (!isImage && !isTextPreview) return;
     if (isImage) {
@@ -113,8 +117,45 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
 
   const table = useMemo(() => ['csv', 'tsv'].includes(ext) ? rowsFrom(text, ext === 'tsv' ? '\t' : ',') : [], [ext, text]);
   const signals = useMemo(() => ext === 'vcd' ? [...text.matchAll(/^\s*\$var\s+\S+\s+(\d+)\s+(\S+)\s+(.+?)\s+\$end/gm)].slice(0, 500) : [], [ext, text]);
-  const zoomIn = () => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 100) / 100));
-  const zoomOut = () => setZoom((value) => Math.max(0.4, Math.round((value - 0.1) * 100) / 100));
+  const emitViewState = (next: Partial<ViewerViewState>) => {
+    latestState.current = { ...latestState.current, ...next };
+    if (stateTimer.current !== null) window.clearTimeout(stateTimer.current);
+    stateTimer.current = window.setTimeout(() => {
+      stateTimer.current = null;
+      onStateChange(tabId, latestState.current);
+    }, 160);
+  };
+  useEffect(() => {
+    const scrollHost = rootRef.current?.querySelector<HTMLElement>('[data-viewer-scroll]');
+    if (scrollHost) {
+      scrollHost.scrollTop = initialState?.scrollTop ?? 0;
+      scrollHost.scrollLeft = initialState?.scrollLeft ?? 0;
+    }
+    return () => {
+      if (stateTimer.current !== null) {
+        window.clearTimeout(stateTimer.current);
+        stateTimer.current = null;
+        onStateChange(tabId, latestState.current);
+      }
+    };
+  }, [tabId]);
+  const applyZoom = (next: number) => {
+    const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
+    setZoom(bounded);
+    emitViewState({ zoom: bounded });
+  };
+  const zoomIn = () => applyZoom(zoom + 0.1);
+  const zoomOut = () => applyZoom(zoom - 0.1);
+  const handleWheelZoom = (event: WheelEvent<HTMLDivElement>) => {
+    if (!(event.ctrlKey || event.metaKey) || (event.target as HTMLElement).closest('.pdf-shell')) return;
+    event.preventDefault();
+    applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
+  };
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-viewer-scroll]');
+    if (!target) return;
+    emitViewState({ scrollTop: target.scrollTop, scrollLeft: target.scrollLeft });
+  };
   const handleZoomKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!(event.ctrlKey || event.metaKey)) return;
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
@@ -125,37 +166,37 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Ctrl+-)" onClick={zoomOut} disabled={zoom <= 0.4}><ZoomOut size={15} /></button>
     <span aria-live="polite">{Math.round(zoom * 100)}%</span>
     <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Ctrl+=)" onClick={zoomIn} disabled={zoom >= 3}><ZoomIn size={15} /></button>
-    <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)" onClick={() => setZoom(1)} disabled={zoom === 1}><RotateCcw size={13} /></button>
+    <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)" onClick={() => applyZoom(1)} disabled={zoom === 1}><RotateCcw size={13} /></button>
   </div>;
 
-  if (isImage) return <div className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
+  if (isImage) return <div ref={rootRef} className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}
-    <div className="image-viewer-viewport"><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
+    <div className="image-viewer-viewport" data-viewer-scroll><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
       {url ? <img src={url} alt={fileName} /> : <div className="loading-state">Loading image…</div>}
     </div></div>
   </div>;
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
-  if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0}>
+  if (isOffice) return <div ref={rootRef} className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {officePdf
-      ? <PdfReader data={officePdf} title={fileName} tabId={`office-preview-${fileName}`} />
+      ? <PdfReader data={officePdf} title={fileName} tabId={tabId} initialState={initialPdfState} onStateChange={onPdfStateChange} />
       : isBrowserOoxml && !hasOfficeRenderFailure
         ? <>
             <div className="office-viewer-toolbar">
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${fileName}-${ext}`} data={data} extension={ext} onError={handleOfficeRenderError} />
+              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onError={handleOfficeRenderError} />
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
           ? <div className="loading-state">Converting Office document to PDF…</div>
           : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError || 'The Office document could not be rendered.'}</p></div>}
   </div>;
-  if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
+  if (ext === 'csv' || ext === 'tsv') return <div ref={rootRef} className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
-    <div className="viewer-table-scroll"><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
+    <div className="viewer-table-scroll" data-viewer-scroll><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
   </div>;
-  if (ext === 'vcd') return <div className="file-viewer engineering-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
+  if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
@@ -164,8 +205,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     </div>
   </div>;
   if (['fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
-  return <div className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
+  return <div ref={rootRef} className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
-    <pre style={{ zoom }}>{text || 'No text content.'}</pre>
+    <pre data-viewer-scroll style={{ zoom }}>{text || 'No text content.'}</pre>
   </div>;
 }
