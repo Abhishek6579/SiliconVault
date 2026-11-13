@@ -127,7 +127,12 @@ export default function App() {
           : null;
       const overPdf = Boolean(target?.closest('.pdf-shell'));
       const overEditor = Boolean(target?.closest('.code-editor, .markdown-preview'));
-      if (overPdf) return; // PdfReader owns wheel zoom while the pointer is over its pages.
+      if (overPdf) {
+        if (target?.closest('.pdf-page-host')) return; // The PDF page host owns wheel zoom.
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', { detail: { direction: event.deltaY < 0 ? 1 : -1 } }));
+        return;
+      }
       if (lastFocusedSurfaceRef.current === 'pdf') {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', { detail: { direction: event.deltaY < 0 ? 1 : -1 } }));
