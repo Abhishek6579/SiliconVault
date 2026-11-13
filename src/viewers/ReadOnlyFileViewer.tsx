@@ -153,7 +153,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   const findInViewer = (query: string, direction: 1 | -1 = 1) => {
     const root = rootRef.current;
     const needle = query.trim().toLocaleLowerCase();
-    if (!root || !needle) return;
+    if (!root) return;
+    if (!needle) { window.getSelection()?.removeAllRanges(); return; }
     const matches: Array<{ node: Text; start: number }> = [];
     const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     let current = walker.nextNode();
@@ -193,7 +194,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     return () => window.removeEventListener('siliconvault:open-document-search', openFind);
   }, [isTextPreview]);
 
-  const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findCursorRef.current = { query: '', index: -1 }; }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
+  const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', index: -1 }; findInViewer(next); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
   const applyZoom = (next: number) => {
     const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
     setZoom(bounded);
