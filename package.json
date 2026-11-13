@@ -21,6 +21,7 @@
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-markdown": "^6.3.2",
     "@codemirror/legacy-modes": "^6.4.0",
+    "@silurus/ooxml": "0.89.9",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-fs": "^2.7.1",
@@ -35,8 +36,7 @@
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
-    "remark-math": "^6.0.0",
-    "@silurus/ooxml": "0.89.9"
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
