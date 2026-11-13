@@ -98,7 +98,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
           enableHyperlinks: false,
           useGoogleFonts: false,
           onError: (reason: Error) => { if (active) onError(reason); },
-          onScaleChange: (next: number) => { if (active) setScale(next); },
+          onScaleChange: (next: number) => { if (active) { setScale(next); onStateChange(next); } },
           onLayoutComplete: (reason?: unknown) => {
             if (active && reason) onError(asError(reason));
           },
