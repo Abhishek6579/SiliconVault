@@ -1,15 +1,24 @@
 # Changelog
 
-User-visible changes to SiliconVault are recorded here. The repository currently prepares version `0.1.1-alpha.2`; this file does not fabricate a release history.
+All notable user-facing changes to SiliconVault are documented here.
+
+## [0.2.0-beta.1] - 2026-11-13
+
+### Added
+- Post-update release notes are shown inside SiliconVault after an update is installed and the app restarts.
+- Improved workspace file search with substring matching across filenames.
+- In-document Find support is broadened across text-oriented file types, including Markdown and source files.
+
+### Improved
+- Find Next and Find Previous navigation and editor search focus behavior.
+- Workspace tab-group sizing and visual consistency.
+- Trash management with an option to empty the trash.
+- Editor and document zoom behavior and general workspace usability.
+- Release and update packaging with signed Windows installers, checksums, and updater metadata.
+
+### Beta status
+- SiliconVault is now published as a beta. Expect further changes and report reproducible issues through the repository issue tracker.
 
 ## [Unreleased]
 
-### Added
-- Project-specific architecture, development, installation, security, contribution, and release documentation.
-- GitHub Actions validation and Windows release automation.
-- Issue and pull request templates.
-
-### Changed
-- README distinguishes implemented functionality from recognized-but-unrendered formats.
-
-No installer or checksum is implied by this entry. Release assets are produced only by a successful version-tag workflow.
+No unreleased changes have been recorded.
