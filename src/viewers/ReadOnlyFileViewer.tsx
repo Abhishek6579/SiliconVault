@@ -216,9 +216,17 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     }
 
     if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, offset: -1 };
-    const from = direction > 0 ? findCursorRef.current.offset + 1 : Math.max(0, findCursorRef.current.offset - 1);
-    let matchOffset = direction > 0 ? index.lower.indexOf(needle, from) : index.lower.lastIndexOf(needle, from);
-    if (matchOffset < 0) matchOffset = direction > 0 ? index.lower.indexOf(needle) : index.lower.lastIndexOf(needle);
+    const cursorOffset = findCursorRef.current.offset;
+    let matchOffset: number;
+    if (direction > 0) {
+      matchOffset = index.lower.indexOf(needle, cursorOffset + 1);
+      if (matchOffset < 0) matchOffset = index.lower.indexOf(needle);
+    } else {
+      // Previous means strictly before the current occurrence. Starting at
+      // -1 or at the first occurrence wraps to the final occurrence.
+      matchOffset = cursorOffset < 0 ? -1 : index.lower.lastIndexOf(needle, cursorOffset - 1);
+      if (matchOffset < 0) matchOffset = index.lower.lastIndexOf(needle);
+    }
     if (matchOffset < 0) return;
     findCursorRef.current = { query: needle, offset: matchOffset };
 
