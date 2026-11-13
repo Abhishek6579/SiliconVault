@@ -26,7 +26,6 @@ export function useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, 
       }
       if (event.key.toLowerCase() !== 'k' && event.key.toLowerCase() !== 'f') return;
       event.preventDefault();
-      event.preventDefault();
       setSearchPopupOpen(true);
       setRightPanel('search');
     };
