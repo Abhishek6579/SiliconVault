@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -130,8 +130,8 @@ jobs:
           if ($null -eq $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
             throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not configured."
           }
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Run Rust tests (allow Cargo to refresh the lockfile for the new updater dependency)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build signed Tauri application
         run: npm run tauri:build
         env:
