@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
 import { extractOfficeDocument, officeBlocksToText, type OfficeBlock } from './officeDocument';
 
@@ -19,7 +19,7 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 }
 
 
-function renderOfficeBlocks(blocks: OfficeBlock[], prefix = 'block'): React.ReactNode {
+function renderOfficeBlocks(blocks: OfficeBlock[], prefix = 'block'): ReactNode {
   return blocks.map((block, index) => {
     const key = `${prefix}-${index}`;
     if (block.type === 'table') {
@@ -30,7 +30,7 @@ function renderOfficeBlocks(blocks: OfficeBlock[], prefix = 'block'): React.Reac
       </tbody></table>;
     }
     const styleClass = block.styleName?.replace(/[^a-z0-9_-]/gi, '') ?? '';
-    const style: React.CSSProperties = {
+    const style: CSSProperties = {
       textAlign: block.alignment,
       marginTop: block.spaceBefore === undefined ? undefined : `${block.spaceBefore}pt`,
       marginBottom: block.spaceAfter === undefined ? undefined : `${block.spaceAfter}pt`,
