@@ -66,6 +66,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [officeText, setOfficeText] = useState('');
   const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
   const [officePdf, setOfficePdf] = useState<Blob | null>(null);
+  const [officeFallbackMessage, setOfficeFallbackMessage] = useState('');
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
@@ -93,6 +94,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     setOfficeText('');
     setOfficeBlocks([]);
     setOfficePdf(null);
+    setOfficeFallbackMessage('');
     setOfficeError('');
     setCopyError('');
     setOfficeLoading(true);
@@ -111,8 +113,22 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
         .then((bytes) => {
           if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
         })
-        .catch((reason: unknown) => {
-          if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not convert this Word document to PDF.');
+        .catch(async (reason: unknown) => {
+          const conversionError = reason instanceof Error ? reason.message : 'Could not convert this Word document to PDF.';
+          if (!active) return;
+          try {
+            const blocks = await extractOfficeDocument(data, ext);
+            if (active) {
+              setOfficeBlocks(blocks);
+              setOfficeText(officeBlocksToText(blocks));
+              setOfficeFallbackMessage(`PDF conversion unavailable (${conversionError}). Showing the basic Word preview instead; images and complex equations may not be preserved.`);
+            }
+          } catch (fallbackReason) {
+            if (active) {
+              const fallbackError = fallbackReason instanceof Error ? fallbackReason.message : 'Unknown preview error.';
+              setOfficeError(`PDF conversion failed: ${conversionError} The basic Word preview also failed: ${fallbackError}`);
+            }
+          }
         })
         .finally(() => { if (active) setOfficeLoading(false); });
     } else {
@@ -176,6 +192,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       </div>
       {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
     </div>
+    {officeFallbackMessage && <div className="viewer-meta" role="status">{officeFallbackMessage}</div>}
     {officeLoading ? <div className="loading-state">Converting Word document to PDF…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
     </>}
   </div>;
