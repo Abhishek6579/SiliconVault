@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
-import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
 import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { saveWorkspaceSession } from './storage/tabSession';
@@ -49,6 +48,7 @@ import ItemContextMenu from './features/workspace/components/menus/ItemContextMe
 import Sidebar from './features/workspace/components/sidebar/Sidebar';
 import ProjectTree from './features/workspace/components/sidebar/ProjectTree';
 import { WorkspaceNavProvider, useWorkspaceNav } from './features/workspace/context/WorkspaceNavContext';
+import { DialogProvider, DialogHost, useDialog } from './features/workspace/context/DialogContext';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
@@ -63,7 +63,7 @@ interface ImportTarget { folderId: string | null; projectId: string | null; work
 interface SearchResult { file: FileMeta; text: string; }
 
 export default function App() {
-  return <WorkspaceNavProvider><AppShell /></WorkspaceNavProvider>;
+  return <WorkspaceNavProvider><DialogProvider><AppShell /></DialogProvider></WorkspaceNavProvider>;
 }
 
 function AppShell() {
@@ -97,7 +97,6 @@ function AppShell() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
-  const [dialog, setDialog] = useState<WorkspaceDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
   const editorWorkspaceRef = useRef<HTMLDivElement>(null);
@@ -116,21 +115,7 @@ function AppShell() {
   useWheelZoom(lastFocusedSurfaceRef, setAppZoom, setEditorFontSize);
 
 
-  function requestInput(title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) {
-    setDialog({ mode: 'input', title, value: initialValue, placeholder, confirmLabel, onConfirm, message });
-  }
-
-  function requestConfirmation(title: string, message: string, confirmLabel: string, onConfirm: () => void | Promise<void>, destructive = false) {
-    setDialog({ mode: 'confirm', title, message, confirmLabel, destructive, onConfirm: () => onConfirm() });
-  }
-
-  async function submitDialog() {
-    if (!dialog || (dialog.mode === 'input' && !dialog.value?.trim())) return;
-    const active = dialog;
-    setDialog(null);
-    try { await active.onConfirm(active.value ?? ''); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'This action could not be completed.'); }
-  }
+  const { prompt: requestInput, confirm: requestConfirmation } = useDialog();
 
   async function downloadMigrationBackupAndUpgrade() {
     if (migrationBackup === null) return;
@@ -760,7 +745,7 @@ function AppShell() {
 
     {moveDialog && <MoveDialog itemName={moveDialog.name} destinations={moveDestinations} onClose={() => setMoveDialog(null)} onMove={(target) => void moveItemTo(target)} />}
 
-    <WorkspaceDialog dialog={dialog} onClose={() => setDialog(null)} onSubmit={() => void submitDialog()} onChange={(value) => setDialog((current) => current ? { ...current, value } : current)} />
+    <DialogHost onError={setError} />
 
     {migrationBackup && <MigrationDialog error={migrationError} upgrading={upgrading} desktopApp={isDesktopApp()} onUpgrade={() => void downloadMigrationBackupAndUpgrade()} />}
 
