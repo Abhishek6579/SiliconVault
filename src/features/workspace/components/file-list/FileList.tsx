@@ -12,6 +12,7 @@ type Sort = 'name' | 'type' | 'size' | 'updatedAt';
 
 interface FileListData {
   view: View;
+  sort: Sort;
   sortDesc: boolean;
   currentFolders: FolderRecord[];
   selectedFolder: string | null;
@@ -41,7 +42,7 @@ interface FileListActions {
 
 export default function FileList({ data, actions }: { data: FileListData; actions: FileListActions }) {
   const {
-    view, currentFolders, selectedFolder, activeProject, activeProjectRecord,
+    view, sort, currentFolders, selectedFolder, activeProject, activeProjectRecord,
     activeProjects, currentWorkspaceId, trashedFiles, sortedVisible, getProjectName, sortDesc,
   } = data;
   const {
