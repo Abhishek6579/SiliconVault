@@ -61,14 +61,26 @@ export default function WorkspaceEditor({
     const needle = query.trim();
     if (!view || !view.dom.isConnected || !needle) return;
     if (restart) findPositionRef.current = 0;
-    const start = direction > 0
-      ? Math.min(view.state.doc.length, findPositionRef.current)
-      : Math.max(0, findPositionRef.current - 1);
-    let result = new SearchCursor(view.state.doc, needle, start, undefined, { caseSensitive: false }).next();
-    if (result.done && start > 0) {
-      result = direction > 0
-        ? new SearchCursor(view.state.doc, needle, 0, start, { caseSensitive: false }).next()
-        : new SearchCursor(view.state.doc, needle, 0, view.state.doc.length, { caseSensitive: false }).next();
+    let result: ReturnType<SearchCursor['next']>;
+    if (direction > 0) {
+      const start = Math.min(view.state.doc.length, findPositionRef.current);
+      result = new SearchCursor(view.state.doc, needle, start, undefined, { caseSensitive: false }).next();
+      if (result.done && start > 0) {
+        result = new SearchCursor(view.state.doc, needle, 0, start, { caseSensitive: false }).next();
+      }
+    } else {
+      const upper = Math.max(0, findPositionRef.current - 1);
+      const cursor = new SearchCursor(view.state.doc, needle, 0, upper, { caseSensitive: false });
+      let previous = cursor.next();
+      while (!previous.done) {
+        result = previous;
+        previous = cursor.next();
+      }
+      if (result === undefined) {
+        const wrap = new SearchCursor(view.state.doc, needle, 0, view.state.doc.length, { caseSensitive: false });
+        let last = wrap.next();
+        while (!last.done) { result = last; last = wrap.next(); }
+      }
     }
     if (result.done) return;
     const match = result.value;
