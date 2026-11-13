@@ -237,7 +237,7 @@ fn get_system_stats(monitor: tauri::State<'_, Mutex<SystemMonitor>>) -> SystemSt
     monitor.lock().unwrap_or_else(|p| p.into_inner()).sample()
 }
 fn main() {
-    let mut app = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(Mutex::new(SystemMonitor::new()))
         .manage(diagnostics::DiagnosticsState::new())
         .plugin(tauri_plugin_dialog::init())
