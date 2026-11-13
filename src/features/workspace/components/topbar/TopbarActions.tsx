@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { Moon, Search, Settings2, Sun } from 'lucide-react';
 import ImportMenu from './ImportMenu';
 
@@ -10,7 +10,7 @@ interface Data {
   activeProject: string | null;
   currentWorkspaceId: string;
   importMenuOpen: boolean;
-  importMenuRef: React.RefObject<HTMLDivElement | null>;
+  importMenuRef: RefObject<HTMLDivElement | null>;
   darkTheme: boolean;
   status: string;
 }
