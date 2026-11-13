@@ -1,0 +1,11 @@
+SiliconVault
+Copyright 2026 Abhishek Yadav
+
+SiliconVault is distributed under the Apache License, Version 2.0.
+A copy of the license is provided in the repository-root LICENSE file.
+
+Third-party software:
+SiliconVault depends on open-source packages and platform components maintained
+by their respective authors. Those components remain under their own licenses.
+Consult each dependency's upstream license and the notices shipped with its
+distribution. This notice does not relicense third-party components.
