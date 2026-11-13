@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
-import { saveWorkspaceSession } from './storage/tabSession';
 import { isDesktopApp } from './platform/desktop';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
@@ -43,6 +41,7 @@ import { useItemActions, type ContextItemType, type ContextMenuState, type MoveD
 import { useProjectActions } from './features/workspace/hooks/useProjectActions';
 import { useFolderActions } from './features/workspace/hooks/useFolderActions';
 import { useMigrationUpgrade } from './features/workspace/hooks/useMigrationUpgrade';
+import { useWorkspaceNavigationActions } from './features/workspace/hooks/useWorkspaceNavigationActions';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import RightPanel from './features/workspace/components/RightPanel';
@@ -187,6 +186,11 @@ export default function AppShell() {
     setView, setExpanded, setStatus, fileInput, folderInput,
   });
   const { handleDrop } = useDragAndDrop({ activeProject, currentWorkspaceId, handleImport, refresh, setError });
+  const { showContextMenu, switchProject, switchWorkspace } = useWorkspaceNavigationActions({
+    workspaces, activeWorkspaceId, workspaceTabs, activeTabId,
+    switchWorkspace: workspace.switchWorkspace, restoreWorkspaceTabs,
+    setActiveProject, setSelectedFolder, setActiveTabId, setView, setWorkspaceMenuOpen, setContextMenu,
+  });
 
   const {
     moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject, restoreTrashedFile,
@@ -206,34 +210,6 @@ export default function AppShell() {
       setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
     });
   }, [activeTab, loading, openFile]);
-
-  function showContextMenu(type: ContextItemType, id: string, event: ReactMouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    setWorkspaceMenuOpen(false);
-    setContextMenu({ type, id, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 260) });
-  }
-
-  async function switchProject(projectId: string | null) {
-    setActiveProject(projectId);
-    setSelectedFolder(null);
-    setView('workspace');
-    setActiveTabId(null);
-    setWorkspaceMenuOpen(false);
-  }
-
-  async function switchWorkspace(workspaceId: string) {
-    if (!workspaces.some((item) => item.id === workspaceId)) return;
-    if (activeWorkspaceId) {
-      await saveWorkspaceSession(db, activeWorkspaceId, workspaceTabs.map((tab) => tab.id), activeTabId);
-    }
-    await workspace.switchWorkspace(workspaceId);
-    await restoreWorkspaceTabs(workspaceId);
-    setActiveProject(null);
-    setSelectedFolder(null);
-    setView('workspace');
-    setWorkspaceMenuOpen(false);
-  }
 
   async function createWorkspaceFile(kind: 'markdown' | 'code') {
     if (view !== 'workspace') setView('workspace');
