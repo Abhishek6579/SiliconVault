@@ -1,7 +1,7 @@
 import type { WorkspaceDatabase } from './database';
 import type { FileMeta } from './types';
 import { fileText } from '../utils/format';
-import type { Tab, EditorViewState, PdfViewState } from '../features/tabs/types';
+import type { Tab, EditorViewState, PdfViewState, ViewerViewState } from '../features/tabs/types';
 
 export interface WorkspaceSession {
   workspaceId: string;
@@ -95,6 +95,15 @@ export async function restoreWorkspaceSession(
   };
 }
 
+function normalizeViewerViewState(value: unknown): ViewerViewState {
+  const state = isRecord(value) ? value : {};
+  return {
+    zoom: typeof state.zoom === 'number' && Number.isFinite(state.zoom) ? Math.max(.1, Math.min(4, state.zoom)) : 1,
+    scrollTop: typeof state.scrollTop === 'number' && Number.isFinite(state.scrollTop) ? Math.max(0, state.scrollTop) : 0,
+    scrollLeft: typeof state.scrollLeft === 'number' && Number.isFinite(state.scrollLeft) ? Math.max(0, state.scrollLeft) : 0,
+  };
+}
+
 function normalizePdfViewState(value: unknown): PdfViewState {
   const state = isRecord(value) ? value : {};
   return {
@@ -113,7 +122,8 @@ export async function hydrateWorkspaceTab(database: WorkspaceDatabase, tab: Tab)
   const savedDraft = isText ? (await database.preferences.get(`draft:${tab.id}`))?.value : undefined;
   const hasRecoveredDraft = typeof savedDraft === 'string';
   const draft = hasRecoveredDraft ? savedDraft : isText ? fileText(data) : '';
-  const savedPdfState = tab.meta.kind === 'pdf' ? (await database.preferences.get(`pdf:${tab.id}`))?.value : undefined;
+  const savedPdfState = tab.meta.kind === 'pdf' || tab.meta.kind === 'viewer' ? (await database.preferences.get(`pdf:${tab.id}`))?.value : undefined;
+  const savedViewerState = tab.meta.kind === 'viewer' ? (await database.preferences.get(`viewer:${tab.id}`))?.value : undefined;
   const editorState = isText ? await loadEditorViewState(database, tab.id) : undefined;
   const { data: _previousDocument, ...tabMetadata } = tab;
   return {
@@ -122,7 +132,8 @@ export async function hydrateWorkspaceTab(database: WorkspaceDatabase, tab: Tab)
     hydrated: true,
     draft,
     dirty: hasRecoveredDraft,
-    pdfState: tab.meta.kind === 'pdf' ? normalizePdfViewState(savedPdfState) : tab.pdfState,
+    pdfState: tab.meta.kind === 'pdf' || tab.meta.kind === 'viewer' ? normalizePdfViewState(savedPdfState) : tab.pdfState,
+    viewerState: tab.meta.kind === 'viewer' ? normalizeViewerViewState(savedViewerState) : tab.viewerState,
     editorState,
     preview: editorState?.preview ?? tab.preview,
   };
