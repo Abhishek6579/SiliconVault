@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { EditorView } from '@codemirror/view';
 import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
 import { isDesktopApp } from './platform/desktop';
@@ -297,7 +298,7 @@ export default function AppShell() {
             actions={{ createProject: () => void createProject(), switchProject, setSelectedFolder, setActiveProject, setActiveTabId }}
           />
           <FileList
-            data={{ view, sortDesc, currentFolders, selectedFolder, activeProject, activeProjectRecord, activeProjects, currentWorkspaceId, trashedFiles, sortedVisible, getProjectName }}
+            data={{ view, sort, sortDesc, currentFolders, selectedFolder, activeProject, activeProjectRecord, activeProjects, currentWorkspaceId, trashedFiles, sortedVisible, getProjectName }}
             actions={{ setSelectedFolder, setActiveTabId, setSort, setSortDesc, showContextMenu, handleDrop, doEmptyTrash, restoreTrashedFile, openFile, deleteFile, createWorkspaceFile, startImportInto }}
           />
         </div>}
