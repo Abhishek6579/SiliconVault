@@ -26,7 +26,22 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, initialState, initialPdfState, onStateChange, onPdfStateChange }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
-  const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
+  const textExtensions = new Set([
+    'txt', 'text', 'md', 'markdown', 'mdx', 'rst', 'adoc', 'log', 'out', 'err',
+    'v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv',
+    'json', 'jsonc', 'jsonl', 'ndjson', 'xml', 'xsd', 'xsl', 'xslt', 'html', 'htm',
+    'css', 'scss', 'sass', 'less', 'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx',
+    'py', 'pyw', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'java', 'kt', 'kts',
+    'rs', 'go', 'rb', 'php', 'swift', 'm', 'mm', 'r', 'jl', 'lua', 'pl', 'pm',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd', 'sql', 'graphql',
+    'gql', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'env',
+    'gitignore', 'gitattributes', 'dockerfile', 'makefile', 'gradle', 'tf',
+    'tex', 'bib', 'diff', 'patch', 'asm', 's', 'hex', 'mem'
+  ]);
+  const isTextPreview = mimeType.startsWith('text/')
+    || /(?:json|xml|javascript|typescript|yaml|toml|x-sh|x-shellscript|sql)/i.test(mimeType)
+    || textExtensions.has(ext)
+    || ['dockerfile', 'makefile', '.gitignore', '.env'].includes(fileName.toLowerCase());
   const officePdfExtensions = ['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'rtf', 'odt', 'fodt', 'xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'fodp'];
   const browserOoxmlExtensions = ['docx', 'docm', 'xlsx', 'xlsm', 'pptx', 'pptm'];
   const isOffice = officePdfExtensions.includes(ext);
