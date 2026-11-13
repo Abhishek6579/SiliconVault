@@ -22,7 +22,7 @@ export default function ImportMenu({ data, actions }: { data: Data; actions: Act
   const { view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, open, menuRef } = data;
   const { setOpen, startImportInto, startImportFolderInto, createFolderInCurrent, createWorkspaceFile } = actions;
   const target = { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId };
-  return view === 'workspace' ? <div className="import-menu-wrapper" ref={menuRef}>
+  return view === 'workspace' ? <div className="import-menu-wrapper" ref={menuRef as RefObject<HTMLDivElement>}>
     <button className="primary-button import-button" aria-expanded={open} onClick={() => setOpen((value) => !value)}><Import size={15} /> Import <ChevronDown size={13} /></button>
     {open && <div className="import-menu">
       <div className="menu-heading">ADD TO {selectedFolder ? 'FOLDER' : activeProjectRecord?.name?.toLocaleUpperCase() ?? 'WORKSPACE'}</div>
