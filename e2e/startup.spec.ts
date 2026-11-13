@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 test('records cold browser startup and JavaScript heap metrics', async ({ page }) => {
-  // This benchmark measures DOM readiness; waiting for every resource's load event is unnecessary and can hang on long-lived assets.\n  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  // This benchmark measures DOM readiness; waiting for every resource's load event is unnecessary and can hang on long-lived assets.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
   const metrics = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
