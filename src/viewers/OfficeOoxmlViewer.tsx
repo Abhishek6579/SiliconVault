@@ -267,6 +267,14 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
   }, [data, extension, onError]);
 
   useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const observer = new MutationObserver(() => { textIndexRef.current = null; });
+    observer.observe(host, { childList: true, characterData: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
     if (Math.abs(viewer.getScale() - zoom) > 0.005) {
