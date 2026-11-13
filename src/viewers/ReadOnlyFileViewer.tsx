@@ -31,6 +31,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
+  const [copyError, setCopyError] = useState('');
   const officeContentRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
@@ -80,8 +81,9 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const copyOfficeText = async (selectionOnly: boolean) => {
     const selected = window.getSelection()?.toString().trim() ?? '';
     const selection = selected && officeContentRef.current?.contains(window.getSelection()?.anchorNode ?? null) ? selected : '';
+    setCopyError('');
     if (selectionOnly && !selection) {
-      setOfficeError('Select text in the preview first, then use Copy selection. You can also use Copy all text.');
+      setCopyError('Select text in the preview first, or use Copy all text.');
       return;
     }
     const value = selectionOnly ? selection : officeText;
@@ -90,7 +92,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       await navigator.clipboard.writeText(value);
       setCopied(selectionOnly && selection ? 'selection' : 'all');
     } catch {
-      setOfficeError('Clipboard access was blocked. Select the text and use Ctrl+C / Cmd+C instead.');
+      setCopyError('Clipboard access was blocked. Select the text and use Ctrl+C / Cmd+C instead.');
     }
   };
   const controls = <div className="viewer-zoom-controls" role="toolbar" aria-label="Viewer zoom controls">
@@ -115,6 +117,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(true)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'selection' ? <><Check size={13} /> Copied selection</> : 'Copy selection'}</button>
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(false)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'all' ? <><Check size={13} /> Copied all</> : 'Copy all text'}</button>
       </div>
+      {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
     </div>
     {officeLoading ? <div className="loading-state">Extracting document text…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <pre ref={officeContentRef} className="office-document-content" style={{ zoom }}>{officeText}</pre>}
   </div>;
