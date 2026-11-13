@@ -4334,7 +4334,7 @@ body,
 }
 .app-shell[data-theme="dark"] .main-area,
 .app-shell[data-theme="dark"] .workspace-body {
-  background: #1b1e23;
+  background: #141414;
 }
 .app-shell[data-theme="light"] .sidebar,
 .app-shell[data-theme="light"] .main-area,
