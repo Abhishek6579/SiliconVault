@@ -95,6 +95,7 @@ async function readZipEntry(view: DataView, bytes: Uint8Array, entry: ZipEntry):
 }
 
 function xmlDocument(source: string): XMLDocument {
+  if (/<!DOCTYPE|<!ENTITY/i.test(source)) throw new Error('Office XML containing document type or entity declarations is not supported.');
   const document = new DOMParser().parseFromString(source, 'application/xml');
   if (document.getElementsByTagName('parsererror').length) throw new Error('An Office document XML part could not be read.');
   return document;
