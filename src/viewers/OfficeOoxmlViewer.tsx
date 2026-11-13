@@ -5,6 +5,8 @@ interface Props {
   data: Blob;
   extension: string;
   onError: (error: Error) => void;
+  zoom: number;
+  onStateChange: (scale: number) => void;
 }
 
 interface ViewerHandle {
@@ -20,10 +22,10 @@ function asError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error('The Office renderer could not open this document.');
 }
 
-export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
+export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(zoom);
   const viewerRef = useRef<ViewerHandle | null>(null);
 
   const changeScale = (next: number) => {
@@ -32,6 +34,8 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
     const bounded = Math.min(4, Math.max(0.1, Math.round(next * 100) / 100));
     viewer.setScale(bounded);
     setScale(viewer.getScale());
+    onStateChange(viewer.getScale());
+    onStateChange(viewer.getScale());
   };
 
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
     let viewer: ViewerHandle | null = null;
     const host = hostRef.current;
     setLoading(true);
-    setScale(1);
+    setScale(zoom);
     viewerRef.current = null;
 
     const openDocument = async () => {
@@ -67,7 +71,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           enableTextSelection: true,
           useGoogleFonts: false,
           onError: (reason: Error) => { if (active) onError(reason); },
-          onScaleChange: (next: number) => { if (active) setScale(next); },
+          onScaleChange: (next: number) => { if (active) { setScale(next); onStateChange(next); } },
           onLayoutComplete: (reason?: unknown) => {
             if (active && reason) onError(asError(reason));
           },
@@ -126,6 +130,15 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
     };
   }, [data, extension, onError]);
 
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (Math.abs(viewer.getScale() - zoom) > 0.005) {
+      viewer.setScale(zoom);
+      setScale(viewer.getScale());
+    }
+  }, [zoom]);
+
   return (
     <div className="office-ooxml-viewer">
       <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document zoom controls">
@@ -134,7 +147,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
         <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom" onClick={() => changeScale(1)} disabled={scale === 1}><RotateCcw size={13} /></button>
       </div>
-      <div className="office-ooxml-host" ref={hostRef} aria-label={`${extension.toUpperCase()} read-only preview`} />
+      <div className="office-ooxml-host" data-viewer-scroll ref={hostRef} aria-label={`${extension.toUpperCase()} read-only preview`} />
       {loading && <div className="office-ooxml-loading" role="status">Rendering Office document…</div>}
     </div>
   );
