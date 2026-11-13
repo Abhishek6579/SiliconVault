@@ -8,7 +8,7 @@ interface GlobalSearchShortcutOptions {
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
 }
 
-export function useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
+export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
