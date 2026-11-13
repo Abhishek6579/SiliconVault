@@ -54,31 +54,44 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     const needle = query.trim().toLocaleLowerCase();
     if (!host) return;
     if (!needle) { window.getSelection()?.removeAllRanges(); return; }
-    const matches: Array<{ node: Text; start: number }> = [];
+    const segments: Array<{ node: Text; start: number; end: number }> = [];
+    let combined = '';
+    let previousBlock: Element | null = null;
     const walker = window.document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
     let current = walker.nextNode();
     while (current) {
       const node = current as Text;
-      const lower = (node.textContent ?? '').toLocaleLowerCase();
-      let offset = lower.indexOf(needle);
-      while (offset >= 0) {
-        matches.push({ node, start: offset });
-        offset = lower.indexOf(needle, offset + Math.max(1, needle.length));
+      const parent = node.parentElement;
+      const block = parent?.closest('p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
+      if (block && previousBlock && block !== previousBlock) combined += '\n';
+      const value = node.textContent ?? '';
+      if (value) {
+        segments.push({ node, start: combined.length, end: combined.length + value.length });
+        combined += value;
       }
+      previousBlock = block ?? previousBlock;
       current = walker.nextNode();
     }
+    const matches: number[] = [];
+    const lower = combined.toLocaleLowerCase();
+    let offset = lower.indexOf(needle);
+    while (offset >= 0) { matches.push(offset); offset = lower.indexOf(needle, offset + Math.max(1, needle.length)); }
     if (!matches.length) return;
     if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, index: -1 };
     const nextIndex = (findCursorRef.current.index + direction + matches.length) % matches.length;
     findCursorRef.current.index = nextIndex;
-    const match = matches[nextIndex];
+    const startOffset = matches[nextIndex];
+    const endOffset = startOffset + needle.length;
+    const startSegment = segments.find((segment) => startOffset >= segment.start && startOffset < segment.end);
+    const endSegment = segments.find((segment) => endOffset > segment.start && endOffset <= segment.end);
+    if (!startSegment || !endSegment) return;
     const range = window.document.createRange();
-    range.setStart(match.node, match.start);
-    range.setEnd(match.node, match.start + needle.length);
+    range.setStart(startSegment.node, startOffset - startSegment.start);
+    range.setEnd(endSegment.node, endOffset - endSegment.start);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    match.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    endSegment.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
   useEffect(() => {
