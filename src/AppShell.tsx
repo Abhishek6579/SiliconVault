@@ -64,7 +64,7 @@ export default function AppShell() {
   const [searchPopupOpen, setSearchPopupOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
-  const lastFocusedSurfaceRef = useRef<'pdf' | 'editor' | null>(null);
+  const lastFocusedSurfaceRef = useRef<'pdf' | 'editor' | 'document' | null>(null);
   const [sort, setSort] = useState<'name' | 'type' | 'size' | 'updatedAt'>('name');
   const [sortDesc, setSortDesc] = useState(false);
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
@@ -103,7 +103,7 @@ export default function AppShell() {
 
   const { persistEditorViewState, updateViewerView, updatePdfView } = useTabViewState({ setTabs, setError });
 
-  useGlobalSearchShortcut({ lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel });
+  useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, setSearchPopupOpen, setRightPanel });
   useEffect(() => {
     if (searchPopupOpen) searchInputRef.current?.focus();
   }, [searchPopupOpen]);
