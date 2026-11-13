@@ -176,8 +176,8 @@ export default function AppShell() {
   const { createProject } = useProjectActions({
     currentWorkspaceId, requestInput, refresh, setActiveProject, setSelectedFolder, setActiveTabId, setView,
   });
-  const { createFolderInCurrent, createNewFile } = useFolderActions({
-    currentWorkspaceId, selectedFolder, activeProject, requestInput, refresh, openFile, setExpanded,
+  const { createFolderInCurrent, createNewFile, createWorkspaceFile } = useFolderActions({
+    currentWorkspaceId, selectedFolder, activeProject, view, setView, requestInput, refresh, openFile, setExpanded,
   });
 
   const { handleImport, startImportInto, startImportFolderInto, handleFolderImport } = useImportActions({
@@ -210,11 +210,6 @@ export default function AppShell() {
       setError(reason instanceof Error ? reason.message : `Could not restore “${activeTab.meta.name}”.`);
     });
   }, [activeTab, loading, openFile]);
-
-  async function createWorkspaceFile(kind: 'markdown' | 'code') {
-    if (view !== 'workspace') setView('workspace');
-    await createNewFile(kind);
-  }
 
   const sortedVisible = useMemo(() => selectVisibleFiles(
     view, liveFiles, trashedFiles, activeWorkspaceId, activeProject, selectedFolder, sort, sortDesc,
