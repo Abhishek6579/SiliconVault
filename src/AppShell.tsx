@@ -29,6 +29,8 @@ import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import { useTabLifecycle } from './features/tabs/hooks/useTabLifecycle';
+import TabStrip from './features/tabs/components/TabStrip';
+import EditorTitlebar from './features/tabs/components/EditorTitlebar';
 import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
 import { isEditableKind } from './shared/constants/fileKinds';
 import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
@@ -349,31 +351,31 @@ export default function AppShell() {
       <ErrorBanner message={error} onDismiss={() => setError('')} />
 
       {activeTab ? <div ref={editorWorkspaceRef} className="editor-workspace">
-        <div className="tab-strip">
-          <div className="tab-list">
-            {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
-              {<FileKindIcon kind={tab.meta.kind} size={15} />}<span className="truncate" title={tab.meta.name}>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}
-              <span role="button" tabIndex={0} className="tab-close" aria-label={`Close ${tab.meta.name}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); closeTab(tab.id); } }}><X size={14} /></span>
-            </button>)}
-          </div>
-          <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}><Plus size={16} /></button>
-        </div>
-        <div className="editor-titlebar">
-          <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? getProjectName(activeTab.meta.projectId) : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? getProjectName(activeTab.meta.projectId) : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
-          <div className="editor-tools">
-            {isEditableKind(activeTab.meta.kind) && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
-            {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => {
-              const preview = !activeTab.preview;
-              const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
-              setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
-              void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
-            }}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
-            {isEditableKind(activeTab.meta.kind) && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
-            <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
-            <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
-            <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
-          </div>
-        </div>
+        <TabStrip
+          tabs={workspaceTabs}
+          activeTabId={activeTabId}
+          onOpen={(tab) => void openFile(tab.meta)}
+          onClose={closeTab}
+          onImport={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}
+        />
+        <EditorTitlebar
+          activeTab={activeTab}
+          folders={folders}
+          getProjectName={getProjectName}
+          editorFontSize={editorFontSize}
+          focusMode={focusMode}
+          onFontSizeChange={setEditorFontSize}
+          onTogglePreview={() => {
+            const preview = !activeTab.preview;
+            const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
+            setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
+            void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
+          }}
+          onSave={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}
+          onRename={() => void renameItem(activeTab.meta)}
+          onDelete={() => void deleteFile(activeTab.meta)}
+          onToggleFocus={() => setFocusMode((value) => !value)}
+        />
         {activeTab.meta.kind === 'pdf' && (
           <div className="pdf-tabs-host">
             <div className="pdf-tab-host" key={activeTab.id}>
