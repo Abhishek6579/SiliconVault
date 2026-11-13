@@ -22,8 +22,10 @@
 
 ## D-03: macOS trackpad zoom
 
-- **Status:** Open
-- **Decision:** Decide whether pinch-generated wheel events should zoom the app only after testing on macOS hardware.
+- **Status:** Accepted; native macOS verification pending
+- **Decision:** Treat pinch-generated wheel events reported with `ctrlKey` as the same zoom gesture as Ctrl/Cmd+wheel. The focused surface receives the existing zoom behavior (PDF zoom, editor font size, or app zoom).
+- **Reason:** This preserves one shared input path and matches the existing Ctrl/Cmd+wheel behavior without adding platform-specific detection to the UI.
+- **Validation:** Unit coverage verifies the shared modifier recognizes a Ctrl wheel gesture. Confirm the actual WebKit event and focused-surface behavior on macOS hardware before release.
 
 ## D-04: Backup schema version
 
