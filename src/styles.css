@@ -4093,6 +4093,35 @@ body,
   background: var(--panel, #111);
 }
 
+.viewer-find {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 3px 10px;
+  color: var(--muted, #aaa);
+  background: var(--panel, #111);
+  border-bottom: 1px solid var(--border, #292929);
+}
+
+.viewer-find input {
+  width: min(260px, 45vw);
+  height: 27px;
+  padding: 0 7px;
+  color: var(--ink, #eee);
+  background: var(--surface, #191919);
+  border: 1px solid var(--border, #383838);
+  border-radius: 4px;
+  outline: none;
+  font: inherit;
+  font-size: 12px;
+}
+
+.viewer-find input:focus {
+  border-color: var(--accent, #777);
+}
+
 .office-document-find {
   display: flex;
   align-items: center;
