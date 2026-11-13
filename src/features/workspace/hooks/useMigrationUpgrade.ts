@@ -5,6 +5,8 @@ import { downloadBackup, exportBackupStream } from '../../../storage/backup';
 import { platform } from '../../../platform';
 import { getWorkspacePreference, loadWorkspaceCatalog } from '../../../storage/workspaceCatalog';
 import type { Workspace } from '../../../storage/types';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 interface Options {
   setLoading: (loading: boolean) => void;
@@ -56,6 +58,7 @@ export function useMigrationUpgrade(options: Options) {
       setMigrationBackup(null);
       await refresh();
     } catch (reason) {
+      void logger.error('storage.migration.failed', 'Database migration or recovery failed.', errorContext(reason));
       setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your existing database remains unchanged unless the upgrade completed.');
       setLoading(false);
     } finally {

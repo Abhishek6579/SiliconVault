@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import WorkspaceDialog, { type WorkspaceDialogState } from '../../../components/WorkspaceDialog';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 type Prompt = (title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) => void;
 type Confirm = (title: string, message: string, confirmLabel: string, onConfirm: () => void | Promise<void>, destructive?: boolean) => void;
@@ -31,7 +33,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialog(null);
     try {
       await active.onConfirm(active.value ?? '');
+      void logger.info('workspace.dialog_action.completed', 'A workspace dialog action completed.', { mode: active.mode });
     } catch (reason) {
+      void logger.error('workspace.dialog_action.failed', 'A workspace dialog action failed.', { mode: active.mode, ...errorContext(reason) });
       onError(reason instanceof Error ? reason.message : 'This action could not be completed.');
     }
   }, [dialog]);

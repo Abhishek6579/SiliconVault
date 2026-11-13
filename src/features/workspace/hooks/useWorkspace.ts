@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { getWorkspace, loadWorkspaceCatalog, setWorkspacePreference } from '../../../storage/workspaceCatalog';
 import type { FileMeta, Folder, Project, Workspace } from '../../../storage/types';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 /** Owns the persisted workspace catalog and the currently selected workspace. */
 export function useWorkspace(onError: (message: string) => void, onLoading: (loading: boolean) => void) {
@@ -20,6 +22,7 @@ export function useWorkspace(onError: (message: string) => void, onLoading: (loa
       // Do not clear errors on success. That would hide a save failure shown moments earlier.
     } catch (reason) {
       console.error('Workspace refresh failed:', reason);
+      void logger.error('workspace.refresh.failed', 'Workspace metadata refresh failed.', errorContext(reason));
       onError(reason instanceof Error ? reason.message : 'Could not open the local workspace.');
     } finally {
       onLoading(false);
@@ -35,8 +38,10 @@ export function useWorkspace(onError: (message: string) => void, onLoading: (loa
       }
       await setWorkspacePreference('activeWorkspace', id);
       setActiveWorkspaceId(id);
+      void logger.info('workspace.switch.completed', 'Active workspace changed.');
     } catch (reason) {
       console.error('Workspace switch failed:', reason);
+      void logger.error('workspace.switch.failed', 'Active workspace could not be changed.', errorContext(reason));
       onError(reason instanceof Error ? reason.message : 'Could not switch workspace.');
     }
   }, [onError]);

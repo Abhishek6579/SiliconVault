@@ -7,11 +7,11 @@ type BackupDatabase = Parameters<typeof exportBackupStream>[0];
 export async function exportWorkspaceBackup(
   database: BackupDatabase,
   platform: Pick<PlatformAdapter, 'capabilities' | 'saveBackup'>,
-): Promise<void> {
+): Promise<boolean> {
   if (platform.capabilities.nativeBackupSave) {
-    await platform.saveBackup(exportBackupStream(database));
-    return;
+    return platform.saveBackup(exportBackupStream(database));
   }
 
   await downloadBackup(database as Parameters<typeof downloadBackup>[0]);
+  return true;
 }

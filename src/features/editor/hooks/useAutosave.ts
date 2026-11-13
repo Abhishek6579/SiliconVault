@@ -6,6 +6,8 @@ import { deletePreference, writePreference } from '../../../storage/preferenceSt
 import { saveFileText } from '../../../storage/files';
 import { platform } from '../../../platform';
 import type { Tab } from '../../tabs/types';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 type SetTabs = Dispatch<SetStateAction<Tab[]>>;
 
@@ -57,6 +59,7 @@ export function useAutosave(
       .catch((reason: unknown) => {
         // The draft stays in pendingDrafts, so the next save or close attempt retries it.
         console.error('persistDraft failed for', id, reason);
+        void logger.error('editor.autosave.failed', 'An editor draft could not be saved.', errorContext(reason));
         if (draftRevisions.current.get(id) === revision) {
           setStatus('Could not save');
           setError(reason instanceof Error ? reason.message : 'Unable to save changes.');
@@ -88,6 +91,7 @@ export function useAutosave(
       draftRecoveryTimers.current.delete(id);
       void writePreference(`draft:${id}`, draft).catch((reason: unknown) => {
         console.error('Crash-recovery draft write failed for', id, reason);
+        void logger.error('editor.recovery_draft.failed', 'Crash-recovery draft persistence failed.', errorContext(reason));
         setError(reason instanceof Error ? reason.message : 'Could not persist the crash-recovery draft.');
       });
     }, 150));
@@ -151,6 +155,7 @@ export function useAutosave(
       } catch (reason) {
         closeInProgress.current = false;
         console.error('Close cancelled: save failed.', reason);
+        void logger.error('app.shutdown_cancelled', 'Application close was cancelled because pending edits could not be saved.', errorContext(reason));
         setStatus('Save failed · close cancelled');
         setError(reason instanceof Error ? reason.message : 'Unsaved changes could not be saved. The application remains open.');
       }

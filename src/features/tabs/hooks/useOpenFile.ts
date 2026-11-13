@@ -5,6 +5,8 @@ import { releaseInactiveTabData } from '../utils/releaseInactiveTabData';
 import type { FileMeta } from '../../../storage/types';
 import type { Tab } from '../types';
 import type { SetTabState } from './useWorkspaceTabs';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 interface OpenFileDependencies {
   activeWorkspaceId: string | null;
@@ -64,6 +66,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
       try {
         hydrated = existing.hydrated !== true ? await hydratePersistedWorkspaceTab(existing) : existing;
       } catch (reason) {
+        void logger.error('file.open.failed', 'An existing workspace tab could not be hydrated.', errorContext(reason));
         setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
         return;
       }
@@ -79,6 +82,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
     try {
       newTab = await hydratePersistedWorkspaceTab({ id: meta.id, meta, draft: '', dirty: false, preview: meta.kind === 'markdown' });
     } catch (reason) {
+      void logger.error('file.open.failed', 'A workspace file could not be opened.', errorContext(reason));
       setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
       return;
     }

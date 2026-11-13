@@ -4,6 +4,8 @@ import { DATABASE_NAME, DATABASE_VERSION, db, existingDatabaseVersion, openWorks
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
 import { getWorkspacePreference, loadWorkspaceCatalog, setWorkspacePreference } from '../../../storage/workspaceCatalog';
 import type { Workspace } from '../../../storage/types';
+import { logger } from '../../../logger.js';
+import { errorContext } from '../../../shared/logging/errorContext';
 
 interface Options {
   refresh: () => Promise<void>;
@@ -29,6 +31,7 @@ export function useWorkspaceInitialization(options: Options) {
   useEffect(() => {
     let alive = true;
     const initialize = async () => {
+      void logger.info('app.startup.started', 'Local workspace startup started.');
       try {
         const version = await existingDatabaseVersion(DATABASE_NAME);
         if (version > 0 && version < DATABASE_VERSION) {
@@ -50,7 +53,9 @@ export function useWorkspaceInitialization(options: Options) {
         if (alive && selectedWorkspace && !storedWorkspace) await setWorkspacePreference('activeWorkspace', selectedWorkspace);
         if (alive && selectedWorkspace) await restoreTabs(selectedWorkspace);
         if (alive) await refresh();
+        if (alive) void logger.info('app.startup.completed', 'Local workspace startup completed.', { workspaceCount: nextWorkspaces.length });
       } catch (reason) {
+        void logger.error('app.startup.failed', 'Local workspace startup failed.', errorContext(reason));
         if (alive) { setError(reason instanceof Error ? reason.message : 'Could not open the local workspace.'); setLoading(false); }
       }
     };
