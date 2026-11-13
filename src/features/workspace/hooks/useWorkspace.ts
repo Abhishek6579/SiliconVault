@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { db } from '../../../storage/database';
+import { getWorkspace, loadWorkspaceCatalog, setWorkspacePreference } from '../../../storage/workspaceCatalog';
 import type { FileMeta, Folder, Project, Workspace } from '../../../storage/types';
 
 /** Owns the persisted workspace catalog and the currently selected workspace. */
@@ -12,12 +12,7 @@ export function useWorkspace(onError: (message: string) => void, onLoading: (loa
 
   const refresh = useCallback(async () => {
     try {
-      const [nextFiles, nextFolders, nextProjects, nextWorkspaces] = await Promise.all([
-        db.files.toArray(),
-        db.folders.toArray(),
-        db.projects.toArray(),
-        db.workspaces.toArray(),
-      ]);
+      const { files: nextFiles, folders: nextFolders, projects: nextProjects, workspaces: nextWorkspaces } = await loadWorkspaceCatalog();
       setFiles(nextFiles);
       setFolders(nextFolders);
       setProjects(nextProjects);
@@ -33,12 +28,12 @@ export function useWorkspace(onError: (message: string) => void, onLoading: (loa
 
   const switchWorkspace = useCallback(async (id: string) => {
     try {
-      const exists = await db.workspaces.get(id);
+      const exists = await getWorkspace(id);
       if (!exists) {
         onError('That workspace no longer exists.');
         return;
       }
-      await db.preferences.put({ key: 'activeWorkspace', value: id, updatedAt: Date.now() });
+      await setWorkspacePreference('activeWorkspace', id);
       setActiveWorkspaceId(id);
     } catch (reason) {
       console.error('Workspace switch failed:', reason);

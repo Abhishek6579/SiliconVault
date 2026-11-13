@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-import { db } from '../../../storage/database';
-import { hydrateWorkspaceTab, saveWorkspaceSession } from '../../../storage/tabSession';
+import { hydratePersistedWorkspaceTab, savePersistedWorkspaceSession } from '../../../storage/tabSession';
 import { kindForFile } from '../../../storage/files';
 import { releaseInactiveTabData } from '../utils/releaseInactiveTabData';
 import type { FileMeta } from '../../../storage/types';
@@ -36,7 +35,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
     let restoredTabs: Tab[] = [];
     if (meta.workspaceId !== activeWorkspaceId) {
       if (activeWorkspaceId) {
-        await saveWorkspaceSession(db, activeWorkspaceId, tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId).map((tab) => tab.id), activeTabId);
+        await savePersistedWorkspaceSession(activeWorkspaceId, tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId).map((tab) => tab.id), activeTabId);
       }
       await switchWorkspace(meta.workspaceId);
       const restored = await restoreWorkspaceTabs(meta.workspaceId);
@@ -52,7 +51,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
         .filter((tab) => tab.meta.workspaceId === meta.workspaceId);
       const openFileIds = [...new Set([...currentWorkspaceTabs.map((tab) => tab.id), meta.id])];
       try {
-        await saveWorkspaceSession(db, meta.workspaceId, openFileIds, meta.id);
+        await savePersistedWorkspaceSession(meta.workspaceId, openFileIds, meta.id);
         return true;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.');
@@ -63,7 +62,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
     if (existing) {
       let hydrated: Tab;
       try {
-        hydrated = existing.hydrated !== true ? await hydrateWorkspaceTab(db, existing) : existing;
+        hydrated = existing.hydrated !== true ? await hydratePersistedWorkspaceTab(existing) : existing;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
         return;
@@ -78,7 +77,7 @@ export function useOpenFile(dependencies: OpenFileDependencies) {
 
     let newTab: Tab;
     try {
-      newTab = await hydrateWorkspaceTab(db, { id: meta.id, meta, draft: '', dirty: false, preview: meta.kind === 'markdown' });
+      newTab = await hydratePersistedWorkspaceTab({ id: meta.id, meta, draft: '', dirty: false, preview: meta.kind === 'markdown' });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
       return;

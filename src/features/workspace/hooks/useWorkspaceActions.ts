@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { createWorkspace as persistWorkspace, renameWorkspace as persistWorkspaceName, setWorkspacePreference } from '../../../storage/workspaceCatalog';
 import { db } from '../../../storage/database';
 import { deleteWorkspace } from '../../../storage/hierarchy';
 import type { FileMeta, Folder, Project, Workspace } from '../../../storage/types';
@@ -25,15 +26,15 @@ export function useWorkspaceActions(options: Options) {
     requestInput('Create workspace', '', 'Workspace name', 'Create workspace', async (name) => {
       const now = Date.now();
       const workspace: Workspace = { id: crypto.randomUUID(), name: name.trim(), createdAt: now, updatedAt: now };
-      await db.workspaces.add(workspace);
-      await db.preferences.put({ key: 'activeWorkspace', value: workspace.id, updatedAt: now });
+      await persistWorkspace(workspace);
+      await setWorkspacePreference('activeWorkspace', workspace.id, now);
       setActiveWorkspaceId(workspace.id); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); setView('workspace');
       await refresh();
     }, 'Each workspace has its own projects, folders, and files.');
   }
   function renameWorkspace(workspace: Workspace) {
     requestInput('Rename workspace', workspace.name, 'Workspace name', 'Save name', async (name) => {
-      await db.workspaces.update(workspace.id, { name: name.trim(), updatedAt: Date.now() });
+      await persistWorkspaceName(workspace.id, name.trim());
       await refresh();
     });
   }

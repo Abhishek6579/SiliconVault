@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../../../storage/database';
+import { db, openWorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../../../storage/database';
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
 import { downloadBackup, exportBackupStream } from '../../../storage/backup';
 import { platform } from '../../../platform';
+import { getWorkspacePreference, loadWorkspaceCatalog } from '../../../storage/workspaceCatalog';
 import type { Workspace } from '../../../storage/types';
 
 interface Options {
@@ -41,15 +42,15 @@ export function useMigrationUpgrade(options: Options) {
         return;
       }
       previous.close();
-      await db.open();
+      await openWorkspaceDatabase();
       const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
       setAppZoom(uiPreferences.appZoom);
       setEditorFontSize(uiPreferences.editorFontSize);
       setPreferencesReady(true);
-      const theme = await db.preferences.get('theme');
+      const theme = await getWorkspacePreference('theme');
       setDarkTheme(theme ? theme.value === 'dark' : true);
-      const selectedPreference = await db.preferences.get('activeWorkspace');
-      const nextWorkspaces = await db.workspaces.toArray();
+      const selectedPreference = await getWorkspacePreference('activeWorkspace');
+      const { workspaces: nextWorkspaces } = await loadWorkspaceCatalog();
       setWorkspaces(nextWorkspaces);
       setActiveWorkspaceId(nextWorkspaces.find((workspace) => workspace.id === selectedPreference?.value)?.id ?? nextWorkspaces[0]?.id ?? null);
       setMigrationBackup(null);

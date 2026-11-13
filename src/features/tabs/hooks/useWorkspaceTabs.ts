@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { db } from '../../../storage/database';
-import { restoreWorkspaceSession, saveWorkspaceSession } from '../../../storage/tabSession';
+import { restorePersistedWorkspaceSession, savePersistedWorkspaceSession } from '../../../storage/tabSession';
 import type { Tab } from '../types';
 
 export type SetTabState = Dispatch<SetStateAction<Tab[]>>;
@@ -23,7 +22,7 @@ export function useWorkspaceTabs(
   const saveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const restoreWorkspaceTabs = useCallback(async (workspaceId: string) => {
-    const restored = await restoreWorkspaceSession(db, workspaceId);
+    const restored = await restorePersistedWorkspaceSession(workspaceId);
     setTabs((current) => {
       const existingTabs = new Map(
         current.filter((tab) => tab.meta.workspaceId === workspaceId).map((tab) => [tab.id, tab]),
@@ -46,7 +45,7 @@ export function useWorkspaceTabs(
       saveTimer.current = null;
       saveChain.current = saveChain.current
         .catch(() => undefined)
-        .then(() => saveWorkspaceSession(db, workspaceId, openFileIds, activeTabId).then(() => undefined))
+        .then(() => savePersistedWorkspaceSession(workspaceId, openFileIds, activeTabId).then(() => undefined))
         .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.'));
     }, 120);
     return () => {
@@ -63,7 +62,7 @@ export function useWorkspaceTabs(
     await saveChain.current.catch(() => undefined);
     if (!activeWorkspaceId) return;
     const openFileIds = workspaceTabSignature ? workspaceTabSignature.split('\u0000') : [];
-    await saveWorkspaceSession(db, activeWorkspaceId, openFileIds, activeTabId);
+    await savePersistedWorkspaceSession(activeWorkspaceId, openFileIds, activeTabId);
   }, [activeTabId, activeWorkspaceId, workspaceTabSignature]);
 
   return { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession };

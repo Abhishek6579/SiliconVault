@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
+import { getWorkspacePreference, loadWorkspaceCatalog, setWorkspacePreference } from './storage/workspaceCatalog';
+import { writePreference } from './storage/preferenceStore';
 import { platform } from './platform';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
@@ -122,12 +124,12 @@ export default function AppShell() {
   const { closeTab } = useTabLifecycle({ tabs, activeTabId, setTabs, setActiveTabId, requestConfirmation, persistDraft });
   const onBackupRestored = useCallback(async () => {
     setTabs([]); setActiveTabId(null); setActiveProject(null); setSelectedFolder(null);
-    const restoredWorkspaces = await db.workspaces.toArray();
-    const storedWorkspace = await db.preferences.get('activeWorkspace');
+    const { workspaces: restoredWorkspaces } = await loadWorkspaceCatalog();
+    const storedWorkspace = await getWorkspacePreference('activeWorkspace');
     const selected = restoredWorkspaces.find((item) => item.id === storedWorkspace?.value)?.id ?? restoredWorkspaces[0]?.id ?? null;
     setWorkspaces(restoredWorkspaces);
     setActiveWorkspaceId(selected);
-    if (selected) await db.preferences.put({ key: 'activeWorkspace', value: selected, updatedAt: Date.now() });
+    if (selected) await setWorkspacePreference('activeWorkspace', selected);
     await refresh();
   }, [refresh, setWorkspaces]);
   const backup = useWorkspaceBackup(flushPendingSaves, requestConfirmation, setError, onBackupRestored);
@@ -270,7 +272,7 @@ export default function AppShell() {
             const preview = !activeTab.preview;
             const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
             setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
-            void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
+            void writePreference(`editor:${activeTab.id}`, editorState).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
           },
           onSave: () => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined),
           onRename: () => void renameItem(activeTab.meta),

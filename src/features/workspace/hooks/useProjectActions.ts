@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { db } from '../../../storage/database';
+import { createProject as persistProject } from '../../../storage/workspaceCatalog';
 import type { Project } from '../../../storage/types';
 
 type View = 'workspace' | 'recent' | 'trash';
@@ -20,7 +20,7 @@ export function useProjectActions({ currentWorkspaceId, requestInput, refresh, s
     requestInput('Create project', '', 'Project name', 'Create project', async (name) => {
       const now = Date.now();
       const project: Project = { id: crypto.randomUUID(), workspaceId: currentWorkspaceId, name: name.trim(), archived: false, createdAt: now, updatedAt: now };
-      await db.projects.add(project);
+      await persistProject(project);
       await refresh();
       setActiveProject(project.id);
       setSelectedFolder(null);

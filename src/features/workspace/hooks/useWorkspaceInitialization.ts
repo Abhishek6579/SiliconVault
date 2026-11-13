@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { DATABASE_NAME, DATABASE_VERSION, db, existingDatabaseVersion } from '../../../storage/database';
+import { DATABASE_NAME, DATABASE_VERSION, db, existingDatabaseVersion, openWorkspaceDatabase } from '../../../storage/database';
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
+import { getWorkspacePreference, loadWorkspaceCatalog, setWorkspacePreference } from '../../../storage/workspaceCatalog';
 import type { Workspace } from '../../../storage/types';
 
 interface Options {
@@ -34,19 +35,19 @@ export function useWorkspaceInitialization(options: Options) {
           if (alive) { setMigrationBackup(version); setLoading(false); }
           return;
         }
-        await db.open();
+        await openWorkspaceDatabase();
         const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
         if (alive) { setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setPreferencesReady(true); }
-        const theme = await db.preferences.get('theme');
+        const theme = await getWorkspacePreference('theme');
         if (alive && theme) setDarkTheme(theme.value === 'dark');
-        const storedWorkspace = await db.preferences.get('activeWorkspace');
-        const nextWorkspaces = await db.workspaces.toArray();
+        const storedWorkspace = await getWorkspacePreference('activeWorkspace');
+        const { workspaces: nextWorkspaces } = await loadWorkspaceCatalog();
         const selectedWorkspace = nextWorkspaces.find((workspace) => workspace.id === storedWorkspace?.value)?.id ?? nextWorkspaces[0]?.id ?? null;
         if (alive) {
           setWorkspaces(nextWorkspaces);
           setActiveWorkspaceId(selectedWorkspace);
         }
-        if (alive && selectedWorkspace && !storedWorkspace) await db.preferences.put({ key: 'activeWorkspace', value: selectedWorkspace, updatedAt: Date.now() });
+        if (alive && selectedWorkspace && !storedWorkspace) await setWorkspacePreference('activeWorkspace', selectedWorkspace);
         if (alive && selectedWorkspace) await restoreTabs(selectedWorkspace);
         if (alive) await refresh();
       } catch (reason) {

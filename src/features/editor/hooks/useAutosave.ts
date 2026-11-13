@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { flushPendingAutosaves } from '../../../storage/autosave';
 import { db } from '../../../storage/database';
+import { deletePreference, writePreference } from '../../../storage/preferenceStore';
 import { saveFileText } from '../../../storage/files';
 import { platform } from '../../../platform';
 import type { Tab } from '../../tabs/types';
@@ -41,7 +42,7 @@ export function useAutosave(
       .then(async () => {
         // Only clear the draft if the user has not typed since this save started.
         if (draftRevisions.current.get(id) === revision) {
-          await db.preferences.delete(`draft:${id}`);
+          await deletePreference(`draft:${id}`);
           pendingDrafts.current.delete(id);
           setTabs((current) => current.map((tab) => tab.id === id
             ? {
@@ -85,7 +86,7 @@ export function useAutosave(
     if (recoveryTimer) clearTimeout(recoveryTimer);
     draftRecoveryTimers.current.set(id, setTimeout(() => {
       draftRecoveryTimers.current.delete(id);
-      void db.preferences.put({ key: `draft:${id}`, value: draft, updatedAt: Date.now() }).catch((reason: unknown) => {
+      void writePreference(`draft:${id}`, draft).catch((reason: unknown) => {
         console.error('Crash-recovery draft write failed for', id, reason);
         setError(reason instanceof Error ? reason.message : 'Could not persist the crash-recovery draft.');
       });
