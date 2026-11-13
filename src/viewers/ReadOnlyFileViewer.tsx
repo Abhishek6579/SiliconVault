@@ -154,11 +154,23 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     findCursorRef.current = { query: '', offset: -1 };
     if (text) restoreScrollPosition();
   }, [text, tabId]);
+  const clearViewerFindHighlight = () => {
+    const highlights = (window.CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights;
+    highlights?.delete('siliconvault-find');
+  };
+  const applyViewerFindHighlight = (range: Range) => {
+    const css = window.CSS as typeof CSS & { highlights?: { set: (name: string, value: unknown) => void } };
+    const HighlightConstructor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+    if (css.highlights && HighlightConstructor) {
+      css.highlights.set('siliconvault-find', new HighlightConstructor(range));
+    }
+  };
+
   const findInViewer = (query: string, direction: 1 | -1 = 1) => {
     const root = rootRef.current;
     const needle = query.trim().toLocaleLowerCase();
     if (!root) return;
-    if (!needle) { window.getSelection()?.removeAllRanges(); findCursorRef.current = { query: '', offset: -1 }; return; }
+    if (!needle) { clearViewerFindHighlight(); findCursorRef.current = { query: '', offset: -1 }; return; }
 
     // Index the rendered text once instead of walking the full DOM and
     // allocating every one-character match on every input event.
@@ -213,9 +225,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     const range = window.document.createRange();
     range.setStart(startSegment.node, matchOffset - startSegment.start);
     range.setEnd(endSegment.node, matchOffset + needle.length - endSegment.start);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    applyViewerFindHighlight(range);
     endSegment.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
@@ -231,7 +241,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     return () => window.removeEventListener('siliconvault:open-document-search', openFind);
   }, [isTextPreview, tabId]);
 
-  const findBar = findOpen && <div className="viewer-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInViewer(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
+  const findBar = findOpen && <div className="viewer-find file-find-bar"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInViewer(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
   const applyZoom = (next: number) => {
     const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
     setZoom(bounded);
