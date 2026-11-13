@@ -64,7 +64,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [officeText, setOfficeText] = useState('');
-  const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);\n  const [officePdf, setOfficePdf] = useState<Blob | null>(null);
+  const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
+  const [officePdf, setOfficePdf] = useState<Blob | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
