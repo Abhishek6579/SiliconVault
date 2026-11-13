@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Search, ZoomIn, ZoomOut } from 'lucide-react';
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
+import { GlobalWorkerOptions, getDocument, TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
+import 'pdfjs-dist/web/pdf_viewer.css';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { disposePdfResources } from './pdf/lifecycle';
 import { MAX_PDF_FILE_SIZE_BYTES } from './storage/limits';
@@ -16,6 +17,7 @@ interface PageSize { width: number; height: number; }
 export default function PdfReader({ tabId, data, title, initialState, onStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef(new Map<number, HTMLCanvasElement>());
+  const textLayerRefs = useRef(new Map<number, HTMLDivElement>());
   const renderTasks = useRef(new Map<number, RenderTask>());
   const renderedScales = useRef(new Map<number, string>());
   const pendingScales = useRef(new Map<number, string>());
@@ -210,6 +212,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
         pendingScales.current.delete(number);
         canvas.width = 0;
         canvas.height = 0;
+        textLayerRefs.current.get(number)?.replaceChildren();
       }
     }
     const renderPage = async (number: number) => {
@@ -238,6 +241,16 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       renderTasks.current.set(number, task);
       try {
         await task.promise;
+        if (pendingScales.current.get(number) !== scaleKey) return;
+        const textLayerContainer = textLayerRefs.current.get(number);
+        if (textLayerContainer) {
+          textLayerContainer.replaceChildren();
+          textLayerContainer.style.width = `${viewport.width}px`;
+          textLayerContainer.style.height = `${viewport.height}px`;
+          const textContent = await page.getTextContent();
+          const textLayer = new TextLayer({ textContentSource: textContent, container: textLayerContainer, viewport });
+          await textLayer.render();
+        }
         if (pendingScales.current.get(number) === scaleKey) renderedScales.current.set(number, scaleKey);
       } catch (reason) {
         if ((reason as { name?: string })?.name !== 'RenderingCancelledException') throw reason;
@@ -422,6 +435,10 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
             style={{ display: 'block' }}
             ref={(element) => { if (element) canvasRefs.current.set(page, element); else canvasRefs.current.delete(page); }}
             aria-label={`${title}, page ${page}`}
+          />
+          <div className="textLayer"
+            ref={(element) => { if (element) textLayerRefs.current.set(page, element); else textLayerRefs.current.delete(page); }}
+            aria-label={`${title}, page ${page}, selectable text`}
           />
         </div>;
       })}</div>}

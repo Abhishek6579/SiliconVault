@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import PdfReader from '../PdfReader';
+import { isDesktopApp } from '../platform/desktop';
 import { extractOfficeDocument, officeBlocksToText, type OfficeBlock } from './officeDocument';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
@@ -62,6 +65,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [zoom, setZoom] = useState(1);
   const [officeText, setOfficeText] = useState('');
   const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
+  const [officePdf, setOfficePdf] = useState<Blob | null>(null);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
@@ -97,10 +101,25 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       setOfficeLoading(false);
       return;
     }
-    extractOfficeDocument(data, ext)
-      .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
-      .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
-      .finally(() => { if (active) setOfficeLoading(false); });
+    if (isDesktopApp() && ['docx', 'docm'].includes(ext)) {
+      data.arrayBuffer()
+        .then((buffer) => invoke<number[]>('convert_office_to_pdf', {
+          bytes: Array.from(new Uint8Array(buffer)),
+          extension: ext,
+        }))
+        .then((bytes) => {
+          if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+        })
+        .catch((reason: unknown) => {
+          if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not convert this Word document to PDF.');
+        })
+        .finally(() => { if (active) setOfficeLoading(false); });
+    } else {
+      extractOfficeDocument(data, ext)
+        .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
+        .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
+        .finally(() => { if (active) setOfficeLoading(false); });
+    }
     return () => { active = false; };
   }, [data, ext, isOffice]);
 
@@ -147,6 +166,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
   if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}
+    {officePdf ? <PdfReader data={officePdf} title={fileName} tabId={`office-preview-${fileName}`} /> : <>
     <div className="office-viewer-toolbar">
       <span>Read-only {ext.startsWith('ppt') ? 'slide' : 'Word-style document'} preview · Text is selectable</span>
       <div>
@@ -155,7 +175,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       </div>
       {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
     </div>
-    {officeLoading ? <div className="loading-state">Preparing document preview…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
+    {officeLoading ? <div className="loading-state">Converting Word document to PDF…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
+    </>}
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
