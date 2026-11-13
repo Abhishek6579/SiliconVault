@@ -148,7 +148,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}
     <div className="office-viewer-toolbar">
-      <span>Read-only {ext.startsWith('ppt') ? 'slide text' : 'document text'} · Original file is unchanged</span>
+      <span>Read-only {ext.startsWith('ppt') ? 'slide' : 'Word-style document'} preview · Text is selectable</span>
       <div>
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(true)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'selection' ? <><Check size={13} /> Copied selection</> : 'Copy selection'}</button>
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(false)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'all' ? <><Check size={13} /> Copied all</> : 'Copy all text'}</button>
