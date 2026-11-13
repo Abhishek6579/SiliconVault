@@ -125,8 +125,15 @@ export default function App() {
         : event.target instanceof Node
           ? event.target.parentElement
           : null;
-      if (target?.closest('.pdf-shell')) return;
-      if (target?.closest('.code-editor, .markdown-preview')) {
+      const overPdf = Boolean(target?.closest('.pdf-shell'));
+      const overEditor = Boolean(target?.closest('.code-editor, .markdown-preview'));
+      if (overPdf) return; // PdfReader owns wheel zoom while the pointer is over its pages.
+      if (lastFocusedSurfaceRef.current === 'pdf') {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', { detail: { direction: event.deltaY < 0 ? 1 : -1 } }));
+        return;
+      }
+      if (overEditor || lastFocusedSurfaceRef.current === 'editor') {
         event.preventDefault();
         setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
         return;

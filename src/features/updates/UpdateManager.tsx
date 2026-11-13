@@ -19,7 +19,6 @@ export default function UpdateManager() {
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [message, setMessage] = useState('');
-  const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const busyRef = useRef(false);
 
@@ -27,20 +26,13 @@ export default function UpdateManager() {
     if (!isDesktopApp() || busyRef.current) return;
     busyRef.current = true;
     setChecking(true);
-    if (manual) {
-      setVisible(true);
-      setMessage('Checking for updates…');
-    }
+    if (manual) setMessage('Checking for updates…');
     try {
       const result = await invoke<UpdateInfo | null>('check_for_update');
       setUpdate(result);
-      if (result) setVisible(true);
       setMessage(result ? '' : manual ? 'SiliconVault is up to date.' : '');
     } catch (error) {
-      if (manual) {
-        setVisible(true);
-        setMessage(error instanceof Error ? error.message : String(error));
-      }
+      if (manual) setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       busyRef.current = false;
       setChecking(false);
@@ -83,18 +75,17 @@ export default function UpdateManager() {
     }
   };
 
-  if (!isDesktopApp() || (!visible && !installing)) return null;
+  if (!isDesktopApp()) return null;
   const percent = progress?.contentLength
     ? Math.min(100, Math.round((progress.downloaded / progress.contentLength) * 100))
     : null;
 
   return (
     <aside style={{ position: 'fixed', right: 18, bottom: 18, zIndex: 10000, width: 'min(390px, calc(100vw - 36px))', padding: 16, border: '1px solid var(--border, #3a3a3a)', borderRadius: 12, background: 'var(--panel, #202020)', color: 'var(--text, #f5f5f5)', boxShadow: '0 12px 40px #0007', fontSize: 13 }}>
-      <button className="icon-button" aria-label="Dismiss update notification" title="Dismiss" disabled={installing} onClick={() => setVisible(false)} style={{ position: 'absolute', top: 7, right: 7 }}>×</button>
       {update ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <strong>SiliconVault {update.version} is available</strong>
-          <button className="icon-button" aria-label="Dismiss update" disabled={installing} onClick={() => { setUpdate(null); setVisible(false); }}>×</button>
+          <button className="icon-button" aria-label="Dismiss update" disabled={installing} onClick={() => setUpdate(null)}>×</button>
         </div>
         {update.notes && <p style={{ margin: '9px 0', whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto', color: 'var(--muted, #b5b5b5)' }}>{update.notes}</p>}
         {installing ? <>
