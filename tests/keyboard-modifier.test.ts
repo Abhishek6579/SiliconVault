@@ -13,4 +13,8 @@ describe('isModKey', () => {
   it('does not treat an unmodified event as a shortcut', () => {
     expect(isModKey({ ctrlKey: false, metaKey: false })).toBe(false);
   });
+
+  it('treats a trackpad pinch reported as ctrl+wheel as a zoom gesture', () => {
+    expect(isModKey({ ctrlKey: true, metaKey: false })).toBe(true);
+  });
 });
