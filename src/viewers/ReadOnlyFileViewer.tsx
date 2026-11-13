@@ -54,6 +54,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     let active = true;
     setOfficeText('');
     setOfficeError('');
+    setCopyError('');
     setOfficeLoading(true);
     setCopied(null);
     if (!(data instanceof Blob)) {
