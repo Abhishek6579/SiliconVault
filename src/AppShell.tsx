@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, MouseEvent as ReactMouseEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { EditorView } from '@codemirror/view';
 import {
   Archive, ArrowDownUp, Check, ChevronDown, ChevronRight, Code2, Command, Download,
@@ -12,7 +12,7 @@ import FileKindIcon from './components/FileKindIcon';
 import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
 import { saveWorkspaceSession } from './storage/tabSession';
-import { createFolder, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
+import { createFolder } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
 import { isDesktopApp, saveBackupToDesktop } from './platform/desktop';
@@ -37,7 +37,7 @@ import BusyPill from './shared/ui/BusyPill';
 import StartupScreen from './shared/ui/StartupScreen';
 import WelcomePage from './features/workspace/components/WelcomePage';
 import { useClickOutside } from './shared/hooks/useClickOutside';
-import { readDragPayload, writeDragPayload } from './shared/utils/dragPayload';
+import { readDragPayload } from './shared/utils/dragPayload';
 import { useOpenFile } from './features/tabs/hooks/useOpenFile';
 import MoveDialog from './features/workspace/components/dialogs/MoveDialog';
 import MigrationDialog from './features/workspace/components/dialogs/MigrationDialog';
@@ -53,6 +53,7 @@ import { useImportActions, type ImportTarget } from './features/workspace/hooks/
 import { useItemActions, type ContextItemType, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
+import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
@@ -225,6 +226,7 @@ export default function AppShell() {
     setError, setImporting, setImportTarget, setSelectedFolder, setActiveProject,
     setView, setExpanded, setStatus, fileInput, folderInput,
   });
+  const { handleDrop } = useDragAndDrop({ activeProject, currentWorkspaceId, handleImport, refresh, setError });
 
   const {
     moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject, restoreTrashedFile,
@@ -316,27 +318,6 @@ export default function AppShell() {
       return;
     }
     close();
-  }
-
-  function handleDrop(event: DragEvent, folderId: string | null, destinationProjectId = activeProject, destinationWorkspaceId = currentWorkspaceId) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer.files.length > 0) {
-      void handleImport(event.dataTransfer.files, folderId, destinationProjectId, destinationWorkspaceId);
-      return;
-    }
-    let payload: ReturnType<typeof readDragPayload>;
-    try { payload = readDragPayload(event.dataTransfer); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not read this dragged item.'); return; }
-    if (!payload) return;
-    const { id, type } = payload;
-    void (async () => {
-      try {
-        if (type === 'file') await moveFile(db, id, folderId, destinationProjectId, destinationWorkspaceId);
-        else await moveFolder(db, id, folderId, destinationProjectId, destinationWorkspaceId);
-        await refresh();
-      } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not move this item.'); }
-    })();
   }
 
   async function createWorkspaceFile(kind: 'markdown' | 'code') {
