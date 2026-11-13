@@ -41,3 +41,15 @@ Attach:
 - An installer upgrade must not clear, recreate, or migrate the IndexedDB profile destructively.
 
 **Status:** CI validates the Windows package build and browser IndexedDB reload behavior. Actual installed MSI upgrade persistence remains a manual VM gate and must not be marked complete until the evidence above is attached.
+
+## Repeatable VM harness
+
+\`scripts/windows/validate-installed-upgrade.ps1\` automates the MSI install sequence and captures evidence without uninstalling between versions. Run it from a clean Windows 10/11 VM using the same Windows account and the actual WebView2 user-data directory for the installed Tauri app:
+
+\`\`\`powershell
+.\\scripts\\windows\\validate-installed-upgrade.ps1 -PreviousMsi .\\artifacts\\previous-release.msi -CandidateMsi .\\artifacts\\candidate.msi -WebView2UserDataDirectory "$env:LOCALAPPDATA\\path\\to\\verified\\WebView2-profile" -EvidenceDirectory .\\upgrade-evidence
+\`\`\`
+
+The profile path must be confirmed from the running installed app before the test; do not assume the example path. The harness installs the previous MSI, pauses for representative data creation, snapshots IndexedDB file inventory, installs the candidate MSI over the existing installation, launches it, and pauses for explicit user verification of workspaces, files, settings, tabs, drafts and PDF position. It records installer logs, MSI SHA-256 hashes, install metadata, profile inventory and the user's pass/fail confirmation in \`upgrade-report.json\`.
+
+The harness deliberately does not infer data integrity from unchanged database file hashes or file counts: WebView2 may rewrite LevelDB files during startup. The human verification step remains mandatory because the harness cannot inspect application-level IndexedDB records from outside the WebView2 process. A run without explicit confirmation is a failure, not a pass.
