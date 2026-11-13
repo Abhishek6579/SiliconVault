@@ -34,6 +34,7 @@ import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
 import { collectFrontendDiagnostics } from './diagnostics.js';
+import UpdateManager from './features/updates/UpdateManager';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceActions } from './features/workspace/hooks/useWorkspaceActions';
@@ -1038,6 +1039,7 @@ export default function App() {
       </section>
     </div>}
 
+    <UpdateManager />
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
