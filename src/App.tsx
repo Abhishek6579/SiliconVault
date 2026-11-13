@@ -151,34 +151,38 @@ export default function App() {
   }, [activeTabId, setEditorFontSize, setAppZoom]);
 
 
-  // Fixed near-black editor theme inspired by the supplied reference.
+  // Charcoal editor surface with a cool, high-contrast syntax palette.
   const editorTheme = useMemo(() => EditorView.theme({
-    '&': { height: '100%', backgroundColor: '#111111', color: '#e6e6e6' },
-    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
-    '.cm-content': { caretColor: '#f2f2f2', fontSize: `${editorFontSize}px` },
+    '&': { height: '100%', backgroundColor: '#1b1d1f', color: '#d7dce2' },
+    '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.65', overflow: 'auto' },
+    '.cm-content': { caretColor: '#dce8f7', fontSize: `${editorFontSize}px` },
     '.cm-line': { padding: '0 4px' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#f2f2f2' },
-    '.cm-gutters': { backgroundColor: '#111111', color: '#777777', border: 'none', borderRight: '1px solid #242424', fontSize: `${editorFontSize}px` },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#dce8f7' },
+    '.cm-gutters': { backgroundColor: '#17191b', color: '#68717c', border: 'none', borderRight: '1px solid #292d31', fontSize: `${editorFontSize}px` },
     '.cm-lineNumbers .cm-gutterElement': { minWidth: '3.5em', padding: '0 12px 0 10px' },
-    '.cm-activeLine': { backgroundColor: '#191919' },
-    '.cm-activeLineGutter': { backgroundColor: '#191919', color: '#d8d8d8' },
-    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#343b4a' },
-    '.cm-selectionMatch': { backgroundColor: '#292f3a' },
-    '.cm-focused .cm-matchingBracket': { backgroundColor: '#292f3a', outline: '1px solid #59677f' },
-    '.cm-searchMatch': { backgroundColor: '#51421f', outline: '1px solid #8a7134' },
-    '.cm-searchMatch-selected': { backgroundColor: '#6a5526' },
-    '.cm-tooltip': { backgroundColor: '#1b1b1b', color: '#e6e6e6', border: '1px solid #383838' },
-    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30343d', color: '#ffffff' },
-    '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
+    '.cm-activeLine': { backgroundColor: '#222528' },
+    '.cm-activeLineGutter': { backgroundColor: '#222528', color: '#c2ccd8' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: '#34465d' },
+    '.cm-selectionMatch': { backgroundColor: '#2c3948' },
+    '.cm-focused .cm-matchingBracket': { backgroundColor: '#2d3d4f', outline: '1px solid #6684a8' },
+    '.cm-searchMatch': { backgroundColor: '#51452b', outline: '1px solid #8b7548' },
+    '.cm-searchMatch-selected': { backgroundColor: '#705b32' },
+    '.cm-tooltip': { backgroundColor: '#25292d', color: '#d7dce2', border: '1px solid #3a4148' },
+    '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#34404e', color: '#e5edf7' },
+    '.cm-foldPlaceholder': { backgroundColor: '#2b3035', color: '#c2ccd8', border: 'none' },
   }, { dark: true }), [editorFontSize]);
   const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
-    { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
-    { tag: tags.keyword, color: '#c586c0' },
-    { tag: [tags.typeName, tags.className], color: '#4ec9b0' },
-    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#dcdcaa' },
-    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#ce9178' },
-    { tag: [tags.number, tags.bool, tags.null], color: '#b5cea8' },
-    { tag: tags.operator, color: '#d4d4d4' },
+    { tag: tags.comment, color: '#7f9b83', fontStyle: 'italic' },
+    { tag: tags.keyword, color: '#c6a0d8' },
+    { tag: [tags.typeName, tags.className, tags.namespace], color: '#82c7c0' },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: '#e4c58a' },
+    { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: '#d99a83' },
+    { tag: [tags.number, tags.bool, tags.null, tags.atom], color: '#b7c995' },
+    { tag: [tags.propertyName, tags.attributeName], color: '#91b9df' },
+    { tag: [tags.variableName, tags.constant(tags.variableName)], color: '#c4c9e8' },
+    { tag: [tags.operator, tags.punctuation, tags.bracket], color: '#c3cbd5' },
+    { tag: [tags.meta, tags.processingInstruction], color: '#8da8c8' },
+    { tag: [tags.heading, tags.strong], color: '#d9e2ef' },
   ])), []);
 
   function requestInput(title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) {
