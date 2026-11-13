@@ -81,4 +81,4 @@ Workspace data is stored locally through Dexie/IndexedDB; no account, cloud sync
 
 ## License
 
-No software license has been selected or granted. The root [LICENSE.md](LICENSE.md) is a status notice, not a license grant. See [License status](docs/license-status.md); do not assume that public repository access grants reuse or redistribution rights.
+SiliconVault is licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify, and distribute the project under those terms. See [NOTICE](NOTICE) for project attribution and [License status](docs/license-status.md) for third-party dependency and distribution guidance.
