@@ -120,7 +120,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
           const conversionError = reason instanceof Error ? reason.message : 'Could not convert this Office document to PDF.';
           if (!active) return;
           if (!structuredOfficeExtensions.includes(ext)) {
-            setOfficeError(`PDF conversion failed: ${conversionError} Install LibreOffice to preview this file in SiliconVault.`);
+            setOfficeError(`PDF conversion failed: ${conversionError} Configure a licensed ONLYOFFICE Document Builder runtime or install LibreOffice to preview this file in SiliconVault.`);
             return;
           }
           try {
@@ -145,7 +145,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
         .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
         .finally(() => { if (active) setOfficeLoading(false); });
     } else {
-      setOfficeError('This Office format requires the desktop app with LibreOffice installed. Open the file in the desktop version to preview it.');
+      setOfficeError('This Office format requires the desktop app with an Office conversion engine configured. Configure ONLYOFFICE Document Builder or LibreOffice, then reopen the file.');
       setOfficeLoading(false);
     }
     return () => { active = false; };
