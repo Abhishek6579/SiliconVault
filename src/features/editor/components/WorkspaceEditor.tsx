@@ -106,7 +106,7 @@ export default function WorkspaceEditor({
   return <div className="code-editor"><CodeMirror
     value={value} height="100%" theme={editorTheme} extensions={[extension, editorSyntax]}
     onChange={onChange}
-    onCreateEditor={(view) => restoreEditorViewState(view, editorState)}
+    onCreateEditor={(view) => { if (editorViewRef) editorViewRef.current = view; restoreEditorViewState(view, editorState); }}
     onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) onViewStateChange(update.view, preview); }}
     basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }}
   /></div>;
