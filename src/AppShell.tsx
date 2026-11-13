@@ -59,6 +59,7 @@ import { useFolderActions } from './features/workspace/hooks/useFolderActions';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import RightPanel from './features/workspace/components/RightPanel';
+import WorkspaceOverview from './features/workspace/components/overview/WorkspaceOverview';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
@@ -421,11 +422,10 @@ export default function AppShell() {
           <WelcomePage onCreateProject={() => void createProject()} onImportFiles={() => startImportInto({ folderId: null, projectId: null, workspaceId: currentWorkspaceId })} onCreateNote={() => void createWorkspaceFile('markdown')} onCreateCodeFile={() => void createWorkspaceFile('code')} />
           <div className="privacy-note"><HardDrive size={15} /> Your files stay in this browser on this device.</div>
         </> : <div className="file-area" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
-          {view === 'workspace' && !activeProject && !selectedFolder && (activeProjects.length > 0 || generalRootFolders.length > 0) && <section className="workspace-overview">
-            <div className="workspace-overview-heading"><div><span>YOUR WORKSPACE</span><h1>Projects and folders</h1><p>Choose a project to open its own files, or browse general workspace files below.</p></div><button className="outline-button" onClick={() => void createProject()}><Plus size={14} /> New project</button></div>
-            {activeProjects.length > 0 && <><h2>Projects</h2><div className="overview-card-grid">{activeProjects.map((project) => <button className="overview-card" key={project.id} onClick={() => void switchProject(project.id)}><span className="overview-card-icon project-card-icon"><Layers size={17} /></span><b>{project.name}</b><small>{liveFiles.filter((file) => file.projectId === project.id).length} files · {folders.filter((folder) => folder.projectId === project.id).length} folders</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
-            {generalRootFolders.length > 0 && <><h2>General folders</h2><div className="overview-card-grid">{generalRootFolders.map((folder) => <button className="overview-card" key={folder.id} onClick={() => { setSelectedFolder(folder.id); setActiveProject(null); setActiveTabId(null); }}><span className="overview-card-icon folder-card-icon"><Folder size={17} /></span><b>{folder.name}</b><small>General workspace folder</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
-          </section>}
+          <WorkspaceOverview
+            data={{ view, activeProject, selectedFolder, activeProjects, generalRootFolders, liveFiles, folders }}
+            actions={{ createProject: () => void createProject(), switchProject, setSelectedFolder, setActiveProject, setActiveTabId }}
+          />
           <FileList
             data={{ view, sortDesc, currentFolders, selectedFolder, activeProject, activeProjectRecord, activeProjects, currentWorkspaceId, trashedFiles, sortedVisible, getProjectName }}
             actions={{ setSelectedFolder, setActiveTabId, setSort, setSortDesc, showContextMenu, handleDrop, doEmptyTrash, restoreTrashedFile, openFile, deleteFile, createWorkspaceFile, startImportInto }}
