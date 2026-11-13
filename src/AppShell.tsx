@@ -1,9 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { File, HardDrive } from 'lucide-react';
+import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
-import FileKindIcon from './components/FileKindIcon';
-import { formatSize } from './utils/format';
 import { saveWorkspaceSession } from './storage/tabSession';
 import { isDesktopApp } from './platform/desktop';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
@@ -19,11 +17,8 @@ import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import { useTabLifecycle } from './features/tabs/hooks/useTabLifecycle';
-import TabStrip from './features/tabs/components/TabStrip';
-import EditorTitlebar from './features/tabs/components/EditorTitlebar';
 import BackgroundTabStrip from './features/tabs/components/BackgroundTabStrip';
-import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
-import { isEditableKind } from './shared/constants/fileKinds';
+import EditorSurface from './features/tabs/components/EditorSurface';
 import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
 import EmptyState from './shared/ui/EmptyState';
 import ErrorBanner from './shared/ui/ErrorBanner';
@@ -55,9 +50,6 @@ import SearchPopup from './features/search/components/SearchPopup';
 import WorkspaceOverview from './features/workspace/components/overview/WorkspaceOverview';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
-const PdfReader = lazy(() => import('./PdfReader'));
-const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
-
 
 export default function AppShell() {
   useEffect(() => collectFrontendDiagnostics(), []);
@@ -305,72 +297,26 @@ export default function AppShell() {
 
       <ErrorBanner message={error} onDismiss={() => setError('')} />
 
-      {activeTab ? <div ref={editorWorkspaceRef} className="editor-workspace">
-        <TabStrip
-          tabs={workspaceTabs}
-          activeTabId={activeTabId}
-          onOpen={(tab) => void openFile(tab.meta)}
-          onClose={closeTab}
-          onImport={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}
-        />
-        <EditorTitlebar
-          activeTab={activeTab}
-          folders={folders}
-          getProjectName={getProjectName}
-          editorFontSize={editorFontSize}
-          focusMode={focusMode}
-          onFontSizeChange={setEditorFontSize}
-          onTogglePreview={() => {
+      {activeTab ? <EditorSurface
+        data={{ activeTab, workspaceTabs, activeTabId, editorFontSize, editorWorkspaceRef, editorViewRef, folders, getProjectName, focusMode }}
+        actions={{
+          onOpenTab: (tab) => void openFile(tab.meta),
+          onCloseTab: closeTab,
+          onImport: () => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }),
+          onFontSizeChange: setEditorFontSize,
+          onTogglePreview: () => {
             const preview = !activeTab.preview;
             const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
             setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
             void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
-          }}
-          onSave={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}
-          onRename={() => void renameItem(activeTab.meta)}
-          onDelete={() => void deleteFile(activeTab.meta)}
-          onToggleFocus={() => setFocusMode((value) => !value)}
-        />
-        {activeTab.meta.kind === 'pdf' && (
-          <div className="pdf-tabs-host">
-            <div className="pdf-tab-host" key={activeTab.id}>
-              {activeTab.data ? <Suspense fallback={<div className="loading-state">Loading PDF tools…</div>}>
-                <PdfReader tabId={activeTab.id} data={activeTab.data} title={activeTab.meta.name} initialState={activeTab.pdfState} onStateChange={updatePdfView} />
-              </Suspense> : <div className="loading-state">Preparing PDF…</div>}
-            </div>
-          </div>
-        )}
-        {activeTab.meta.kind === 'pdf' || activeTab.meta.kind === 'viewer' ? null : isEditableKind(activeTab.meta.kind) ? (
-          <WorkspaceEditor
-            kind={activeTab.meta.kind}
-            name={activeTab.meta.name}
-            value={activeTab.draft}
-            fontSize={editorFontSize}
-            preview={activeTab.preview}
-            editorState={activeTab.editorState}
-            editorViewRef={activeTab.meta.kind === 'markdown' ? editorViewRef : undefined}
-            onChange={(value) => updateDraft(activeTab.id, value)}
-            onViewStateChange={(view, preview) => persistEditorViewState(activeTab.id, view, preview)}
-          />
-        ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
-        {workspaceTabs.filter((tab) => tab.meta.kind === 'viewer' && tab.data instanceof Blob).map((tab) => (
-          <div key={tab.id} className="persistent-viewer-panel" style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}>
-            <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}>
-              <ReadOnlyFileViewer
-                tabId={tab.id}
-                fileName={tab.meta.name}
-                data={tab.data}
-                mimeType={tab.meta.mimeType}
-                initialState={tab.viewerState}
-                initialPdfState={tab.pdfState}
-                onStateChange={updateViewerView}
-                onPdfStateChange={updatePdfView}
-              />
-            </Suspense>
-          </div>
-        ))}
-        <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
-      </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
+          },
+          onSave: () => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined),
+          onRename: () => void renameItem(activeTab.meta),
+          onDelete: () => void deleteFile(activeTab.meta),
+          onToggleFocus: () => setFocusMode((value) => !value),
+          updatePdfView, updateViewerView, updateDraft, persistEditorViewState,
+        }}
+      />: <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
         <BackgroundTabStrip tabs={workspaceTabs} activeTabId={activeTabId} onOpen={(tab) => void openFile(tab.meta)} onClose={closeTab} />
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <>
           <WelcomePage onCreateProject={() => void createProject()} onImportFiles={() => startImportInto({ folderId: null, projectId: null, workspaceId: currentWorkspaceId })} onCreateNote={() => void createWorkspaceFile('markdown')} onCreateCodeFile={() => void createWorkspaceFile('code')} />
