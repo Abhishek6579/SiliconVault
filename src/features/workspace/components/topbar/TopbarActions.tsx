@@ -1,0 +1,38 @@
+import type { Dispatch, SetStateAction } from 'react';
+import { Moon, Search, Settings2, Sun } from 'lucide-react';
+import ImportMenu from './ImportMenu';
+
+interface ImportTarget { folderId: string | null; projectId: string | null; workspaceId: string; }
+interface Data {
+  view: 'workspace' | 'recent' | 'trash';
+  selectedFolder: string | null;
+  activeProjectRecord: { name: string } | null;
+  activeProject: string | null;
+  currentWorkspaceId: string;
+  importMenuOpen: boolean;
+  importMenuRef: React.RefObject<HTMLDivElement | null>;
+  darkTheme: boolean;
+  status: string;
+}
+interface Actions {
+  setImportMenuOpen: Dispatch<SetStateAction<boolean>>;
+  startImportInto: (target: ImportTarget) => void;
+  startImportFolderInto: (target: ImportTarget) => void;
+  createFolderInCurrent: () => void;
+  createWorkspaceFile: (kind: 'markdown' | 'code') => Promise<void>;
+  setSearchPopupOpen: Dispatch<SetStateAction<boolean>>;
+  setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
+  toggleTheme: () => Promise<void>;
+  setDetailsOpen: () => void;
+}
+export default function TopbarActions({ data, actions }: { data: Data; actions: Actions }) {
+  const { view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status } = data;
+  const { setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent, createWorkspaceFile, setSearchPopupOpen, setRightPanel, toggleTheme, setDetailsOpen } = actions;
+  return <div className="topbar-actions">
+    <ImportMenu data={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, open: importMenuOpen, menuRef: importMenuRef }} actions={{ setOpen: setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent, createWorkspaceFile }} />
+    <button className="global-search-trigger" onClick={() => { setSearchPopupOpen(true); setRightPanel('search'); }} title="Search files and folders (Ctrl+F)"><Search size={16} /><span>Search files and folders</span><kbd>Ctrl F</kbd></button>
+    <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
+    <span className={`save-status ${status === 'Saved locally' ? 'saved' : ''}`}><span className="status-dot" />{status}</span>
+    <button className="icon-button" title="Details" onClick={setDetailsOpen}><Settings2 size={17} /></button>
+  </div>;
+}
