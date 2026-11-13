@@ -109,7 +109,7 @@ Write-Host "Launching upgraded installation: $newExecutable" -ForegroundColor Cy
 Start-Process -FilePath $newExecutable
 $answer = Read-Host "Verify seeded data/settings, edit and save a file, close and relaunch. Enter Y only if everything persisted"
 Stop-SiliconVault
-$report.AfterUpgrade = Get-IndexedDbSnapshot $profile
+$report.AfterUpgrade = Get-IndexedDbSnapshot $webView2Profile
 $report.UserConfirmedDataIntegrity = ($answer -match '^(Y|YES)$')
 if ($report.AfterUpgrade.IndexedDbRootCount -lt 1 -or $report.AfterUpgrade.FileCount -lt 1) { throw "WebView2 IndexedDB profile is missing after upgrade." }
 if (-not $report.UserConfirmedDataIntegrity) { throw "Data integrity was not confirmed. Treat this run as failed." }
