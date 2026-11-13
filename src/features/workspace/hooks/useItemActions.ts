@@ -130,7 +130,12 @@ export function useItemActions(options: UseItemActionsOptions) {
     await refresh();
   }
 
-  async function restoreTrashedFile(id: string) {\n    await restoreFile(db, id);\n    await refresh();\n  }\n\n  async function doEmptyTrash() {
+  async function restoreTrashedFile(id: string) {
+    await restoreFile(db, id);
+    await refresh();
+  }
+
+  async function doEmptyTrash() {
     if (!trashedFiles.length) return;
     requestConfirmation('Empty Trash?', `Permanently delete ${trashedFiles.length} trashed file${trashedFiles.length === 1 ? '' : 's'}? This cannot be undone.`, 'Empty Trash', async () => {
       const trashIds = new Set(trashedFiles.map((file) => file.id));
