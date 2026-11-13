@@ -126,7 +126,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     }, 160);
   };
   const restoreScrollPosition = () => {
-    const scrollHost = rootRef.current?.querySelector<HTMLElement>('[data-viewer-scroll]');
+    const root = rootRef.current;
+    const scrollHost = root?.matches('[data-viewer-scroll]') ? root : root?.querySelector<HTMLElement>('[data-viewer-scroll]');
     if (scrollHost) {
       scrollHost.scrollTop = initialState?.scrollTop ?? 0;
       scrollHost.scrollLeft = initialState?.scrollLeft ?? 0;
@@ -170,7 +171,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   const controls = <div className="viewer-zoom-controls" role="toolbar" aria-label="Viewer zoom controls">
     <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Ctrl+-)" onClick={zoomOut} disabled={zoom <= 0.4}><ZoomOut size={15} /></button>
     <span aria-live="polite">{Math.round(zoom * 100)}%</span>
-    <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Ctrl+=)" onClick={zoomIn} disabled={zoom >= 3}><ZoomIn size={15} /></button>
+    <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Ctrl+=)" onClick={zoomIn} disabled={zoom >= 4}><ZoomIn size={15} /></button>
     <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)" onClick={() => applyZoom(1)} disabled={zoom === 1}><RotateCcw size={13} /></button>
   </div>;
 
