@@ -5,11 +5,12 @@ export function useGlobalShortcuts(
   setEditorFontSize: React.Dispatch<React.SetStateAction<number>>,
 ) {
   useEffect(() => {
-    let lastFocusedSurface: 'pdf' | 'editor' | null = null;
+    let lastFocusedSurface: 'pdf' | 'editor' | 'office' | null = null;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('.pdf-shell')) lastFocusedSurface = 'pdf';
       else if (target?.closest('.code-editor, .markdown-preview')) lastFocusedSurface = 'editor';
+      else if (target?.closest('.office-viewer')) lastFocusedSurface = 'office';
       else lastFocusedSurface = null;
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -19,6 +20,7 @@ export function useGlobalShortcuts(
       const target = event.target instanceof Element ? event.target : null;
       const pdfFocused = Boolean(target?.closest('.pdf-shell')) || lastFocusedSurface === 'pdf';
       const editorFocused = Boolean(target?.closest('.code-editor, .markdown-preview')) || lastFocusedSurface === 'editor';
+      const officeFocused = Boolean(target?.closest('.office-viewer')) || lastFocusedSurface === 'office';
       if (pdfFocused) {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', {
@@ -27,6 +29,11 @@ export function useGlobalShortcuts(
       } else if (editorFocused && event.key !== '0') {
         event.preventDefault();
         setEditorFontSize((value) => Math.max(8, Math.min(32, value + (event.key === '-' || event.key === '_' ? -1 : 1))));
+      } else if (officeFocused) {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent('siliconvault:office-zoom', {
+          detail: { direction: event.key === '-' || event.key === '_' ? -1 : event.key === '0' ? 0 : 1 },
+        }));
       } else if (event.key === '=' || event.key === '+') {
         event.preventDefault();
         setZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100));
