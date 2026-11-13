@@ -33,7 +33,6 @@ import { isDesktopApp, iterateDesktopFiles, iterateDesktopFolder, saveBackupToDe
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
-import DiagnosticsDashboard from './features/diagnostics/components/DiagnosticsDashboard';
 import { collectFrontendDiagnostics } from './diagnostics.js';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
@@ -48,7 +47,7 @@ import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './sto
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
-type View = 'workspace' | 'recent' | 'trash' | 'diagnostics';
+type View = 'workspace' | 'recent' | 'trash';
 type ContextItemType = 'file' | 'folder' | 'project';
 interface ContextMenuState { type: ContextItemType; id: string; x: number; y: number; }
 interface MoveDialogState { type: 'file' | 'folder'; id: string; name: string; }
@@ -748,7 +747,6 @@ export default function App() {
           <button className={`nav-item ${view === 'workspace' && activeProject === null ? 'active' : ''}`} onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={16} /> Workspace</button>
           <button className={`nav-item ${view === 'recent' ? 'active' : ''}`} onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={16} /> Recent <span className="nav-count">{liveFiles.length}</span></button>
           <button className={`nav-item ${view === 'trash' ? 'active' : ''}`} onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={16} /> Trash {trashedFiles.length > 0 && <span className="nav-count">{trashedFiles.length}</span>}</button>
-          <button className={`nav-item ${view === 'diagnostics' ? 'active' : ''}`} onClick={() => { setView('diagnostics'); setActiveTabId(null); }}><Activity size={16} /> Diagnostics</button>
         </div>
         <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={() => void createProject()}><Plus size={15} /></button></div>
         <div className="project-tree">
@@ -791,14 +789,14 @@ export default function App() {
           <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void backup.openBackup(event.target.files?.[0], event.currentTarget)} />
         </div>
       </>}
-      {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="Diagnostics" onClick={() => { setView('diagnostics'); setActiveTabId(null); }}><Activity size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
+      {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
     </aside>
 
     <main className="main-area">
       <header className="topbar">
         <div className="workspace-switcher" ref={workspaceMenuRef}>
           <button className="workspace-switch-button" aria-expanded={workspaceMenuOpen} onClick={() => setWorkspaceMenuOpen((open) => !open)}>
-            <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : view === 'diagnostics' ? 'Diagnostics' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
+            <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
             {selectedFolder && view === 'workspace' && <small> / {folders.find((folder) => folder.id === selectedFolder)?.name}</small>}
             <ChevronDown size={14} />
           </button>
@@ -854,7 +852,7 @@ export default function App() {
 
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
 
-      {view === 'diagnostics' ? <DiagnosticsDashboard /> : activeTab ? <div className="editor-workspace">
+      {activeTab ? <div className="editor-workspace">
         <div className="tab-strip">
           <div className="tab-list">
             {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
@@ -903,7 +901,7 @@ export default function App() {
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
           <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? (
-          <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} /></Suspense>
+          <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} maximized={focusMode} onToggleMaximize={() => setFocusMode((value) => !value)} /></Suspense>
         ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
