@@ -35,7 +35,6 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onSt
     viewer.setScale(bounded);
     setScale(viewer.getScale());
     onStateChange(viewer.getScale());
-    onStateChange(viewer.getScale());
   };
 
   useEffect(() => {
@@ -83,7 +82,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onSt
           mode,
           showZoomSlider: false,
           useGoogleFonts: false,
-          onScaleChange: (next: number) => { if (active) setScale(next); },
+          onScaleChange: (next: number) => { if (active) { setScale(next); onStateChange(next); } },
           onError: (reason: Error) => { if (active) onError(reason); },
         });
       } else if (extension === 'pptx' || extension === 'pptm') {
@@ -108,7 +107,9 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onSt
       viewerRef.current = viewer;
       await viewer.load(source);
       if (active) {
+        viewer.setScale(zoom);
         setScale(viewer.getScale());
+        onStateChange(viewer.getScale());
         setLoading(false);
       }
     };
