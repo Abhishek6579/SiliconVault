@@ -12,7 +12,7 @@ interface MarkdownPreviewProps {
   fontSize: number;
   preview: boolean;
   findBar: ReactNode;
-  previewRef: RefObject<HTMLDivElement | null>;
+  previewRef: RefObject<HTMLDivElement>;
 }
 
 export default function MarkdownPreview({ value, fontSize, preview, findBar, previewRef }: MarkdownPreviewProps) {
