@@ -58,6 +58,7 @@ import { useProjectActions } from './features/workspace/hooks/useProjectActions'
 import { useFolderActions } from './features/workspace/hooks/useFolderActions';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
+import RightPanel from './features/workspace/components/RightPanel';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
@@ -66,7 +67,6 @@ const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
 type View = 'workspace' | 'recent' | 'trash';
-interface SearchResult { file: FileMeta; text: string; }
 
 export default function AppShell() {
   useEffect(() => collectFrontendDiagnostics(), []);
@@ -434,22 +434,15 @@ export default function AppShell() {
       </div>}
     </main>
 
-    {rightPanel && <aside className="right-panel">
-      <div className="right-panel-header"><b>{rightPanel === 'details' ? 'Workspace details' : 'Search results'}</b><button className="icon-button" onClick={() => setRightPanel(null)}><X size={16} /></button></div>
-      {rightPanel === 'details' ? <div className="details-content">
-        <div className="details-card"><span className="details-icon"><HardDrive size={18} /></span><div><b>Stored on this device</b><span>Only you can access these files.</span></div></div>
-        <div className="detail-row"><span>Total files</span><b>{liveFiles.length}</b></div><div className="detail-row"><span>Projects</span><b>{activeProjects.length}</b></div><div className="detail-row"><span>Folders</span><b>{folders.filter((folder) => folder.workspaceId === activeWorkspaceId).length}</b></div><div className="detail-row"><span>Storage used</span><b>{formatSize(liveFiles.reduce((sum, item) => sum + item.size, 0))}</b></div>
-        <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void backup.saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
-      </div> : <div className="search-results-panel">
-        {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and folder names, plus text in notes and code.</span></div> : searchResults.length === 0 && folderSearchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Searching file names and folders. Try a different word or phrase.</span></div> : <>
-        {folderSearchResults.map((folder) => <button className="search-result" key={`folder-${folder.id}`} onClick={() => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); }}><span className="search-result-title"><Folder size={15} /><b>{folder.name}</b></span><span className="search-result-location">Folder · {getProjectName(folder.projectId) ?? 'Workspace'}</span><span className="search-result-snippet">Open folder</span></button>)}
-        {searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => { void openFile(file); setSearchPopupOpen(false); }}>
-          <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{getProjectName(file.projectId) ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
-        </button>)}
-        {query.trim() && (searchResults.length > 0 || folderSearchResults.length > 0) && <div className="search-count">{searchResults.length} file{searchResults.length === 1 ? '' : 's'} · {folderSearchResults.length} folder{folderSearchResults.length === 1 ? '' : 's'}</div>}
-        </>}
-      </div>}
-    </aside>}
+    <RightPanel
+      data={{ panel: rightPanel, liveFiles, activeProjects, folders, activeWorkspaceId, query, searchResults, folderSearchResults, getProjectName }}
+      actions={{
+        setPanel: setRightPanel,
+        saveBackup: () => void backup.saveWorkspaceBackup(),
+        openFile: (file) => { void openFile(file); setSearchPopupOpen(false); },
+        openFolder: (folder) => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); },
+      }}
+    />
 
     {contextMenu && <div ref={contextMenuRef} className="item-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <ItemContextMenu type={contextMenu.type} name={contextMenu.type === 'file' ? files.find((file) => file.id === contextMenu.id)?.name ?? '' : contextMenu.type === 'folder' ? folders.find((folder) => folder.id === contextMenu.id)?.name ?? '' : projects.find((project) => project.id === contextMenu.id)?.name ?? ''} onAction={(action) => void runContextAction(action)} />
