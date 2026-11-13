@@ -416,6 +416,12 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
       className="pdf-page-host"
       ref={hostRef}
       onScroll={updateVisiblePage}
+      onWheel={(event) => {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        event.preventDefault();
+        setFit(false);
+        setZoom((value) => Math.max(.5, Math.min(2, Math.round((value + (event.deltaY < 0 ? .1 : -.1)) * 100) / 100)));
+      }}
       style={{ overflowAnchor: 'none' }}
     >
       {!document && !error && <div className="loading-state">Loading PDF…</div>}
