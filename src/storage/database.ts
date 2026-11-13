@@ -126,3 +126,8 @@ export class WorkspaceDatabase extends Dexie {
 }
 
 export const db = new WorkspaceDatabase();
+
+/** Opens the app's Dexie database from the storage boundary. */
+export async function openWorkspaceDatabase(): Promise<void> {
+  await db.open();
+}

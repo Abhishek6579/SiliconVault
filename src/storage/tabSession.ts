@@ -1,4 +1,5 @@
 import type { WorkspaceDatabase } from './database';
+import { db } from './database';
 import type { FileMeta } from './types';
 import { fileText } from '../utils/format';
 import type { Tab, EditorViewState, PdfViewState, ViewerViewState } from '../features/tabs/types';
@@ -16,6 +17,12 @@ export interface RestoredWorkspaceSession {
 }
 
 export const workspaceSessionKey = (workspaceId: string) => `session:${workspaceId}`;
+
+/** App-bound session operations keep Dexie access inside the storage layer. */
+export const restorePersistedWorkspaceSession = (workspaceId: string) => restoreWorkspaceSession(db, workspaceId);
+export const savePersistedWorkspaceSession = (workspaceId: string, openFileIds: string[], activeFileId: string | null) =>
+  saveWorkspaceSession(db, workspaceId, openFileIds, activeFileId);
+export const hydratePersistedWorkspaceTab = (tab: Tab) => hydrateWorkspaceTab(db, tab);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
