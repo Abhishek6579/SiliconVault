@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent, type WheelEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
@@ -153,11 +153,17 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   };
   const zoomIn = () => applyZoom(zoom + 0.1);
   const zoomOut = () => applyZoom(zoom - 0.1);
-  const handleWheelZoom = (event: WheelEvent<HTMLDivElement>) => {
-    if (!(event.ctrlKey || event.metaKey) || (event.target as HTMLElement).closest('.pdf-shell')) return;
-    event.preventDefault();
-    applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
-  };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || (event.target instanceof Element && event.target.closest('.pdf-shell'))) return;
+      event.preventDefault();
+      applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
+    };
+    root.addEventListener('wheel', handleWheel, { passive: false });
+    return () => root.removeEventListener('wheel', handleWheel);
+  }, [zoom]);
   const handleScroll = (event: UIEvent<HTMLElement>) => {
     const target = event.currentTarget;
     emitViewState({ scrollTop: target.scrollTop, scrollLeft: target.scrollLeft });
@@ -175,7 +181,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)" onClick={() => applyZoom(1)} disabled={zoom === 1}><RotateCcw size={13} /></button>
   </div>;
 
-  if (isImage) return <div ref={rootRef} className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  if (isImage) return <div ref={rootRef} className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {controls}
     <div className="image-viewer-viewport" data-viewer-scroll onScroll={handleScroll}><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
       {url ? <img src={url} alt={fileName} onLoad={restoreScrollPosition} /> : <div className="loading-state">Loading image…</div>}
