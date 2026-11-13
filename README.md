@@ -186,7 +186,6 @@ These shortcuts are implemented by the frontend keyboard handlers. **Ctrl** corr
 | Ctrl++ / Ctrl+= | Office/document viewer | Zoom in. |
 | Ctrl+- | Office/document viewer | Zoom out. |
 | Ctrl+0 | Office/document viewer | Reset viewer zoom. |
-| Ctrl+S | Editable text/code/Markdown file | Save the current draft using the editor's Save action. |
 
 Zoom shortcuts are context-sensitive. The focused surface determines whether the application, editor, PDF, or document viewer is zoomed.
 
