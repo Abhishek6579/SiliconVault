@@ -311,7 +311,8 @@ describe('workspace storage', () => {
     const backup = await exportBackup(database);
     expect(backup.files).toHaveLength(2);
     expect(contentsArray).not.toHaveBeenCalled();
-    expect(contentsGet).toHaveBeenCalledTimes(2);
+    // One sequential read per file for size/serialization preflight, then one for output.
+    expect(contentsGet).toHaveBeenCalledTimes(4);
   });
 
   it('produces a valid streamed backup without retaining a complete backup object', async () => {

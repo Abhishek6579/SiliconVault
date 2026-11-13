@@ -80,8 +80,6 @@ export async function prepareBackupExport(database: BackupDatabase): Promise<Bac
   const prefix = `{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${exportedAt},"files":[`;
   let serializedBytes = encoder.encode(prefix).byteLength;
   let aggregateContentBytes = 0;
-  let first = true;
-
   for (const meta of files) {
     if (!Number.isSafeInteger(meta.size) || meta.size < 0) {
       throw new Error(`File "${meta.name}" has invalid size metadata and cannot be backed up.`);
@@ -93,7 +91,10 @@ export async function prepareBackupExport(database: BackupDatabase): Promise<Bac
     if (aggregateContentBytes > MAX_BACKUP_TOTAL_CONTENT_BYTES) {
       throw new Error(`Workspace content exceeds the total backup limit of ${Math.floor(MAX_BACKUP_TOTAL_CONTENT_BYTES / (1024 * 1024))} MiB.`);
     }
+  }
 
+  let first = true;
+  for (const meta of files) {
     const item = await createBackupFile(database, meta);
     serializedBytes += encoder.encode(`${first ? '' : ','}${JSON.stringify(item)}`).byteLength;
     first = false;
