@@ -52,6 +52,7 @@ import { DialogHost, useDialog } from './features/workspace/context/DialogContex
 import { useImportActions, type ImportTarget } from './features/workspace/hooks/useImportActions';
 import { useItemActions, type ContextItemType, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
 import FileList from './features/workspace/components/file-list/FileList';
+import Topbar from './features/workspace/components/topbar/Topbar';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
 import type { Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
@@ -373,58 +374,20 @@ export default function AppShell() {
       />
     </Sidebar>
     <main className="main-area">
-      <header className="topbar">
-        <div className="workspace-switcher" ref={workspaceMenuRef}>
-          <button className="workspace-switch-button" aria-expanded={workspaceMenuOpen} onClick={() => setWorkspaceMenuOpen((open) => !open)}>
-            <Layers size={16} /><span>{view === 'trash' ? 'Trash' : view === 'recent' ? 'Recent files' : activeWorkspace?.name ?? 'Workspace'}{activeProjectRecord ? ` / ${activeProjectRecord.name}` : ''}</span>
-            {selectedFolder && view === 'workspace' && <small> / {folders.find((folder) => folder.id === selectedFolder)?.name}</small>}
-            <ChevronDown size={14} />
-          </button>
-          {workspaceMenuOpen && <div className="workspace-switch-menu">
-            <div className="menu-heading">WORKSPACES</div>
-            {workspaces.map((workspace) => <button key={workspace.id} className={workspace.id === activeWorkspaceId ? 'current' : ''} onClick={() => void switchWorkspace(workspace.id)}><Layers size={15} /><span>{workspace.name}</span>{workspace.id === activeWorkspaceId && <Check size={14} />}</button>)}
-            <button onClick={() => { setWorkspaceMenuOpen(false); createWorkspace(); }}><Plus size={15} /><span>New workspace…</span></button>
-            {activeWorkspace && <>
-              <button onClick={() => { setWorkspaceMenuOpen(false); renameWorkspace(activeWorkspace); }}><Pencil size={15} /><span>Rename this workspace…</span></button>
-              <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); deleteCurrentWorkspace(); }}><Trash2 size={15} /><span>Delete this workspace…</span></button>
-            </>}
-            <div className="switch-menu-separator" />
-            <div className="menu-heading">PROJECTS IN {activeWorkspace?.name?.toLocaleUpperCase() ?? 'WORKSPACE'}</div>
-            <button className={!activeProject && view === 'workspace' ? 'current' : ''} onClick={() => void switchProject(null)}><Layers size={15} /><span>General files</span>{!activeProject && view === 'workspace' && <Check size={14} />}</button>
-            {activeProjects.map((project) => <button key={project.id} className={activeProject === project.id && view === 'workspace' ? 'current' : ''} onClick={() => void switchProject(project.id)}><span className="project-dot" /><span>{project.name}</span>{activeProject === project.id && view === 'workspace' && <Check size={14} />}</button>)}
-            <div className="switch-menu-separator" />
-            <button onClick={() => { setView('recent'); setActiveTabId(null); setWorkspaceMenuOpen(false); }}><Clock3 size={15} /><span>Recent files</span></button>
-            <button onClick={() => { setView('trash'); setActiveTabId(null); setWorkspaceMenuOpen(false); }}><Trash2 size={15} /><span>Trash</span></button>
-            <button onClick={() => { setWorkspaceMenuOpen(false); void createProject(); }}><Plus size={15} /><span>New project…</span></button>
-            {(view === 'trash' && trashedFiles.length > 0) || (view === 'workspace' && (activeProjectRecord || selectedFolder)) ? <>
-              <div className="switch-menu-separator" />
-              <div className="menu-heading">CURRENT VIEW</div>
-              {view === 'trash' && trashedFiles.length > 0 && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void doEmptyTrash(); }}><Trash2 size={15} /><span>Empty trash…</span></button>}
-              {view === 'workspace' && activeProjectRecord?.archived && <button onClick={() => { setWorkspaceMenuOpen(false); void restoreProject(activeProjectRecord); }}><Archive size={15} /><span>Restore project</span></button>}
-              {view === 'workspace' && activeProjectRecord && !activeProjectRecord.archived && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void deleteProject(activeProjectRecord); }}><Trash2 size={15} /><span>Delete project…</span></button>}
-              {view === 'workspace' && selectedFolder && folders.find((folder) => folder.id === selectedFolder) && <button className="workspace-delete-option" onClick={() => { setWorkspaceMenuOpen(false); void deleteFolder(folders.find((folder) => folder.id === selectedFolder)!); }}><Trash2 size={15} /><span>Delete folder…</span></button>}
-            </> : null}
-          </div>}
-        </div>
-        <div className="topbar-actions">
-          {view === 'workspace' && <div className="import-menu-wrapper" ref={importMenuRef}>
-            <button className="primary-button import-button" aria-expanded={importMenuOpen} onClick={() => setImportMenuOpen((open) => !open)}><Import size={15} /> Import <ChevronDown size={13} /></button>
-            {importMenuOpen && <div className="import-menu">
-              <div className="menu-heading">ADD TO {selectedFolder ? 'FOLDER' : activeProjectRecord?.name?.toLocaleUpperCase() ?? 'WORKSPACE'}</div>
-              <button onClick={() => { setImportMenuOpen(false); startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }); }}><FileText size={15} /><span>Import files</span></button>
-              <button onClick={() => { setImportMenuOpen(false); startImportFolderInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }); }}><FolderPlus size={15} /><span>Import folder</span></button>
-              <div className="switch-menu-separator" />
-              <button onClick={() => { setImportMenuOpen(false); void createFolderInCurrent(); }}><FolderPlus size={15} /><span>New folder</span></button>
-              <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('markdown'); }}><FilePlus2 size={15} /><span>New note</span></button>
-              <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('code'); }}><Code2 size={15} /><span>New code file</span></button>
-            </div>}
-          </div>}
-          <button className="global-search-trigger" onClick={() => { setSearchPopupOpen(true); setRightPanel('search'); }} title="Search files and folders (Ctrl+F)"><Search size={16} /><span>Search files and folders</span><kbd>Ctrl F</kbd></button>
-          <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
-          <span className={`save-status ${status === 'Saved locally' ? 'saved' : ''}`}><span className="status-dot" />{status}</span>
-          <button className="icon-button" title="Details" onClick={() => setRightPanel((value) => value === 'details' ? null : 'details')}><Settings2 size={17} /></button>
-        </div>
-      </header>
+      <Topbar
+        switcherData={{ view, activeWorkspace, activeWorkspaceId, activeProjectRecord, activeProject, selectedFolder, folders, workspaces, activeProjects, trashedFiles, open: workspaceMenuOpen, menuRef: workspaceMenuRef }}
+        switcherActions={{
+          setOpen: setWorkspaceMenuOpen, switchWorkspace, createWorkspace, renameWorkspace, deleteCurrentWorkspace,
+          switchProject, setView, setActiveTabId, createProject: () => void createProject(), doEmptyTrash,
+          restoreProject, deleteProject, deleteFolder,
+        }}
+        actionsData={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status }}
+        actions={{
+          setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent: () => void createFolderInCurrent(),
+          createWorkspaceFile, setSearchPopupOpen, setRightPanel, toggleTheme,
+          setDetailsOpen: () => setRightPanel((current) => current === 'details' ? null : 'details'),
+        }}
+      />
 
       {searchPopupOpen && <div className="search-popup-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setSearchPopupOpen(false); }}>
         <section className="search-popup" role="dialog" aria-modal="true" aria-label="Search files and folders">
