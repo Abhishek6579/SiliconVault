@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { verilog } from '@codemirror/legacy-modes/mode/verilog';
+import { SearchCursor } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
 import ReactMarkdown from 'react-markdown';
@@ -16,6 +17,7 @@ import MermaidDiagram from '../../../components/MermaidDiagram';
 interface WorkspaceEditorProps {
   kind: 'code' | 'text' | 'markdown';
   name: string;
+  tabId: string;
   value: string;
   fontSize: number;
   preview?: boolean;
@@ -47,8 +49,70 @@ function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
 }
 
 export default function WorkspaceEditor({
-  kind, name, value, fontSize, preview = false, editorState, editorViewRef, onChange, onViewStateChange,
+  kind, name, tabId, value, fontSize, preview = false, editorState, editorViewRef, onChange, onViewStateChange,
 }: WorkspaceEditorProps) {
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const findPositionRef = useRef(0);
+
+  const findInEditor = (query: string, direction: 1 | -1 = 1, restart = false) => {
+    const view = editorViewRef?.current;
+    const needle = query.trim();
+    if (!view || !view.dom.isConnected || !needle) return;
+    if (restart) findPositionRef.current = 0;
+    const start = direction > 0
+      ? Math.min(view.state.doc.length, findPositionRef.current)
+      : Math.max(0, findPositionRef.current - 1);
+    let result = new SearchCursor(view.state.doc, needle, start, undefined, { caseSensitive: false }).next();
+    if (result.done && start > 0) {
+      result = direction > 0
+        ? new SearchCursor(view.state.doc, needle, 0, start, { caseSensitive: false }).next()
+        : new SearchCursor(view.state.doc, needle, 0, view.state.doc.length, { caseSensitive: false }).next();
+    }
+    if (result.done) return;
+    const match = result.value;
+    findPositionRef.current = direction > 0 ? match.to : match.from;
+    view.dispatch({
+      selection: { anchor: match.from, head: match.to },
+      effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
+    });
+    // Deliberately do not focus the editor: typing must remain in the find field.
+  };
+
+  useEffect(() => {
+    const openFind = (event: Event) => {
+      const requestedTabId = (event as CustomEvent<{ tabId?: string }>).detail?.tabId;
+      if (requestedTabId && requestedTabId !== tabId) return;
+      setFindOpen(true);
+      window.setTimeout(() => findInputRef.current?.focus(), 0);
+    };
+    window.addEventListener('siliconvault:open-editor-search', openFind);
+    return () => window.removeEventListener('siliconvault:open-editor-search', openFind);
+  }, [tabId]);
+
+  useEffect(() => {
+    if (findOpen && findQuery.trim()) findInEditor(findQuery, 1, true);
+  }, [findQuery, findOpen]);
+
+  const findBar = findOpen && <div className="editor-find-bar">
+    <span className="editor-find-label">Find</span>
+    <input
+      ref={findInputRef}
+      aria-label="Find in file"
+      placeholder="Find in code or text"
+      value={findQuery}
+      onChange={(event) => { setFindQuery(event.target.value); findPositionRef.current = 0; }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); findInEditor(findQuery, event.shiftKey ? -1 : 1); }
+        if (event.key === 'Escape') { event.preventDefault(); setFindOpen(false); }
+      }}
+    />
+    <button type="button" className="icon-button" aria-label="Previous match" title="Previous match" onClick={() => findInEditor(findQuery, -1)}><span>↑</span></button>
+    <button type="button" className="icon-button" aria-label="Next match" title="Next match" onClick={() => findInEditor(findQuery, 1)}><span>↓</span></button>
+    <button type="button" className="icon-button" aria-label="Close find" title="Close find" onClick={() => setFindOpen(false)}>×</button>
+  </div>;
+
   const editorTheme = useMemo(() => EditorView.theme({
     '&': { height: '100%', backgroundColor: '#111111', color: '#e6e6e6' },
     '.cm-scroller': { fontFamily: "'Cascadia Code', 'SFMono-Regular', Consolas, monospace", lineHeight: '1.6', overflow: 'auto' },
@@ -80,7 +144,7 @@ export default function WorkspaceEditor({
 
   if (kind === 'markdown') {
     return <div className={`note-layout ${preview ? 'preview-only' : ''}`}>
-      {!preview && <div className="code-editor markdown-editor"><CodeMirror
+      {!preview && <div className="code-editor markdown-editor">{findBar}<CodeMirror
         value={value} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]}
         onChange={onChange}
         onCreateEditor={(view) => { if (editorViewRef) editorViewRef.current = view; restoreEditorViewState(view, editorState); }}
@@ -103,7 +167,7 @@ export default function WorkspaceEditor({
       ? StreamLanguage.define(verilog)
       : javascript())
     : [];
-  return <div className="code-editor"><CodeMirror
+  return <div className="code-editor">{findBar}<CodeMirror
     value={value} height="100%" theme={editorTheme} extensions={[extension, editorSyntax]}
     onChange={onChange}
     onCreateEditor={(view) => { if (editorViewRef) editorViewRef.current = view; restoreEditorViewState(view, editorState); }}
