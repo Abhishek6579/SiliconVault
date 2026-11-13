@@ -33,7 +33,8 @@ function Resolve-AppExecutable($Entry) {
     throw "Could not resolve SiliconVault.exe. Re-run with -ApplicationExecutable."
 }
 function Invoke-MsiInstall([string] $MsiPath, [string] $LogPath) {
-    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList @("/i", $MsiPath, "/qn", "/norestart", "/l*v", $LogPath) -Wait -PassThru
+    $arguments = '/i "' + $MsiPath + '" /qn /norestart /l*v "' + $LogPath + '"'
+    $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -notin @(0, 3010)) { throw "MSI installation failed with exit code $($process.ExitCode). See $LogPath" }
     return $process.ExitCode
 }
