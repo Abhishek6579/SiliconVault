@@ -54,8 +54,9 @@ fn convert_with_document_builder(
         .map_err(|error| format!("Could not start ONLYOFFICE Document Builder: {error}"))?;
 
     if !result.status.success() || !output.is_file() {
-        let details = String::from_utf8_lossy(&result.stderr);
-        let details = details.trim();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        let details = if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() };
         return Err(if details.is_empty() {
             "ONLYOFFICE Document Builder could not convert this document.".to_string()
         } else {
