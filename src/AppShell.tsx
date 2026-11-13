@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { File, HardDrive, Search, X } from 'lucide-react';
+import { File, HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
 import { formatSize } from './utils/format';
@@ -51,6 +51,7 @@ import { useMigrationUpgrade } from './features/workspace/hooks/useMigrationUpgr
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import RightPanel from './features/workspace/components/RightPanel';
+import SearchPopup from './features/search/components/SearchPopup';
 import WorkspaceOverview from './features/workspace/components/overview/WorkspaceOverview';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
@@ -292,12 +293,12 @@ export default function AppShell() {
         }}
       />
 
-      {searchPopupOpen && <div className="search-popup-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setSearchPopupOpen(false); }}>
-        <section className="search-popup" role="dialog" aria-modal="true" aria-label="Search files and folders">
-          <div className="search-popup-input"><Search size={17} /><input ref={searchInputRef} value={query} placeholder="Search files, folders and note/code content…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchPopupOpen(false); if (event.key === 'Enter') setSearchPopupOpen(false); }} /><kbd>ESC</kbd><button className="icon-button" aria-label="Close search" onClick={() => setSearchPopupOpen(false)}><X size={15} /></button></div>
-          <div className="search-popup-scope">Searching file and folder names, plus note/code text</div>
-        </section>
-      </div>}
+      {searchPopupOpen && <SearchPopup
+        query={query}
+        inputRef={searchInputRef}
+        onQueryChange={(value) => { setQuery(value); setRightPanel('search'); }}
+        onClose={() => setSearchPopupOpen(false)}
+      />}
 
       <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
       <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleFolderImport(event.target.files, target); }} />
