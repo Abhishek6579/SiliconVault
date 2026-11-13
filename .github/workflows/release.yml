@@ -10,7 +10,7 @@ on:
         description: "SemVer version to publish from the selected master commit (without the v prefix)"
         required: true
         type: string
-        default: "0.1.1-alpha.2"
+        default: "0.2.0-beta.1"
 
 permissions:
   contents: read
@@ -115,12 +115,13 @@ jobs:
           }
           $package = Get-Content package.json -Raw | ConvertFrom-Json
           $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json
           $cargo = Get-Content src-tauri/Cargo.toml -Raw
           $match = [regex]::Match($cargo, '(?ms)^\[package\]\s.*?^version\s*=\s*"([^"]+)"')
           if (-not $match.Success) { throw "Could not read [package].version from Cargo.toml" }
-          $versions = @($package.version, $tauri.version, $match.Groups[1].Value)
+          $versions = @($package.version, $tauri.version, $lock.version, $lock.packages."".version, $match.Groups[1].Value)
           if ($versions | Where-Object { $_ -ne $tagVersion }) {
-            throw "Tag v$tagVersion must match package.json, tauri.conf.json, and Cargo.toml. Found: $($versions -join ', ')"
+            throw "Tag v$tagVersion must match package.json, package-lock.json, tauri.conf.json, and Cargo.toml. Found: $($versions -join ', ')"
           }
           if ($tagVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
             throw "Tag is not valid SemVer: $tagVersion"
@@ -159,11 +160,13 @@ jobs:
           $signaturePath = "$($updaterInstaller.FullName).sig"
           if (-not (Test-Path $signaturePath)) { throw "NSIS updater signature was not generated: $signaturePath" }
           $tagVersion = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.version }}" } else { "${{ github.ref_name }}".Substring(1) }
+          $releaseNotes = Get-Content "release-notes/v$tagVersion.md" -Raw
+          if ([string]::IsNullOrWhiteSpace($releaseNotes)) { throw "Release notes file is missing or empty for v$tagVersion." }
           $signature = (Get-Content $signaturePath -Raw).Trim()
           $assetUrl = "https://github.com/Abhishek6579/SiliconVault/releases/download/v$tagVersion/$($updaterInstaller.Name)"
           $manifest = @{
             version = $tagVersion
-            notes = "SiliconVault $tagVersion update. See the GitHub release notes for details."
+            notes = $releaseNotes
             pub_date = (Get-Date).ToUniversalTime().ToString("o")
             platforms = @{
               "windows-x86_64" = @{
@@ -180,7 +183,8 @@ jobs:
           name: SiliconVault ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          generate_release_notes: true
+          body_path: release-notes/v0.2.0-beta.1.md
+          generate_release_notes: false
           prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name, '-') }}
           fail_on_unmatched_files: true
           files: |
