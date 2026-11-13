@@ -14,6 +14,63 @@ use tauri::Manager;
 
 static OFFICE_CONVERSION_ID: AtomicU64 = AtomicU64::new(0);
 
+
+fn find_document_builder() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("SILICONVAULT_DOCBUILDER_PATH") {
+        let candidate = PathBuf::from(path);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    let executable_name = if cfg!(target_os = "windows") { "docbuilder.exe" } else { "documentbuilder" };
+    let path_variable = std::env::var_os("PATH")?;
+    std::env::split_paths(&path_variable)
+        .map(|directory| directory.join(executable_name))
+        .find(|candidate| candidate.is_file())
+}
+
+fn convert_with_document_builder(
+    executable: &Path,
+    input: &Path,
+    output: &Path,
+    directory: &Path,
+) -> Result<Vec<u8>, String> {
+    let script_path = directory.join("convert.js");
+    let input_path = serde_json::to_string(&input.to_string_lossy().to_string())
+        .map_err(|error| format!("Could not encode Document Builder input path: {error}"))?;
+    let output_path = serde_json::to_string(&output.to_string_lossy().to_string())
+        .map_err(|error| format!("Could not encode Document Builder output path: {error}"))?;
+    let script = format!(
+        "builderJS.OpenFile({input_path});\\nbuilderJS.SaveFile(\\"pdf\\", {output_path});\\nbuilderJS.CloseFile();\\n"
+    );
+    fs::write(&script_path, script)
+        .map_err(|error| format!("Could not create the Document Builder script: {error}"))?;
+
+    let result = Command::new(executable)
+        .arg(&script_path)
+        .current_dir(directory)
+        .output()
+        .map_err(|error| format!("Could not start ONLYOFFICE Document Builder: {error}"))?;
+
+    if !result.status.success() || !output.is_file() {
+        let details = String::from_utf8_lossy(&result.stderr);
+        let details = details.trim();
+        return Err(if details.is_empty() {
+            "ONLYOFFICE Document Builder could not convert this document.".to_string()
+        } else {
+            format!("ONLYOFFICE Document Builder failed: {details}")
+        });
+    }
+
+    let metadata = fs::metadata(output)
+        .map_err(|error| format!("Could not inspect the Document Builder PDF: {error}"))?;
+    if metadata.len() == 0 || metadata.len() > 100 * 1024 * 1024 {
+        return Err("The Document Builder PDF is empty or exceeds the 100 MB preview limit.".into());
+    }
+    fs::read(output).map_err(|error| format!("Could not read the Document Builder PDF: {error}"))
+}
+
 fn find_libreoffice() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("SILICONVAULT_SOFFICE_PATH") {
         let candidate = PathBuf::from(path);
@@ -82,7 +139,6 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
         return Err("The Office document is empty or exceeds the 100 MB conversion limit.".into());
     }
 
-    let executable = find_libreoffice().ok_or_else(|| "LibreOffice was not found. Install LibreOffice or configure SILICONVAULT_SOFFICE_PATH to its soffice executable.".to_string())?;
     let id = OFFICE_CONVERSION_ID.fetch_add(1, Ordering::Relaxed);
     let directory = std::env::temp_dir().join(format!("silicon-vault-office-{}-{}", std::process::id(), id));
     let output_directory = directory.join("output");
@@ -91,6 +147,45 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
     let result = (|| {
         let input = directory.join(format!("source.{extension}"));
         fs::write(&input, bytes).map_err(|error| format!("Could not stage the Office document: {error}"))?;
+        let pdf_path = output_directory.join("source.pdf");
+
+        // Prefer Document Builder when explicitly configured. It is a native conversion
+        // engine and avoids adding a Python, Java, or Node.js runtime to SiliconVault.
+        if let Some(builder) = find_document_builder() {
+            match convert_with_document_builder(&builder, &input, &pdf_path, &directory) {
+                Ok(pdf) => return Ok(pdf),
+                Err(builder_error) => {
+                    if let Some(executable) = find_libreoffice() {
+                        let _ = fs::remove_file(&pdf_path);
+                        let profile = directory.join("lo-profile");
+                        fs::create_dir_all(&profile).map_err(|error| format!("Could not create a LibreOffice profile: {error}"))?;
+                        let profile_url = path_to_file_url(&profile);
+                        let output = Command::new(&executable)
+                            .arg("--headless")
+                            .arg("--nologo")
+                            .arg("--nodefault")
+                            .arg("--nolockcheck")
+                            .arg(format!("-env:UserInstallation={profile_url}"))
+                            .arg("--convert-to")
+                            .arg("pdf")
+                            .arg("--outdir")
+                            .arg(&output_directory)
+                            .arg(&input)
+                            .output()
+                            .map_err(|error| format!("Document Builder failed ({builder_error}); could not start LibreOffice: {error}"))?;
+                        if output.status.success() && pdf_path.is_file() {
+                            let metadata = fs::metadata(&pdf_path).map_err(|error| format!("Could not inspect the converted PDF: {error}"))?;
+                            if metadata.len() > 0 && metadata.len() <= 100 * 1024 * 1024 {
+                                return fs::read(&pdf_path).map_err(|error| format!("Could not read the converted PDF: {error}"));
+                            }
+                        }
+                    }
+                    return Err(format!("{builder_error} Configure a licensed ONLYOFFICE Document Builder runtime with SILICONVAULT_DOCBUILDER_PATH, or install LibreOffice."));
+                }
+            }
+        }
+
+        let executable = find_libreoffice().ok_or_else(|| "No Office conversion engine was found. Configure SILICONVAULT_DOCBUILDER_PATH for ONLYOFFICE Document Builder or install LibreOffice.".to_string())?;
         let profile = directory.join("lo-profile");
         fs::create_dir_all(&profile).map_err(|error| format!("Could not create a LibreOffice profile: {error}"))?;
         let profile_url = path_to_file_url(&profile);
@@ -108,7 +203,6 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
             .output()
             .map_err(|error| format!("Could not start LibreOffice: {error}"))?;
 
-        let pdf_path = output_directory.join("source.pdf");
         if !output.status.success() || !pdf_path.is_file() {
             let details = String::from_utf8_lossy(&output.stderr);
             let details = details.trim();
