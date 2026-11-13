@@ -1,7 +1,7 @@
 import { useEffect, type MutableRefObject } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-type LastFocusedSurface = 'pdf' | 'editor' | null;
+type LastFocusedSurface = 'pdf' | 'editor' | 'document' | null;
 
 export function useWheelZoom(
   lastFocusedSurfaceRef: MutableRefObject<LastFocusedSurface>,
