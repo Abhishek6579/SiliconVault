@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { isDesktopApp, platform } from '../platform';
+import { platform } from '../platform';
 import type { PdfViewState, ViewerViewState } from '../features/tabs/types';
 import { isModKey } from '../shared/keyboard/modifier';
 
