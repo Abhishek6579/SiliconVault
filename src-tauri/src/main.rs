@@ -79,7 +79,7 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
         return Err("This Office file format is not supported by the PDF conversion pipeline.".into());
     }
     if bytes.is_empty() || bytes.len() > 100 * 1024 * 1024 {
-        return Err("The Word document is empty or exceeds the 100 MB conversion limit.".into());
+        return Err("The Office document is empty or exceeds the 100 MB conversion limit.".into());
     }
 
     let executable = find_libreoffice().ok_or_else(|| "LibreOffice was not found. Install LibreOffice or configure SILICONVAULT_SOFFICE_PATH to its soffice executable.".to_string())?;
@@ -90,7 +90,7 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
 
     let result = (|| {
         let input = directory.join(format!("source.{extension}"));
-        fs::write(&input, bytes).map_err(|error| format!("Could not stage the Word document: {error}"))?;
+        fs::write(&input, bytes).map_err(|error| format!("Could not stage the Office document: {error}"))?;
         let profile = directory.join("lo-profile");
         fs::create_dir_all(&profile).map_err(|error| format!("Could not create a LibreOffice profile: {error}"))?;
         let profile_url = path_to_file_url(&profile);
@@ -113,7 +113,7 @@ fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>,
             let details = String::from_utf8_lossy(&output.stderr);
             let details = details.trim();
             return Err(if details.is_empty() {
-                "LibreOffice could not convert this Word document to PDF.".to_string()
+                "LibreOffice could not convert this Office document to PDF.".to_string()
             } else {
                 format!("LibreOffice conversion failed: {details}")
             });
