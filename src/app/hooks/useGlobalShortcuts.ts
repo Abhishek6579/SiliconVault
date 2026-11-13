@@ -13,6 +13,7 @@ export function useGlobalShortcuts(
       else lastFocusedSurface = null;
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
       if (!['=', '+', '-', '_', '0'].includes(event.key)) return;
       const target = event.target instanceof Element ? event.target : null;
