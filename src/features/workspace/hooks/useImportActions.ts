@@ -2,11 +2,13 @@ import type { Dispatch, SetStateAction } from 'react';
 import { db } from '../../../storage/database';
 import { platform } from '../../../platform';
 import { importFiles } from '../../../services/importFiles';
-import { importFolder, type ImportTarget } from '../../../services/importFolder';
+import { importFolder } from '../../../services/importFolder';
 import type { FileMeta } from '../../../storage/types';
 import { logger } from '../../../logger.js';
 import { errorContext } from '../../../shared/logging/errorContext';
 import { useActivity } from '../../../shared/activity/ActivityContext';
+import type { ImportTarget } from '../../../services/importTypes';
+export type { ImportTarget } from '../../../services/importTypes';
 
 interface UseImportActionsOptions {
   openFile: (file: FileMeta) => Promise<void>;
