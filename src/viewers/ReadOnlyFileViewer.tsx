@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Maximize2, Minimize2, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
 import { isDesktopApp } from '../platform/desktop';
 import OfficeOoxmlViewer from './OfficeOoxmlViewer';
 
-interface Props { fileName: string; data?: Blob | string; mimeType: string; }
+interface Props { fileName: string; data?: Blob | string; mimeType: string; maximized: boolean; onToggleMaximize: () => void; }
 
 export function rowsFrom(source: string, delimiter: string): string[][] {
   const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
@@ -22,7 +22,7 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 }
 
 
-export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
+export default function ReadOnlyFileViewer({ fileName, data, mimeType, maximized, onToggleMaximize }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
@@ -126,6 +126,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     <span aria-live="polite">{Math.round(zoom * 100)}%</span>
     <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in (Ctrl+=)" onClick={zoomIn} disabled={zoom >= 3}><ZoomIn size={15} /></button>
     <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom (Ctrl+0)" onClick={() => setZoom(1)} disabled={zoom === 1}><RotateCcw size={13} /></button>
+    <button type="button" className="icon-button" aria-label={maximized ? 'Minimize file' : 'Maximize file'} title={maximized ? 'Minimize file' : 'Maximize file'} onClick={onToggleMaximize}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
   </div>;
 
   if (isImage) return <div className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
@@ -141,8 +142,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       : isBrowserOoxml && !hasOfficeRenderFailure
         ? <>
             <div className="office-viewer-toolbar">
-              <span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span>
-              <span>Rendered locally · No document upload</span>
+              <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
+              <button type="button" className="icon-button" aria-label={maximized ? 'Minimize file' : 'Maximize file'} title={maximized ? 'Minimize file' : 'Maximize file'} onClick={onToggleMaximize}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
             </div>
             {data instanceof Blob
               ? <OfficeOoxmlViewer key={`${fileName}-${ext}`} data={data} extension={ext} onError={handleOfficeRenderError} />
