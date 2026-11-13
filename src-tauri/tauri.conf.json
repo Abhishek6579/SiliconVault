@@ -46,6 +46,18 @@
         "version": "0.1.1.2"
       }
     },
-    "license": "../LICENSE"
+    "license": "../LICENSE",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/Abhishek6579/SiliconVault/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
