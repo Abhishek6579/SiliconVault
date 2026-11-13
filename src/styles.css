@@ -4127,3 +4127,32 @@ body,
   flex: 1 1 0;
   min-height: 0;
 }
+
+
+/* Contextual search popup and explicit Trash action. */
+.global-search-trigger {
+  display: inline-flex; align-items: center; gap: 9px; min-width: 220px; height: 31px;
+  padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer;
+}
+.global-search-trigger span { flex: 1; text-align: left; }
+.global-search-trigger kbd, .search-popup kbd {
+  padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px;
+  color: var(--muted); font: 9px/1.4 inherit;
+}
+.search-popup-backdrop {
+  position: fixed; inset: 0; z-index: 12000; display: flex; justify-content: center;
+  align-items: flex-start; padding: 15vh 18px 18px; background: #080b1280;
+}
+.search-popup {
+  width: min(620px, 100%); overflow: hidden; border: 1px solid var(--line);
+  border-radius: 11px; background: var(--panel); box-shadow: 0 22px 70px #0005;
+}
+.search-popup-input { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+.search-popup-input input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.search-popup-scope { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.trash-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px; color: var(--muted); font-size: 11px; }
+.danger-outline { color: #b94d4d; border-color: #d7a4a4; }
+.danger-outline:hover { background: #fff1f1; }
+.app-shell[data-theme="dark"] .danger-outline { color: #e29a9a; border-color: #704747; }
+.app-shell[data-theme="dark"] .danger-outline:hover { background: #382626; }
