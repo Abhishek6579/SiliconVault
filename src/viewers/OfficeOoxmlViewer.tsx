@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface Props {
   data: Blob;
@@ -9,6 +10,8 @@ interface Props {
 interface ViewerHandle {
   load(source: ArrayBuffer): Promise<void>;
   destroy(): void;
+  setScale(scale: number): void;
+  getScale(): number;
 }
 
 const MAX_OFFICE_FILE_BYTES = 100 * 1024 * 1024;
@@ -20,12 +23,24 @@ function asError(reason: unknown): Error {
 export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
+  const [scale, setScale] = useState(1);
+  const viewerRef = useRef<ViewerHandle | null>(null);
+
+  const changeScale = (next: number) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const bounded = Math.min(4, Math.max(0.1, Math.round(next * 100) / 100));
+    viewer.setScale(bounded);
+    setScale(viewer.getScale());
+  };
 
   useEffect(() => {
     let active = true;
     let viewer: ViewerHandle | null = null;
     const host = hostRef.current;
     setLoading(true);
+    setScale(1);
+    viewerRef.current = null;
 
     const openDocument = async () => {
       if (!host) throw new Error('The Office preview container is unavailable.');
@@ -52,6 +67,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           enableTextSelection: true,
           useGoogleFonts: false,
           onError: (reason: Error) => { if (active) onError(reason); },
+          onScaleChange: (next: number) => { if (active) setScale(next); },
           onLayoutComplete: (reason?: unknown) => {
             if (active && reason) onError(asError(reason));
           },
@@ -61,8 +77,9 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
         if (!active) return;
         viewer = new XlsxViewer(host, {
           mode,
-          showZoomSlider: true,
+          showZoomSlider: false,
           useGoogleFonts: false,
+          onScaleChange: (next: number) => { if (active) setScale(next); },
           onError: (reason: Error) => { if (active) onError(reason); },
         });
       } else if (extension === 'pptx' || extension === 'pptm') {
@@ -75,6 +92,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           enableHyperlinks: false,
           useGoogleFonts: false,
           onError: (reason: Error) => { if (active) onError(reason); },
+          onScaleChange: (next: number) => { if (active) setScale(next); },
           onLayoutComplete: (reason?: unknown) => {
             if (active && reason) onError(asError(reason));
           },
@@ -83,8 +101,12 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
         throw new Error(`Unsupported browser Office format: .${extension}`);
       }
 
+      viewerRef.current = viewer;
       await viewer.load(source);
-      if (active) setLoading(false);
+      if (active) {
+        setScale(viewer.getScale());
+        setLoading(false);
+      }
     };
 
     void openDocument().catch((reason: unknown) => {
@@ -95,6 +117,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
 
     return () => {
       active = false;
+      viewerRef.current = null;
       try {
         viewer?.destroy();
       } finally {
@@ -105,6 +128,12 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
 
   return (
     <div className="office-ooxml-viewer">
+      <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document zoom controls">
+        <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => changeScale(scale - 0.1)} disabled={scale <= 0.1}><ZoomOut size={15} /></button>
+        <span aria-live="polite">{Math.round(scale * 100)}%</span>
+        <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
+        <button type="button" className="icon-button" aria-label="Reset zoom" title="Reset zoom" onClick={() => changeScale(1)} disabled={scale === 1}><RotateCcw size={13} /></button>
+      </div>
       <div className="office-ooxml-host" ref={hostRef} aria-label={`${extension.toUpperCase()} read-only preview`} />
       {loading && <div className="office-ooxml-loading" role="status">Rendering Office document…</div>}
     </div>
