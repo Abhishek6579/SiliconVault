@@ -186,7 +186,7 @@ test('imports a text file, edits it, saves it, and recovers the saved content', 
 
   const fileChooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Import', exact: true }).click();
-  await page.getByRole('button', { name: 'Import files', exact: true }).click();
+  await page.locator('header').getByRole('button', { name: 'Import files', exact: true }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles({
     name: 'import-edit.txt',
