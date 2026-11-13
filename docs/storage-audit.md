@@ -9,6 +9,7 @@ This audit records the existing Dexie schema before adding storage features. The
 | 1 | `files`: `&id, kind, name, parentFolderId, projectId, createdAt, updatedAt, deletedAt`; `contents`: `&fileId`; `folders`: `&id, name, parentFolderId, projectId, createdAt, updatedAt`; `projects`: `&id, name, archived, createdAt, updatedAt` | `migrateToUnifiedMetadata` (initial schema; no predecessor) |
 | 2 | Version 1 stores plus `preferences`: `&key, updatedAt` | `migrateToWorkspacePreferences` (adds preferences; preserves existing rows) |
 | 3 | `files`: `&id, workspaceId, kind, name, parentFolderId, projectId, createdAt, updatedAt, deletedAt`; `contents`: `&fileId`; `folders`: `&id, workspaceId, name, parentFolderId, projectId, createdAt, updatedAt`; `projects`: `&id, workspaceId, name, archived, createdAt, updatedAt`; preferences unchanged; `workspaces`: `&id, name, createdAt, updatedAt` | `migrateToWorkspaces` (creates default workspace and assigns missing workspace IDs) |
+| 4 | Version 3 stores plus `[workspaceId+deletedAt]` and `[projectId+deletedAt]` compound indexes on `files` | Adds targeted indexes for workspace Trash and project archive restoration; no record rewrite |
 
 ## Record model and integrity
 
@@ -16,7 +17,7 @@ This audit records the existing Dexie schema before adding storage features. The
 - Folders and projects have stable string IDs, workspace and parent references, and creation/update timestamps. Files have timestamps, kind, MIME type, size, parent/project/workspace references, and a nullable soft-delete timestamp.
 - Preferences use a stable string key and update timestamp. Workspaces have stable string IDs and timestamps.
 - Existing migrations preserve document IDs and content. The v1 and v2 schema classes are retained for fixture-based upgrade tests.
-- Current tables do not define compound indexes for workspace/parent, project or deleted-state queries; those queries currently filter metadata in application code.
+- Version 4 defines compound `[workspaceId+deletedAt]` and `[projectId+deletedAt]` indexes on `files`; these support workspace Trash and project-archive restore queries. Other hierarchy operations still build or filter metadata indexes in application code.
 - `sources/` is read-only reference material. No source files were modified for this audit. The current repository schema contains no separate assets or collections stores; historical synced data should be reviewed before any future migration that assumes this is exhaustive.
 - Normal workspace refresh now reads only metadata. Search reads text content by individual file key and keeps only result snippets in React state. PDFs are not yet indexed for content search.
 
@@ -36,7 +37,7 @@ The main-window capability retains file read, directory read and file write oper
 
 ## Reliability and scalability changes
 
-- Backup validation checks record shape, field types, duplicate identifiers, content size, SHA-256 integrity and workspace/folder/project references before the replacement transaction begins. Pre-workspace version-1 backups remain importable and are assigned to the default workspace.
+- Backup export preflights the shared record-count, per-file, aggregate-content, and serialized JSON size limits, and checks that stored content byte length matches file metadata before showing a native save dialog or starting a browser download. Restore enforces the same size limits and validates record shape, field types, duplicate identifiers, SHA-256 integrity and workspace/folder/project references before the replacement transaction begins. Pre-workspace version-1 backups remain importable and are assigned to the default workspace.
 - Backup export reads one content record at a time instead of materializing the entire contents table. Regular browser downloads, native desktop saves, and the pre-migration safety backup use the same incremental serializer. Restore validates one file payload at a time before the replacement transaction and decodes content again in bounded batches, rather than retaining all decoded files in memory.
 - Project archival records its archive timestamp and only soft-deletes files that were live. Restoring a project revives files deleted by that archive operation while preserving files that were already in Trash. Legacy archived projects without an archive timestamp use a best-effort compatibility path that restores their deleted project files.
 - Workspace tree construction builds folder/file buckets once per render and traverses those indexes rather than filtering the complete metadata arrays at every recursive node.

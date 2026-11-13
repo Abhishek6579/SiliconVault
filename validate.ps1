@@ -40,7 +40,7 @@ Write-Ok "Node $(node -v), npm $(npm -v)"
 
 Write-Step "Required npm scripts"
 $pkg = Get-Content ".\package.json" -Raw | ConvertFrom-Json
-$requiredScripts = @("build", "test", "test:e2e", "benchmark:storage", "benchmark:backup-memory")
+$requiredScripts = @("build", "test", "test:e2e", "benchmark:storage", "benchmark:backup-memory", "check:architecture", "typecheck")
 $missingScripts = @($requiredScripts | Where-Object { -not $pkg.scripts.PSObject.Properties[$_] })
 if ($missingScripts.Count -gt 0) {
     Stop-Run "package.json is missing scripts: $($missingScripts -join ', ')"
@@ -62,8 +62,15 @@ Invoke-Native "playwright install chromium" { npx playwright install chromium }
 Write-Ok "Chromium ready"
 Write-Step "Unit tests";           Invoke-Native "unit tests"   { npm run test }
 Write-Ok "Unit tests passed"
-Write-Step "TypeScript check";     Invoke-Native "tsc"          { npx tsc --noEmit }
+Write-Step "TypeScript check";     Invoke-Native "typecheck"    { npm run typecheck }
 Write-Ok "TypeScript passed"
+Write-Step "Architecture boundaries"; Invoke-Native "architecture" { npm run check:architecture }
+Write-Ok "Architecture boundaries passed"
+Write-Step "Rust tests"
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Stop-Run "Cargo not found. Install the Rust toolchain before running full desktop validation." }
+Invoke-Native "Rust tests" { cargo test --manifest-path src-tauri/Cargo.toml }
+Write-Ok "Rust tests passed"
+
 Write-Step "Production build";     Invoke-Native "build"        { npm run build }
 Write-Ok "Build passed"
 Write-Step "E2E tests";            Invoke-Native "e2e"          { npm run test:e2e }

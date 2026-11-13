@@ -5,7 +5,7 @@
 - **Status:** Accepted
 - **Decision:** Keep the existing React application and Tauri 2 shell. Windows remains the regression reference while platform integrations move behind `src/platform/`.
 - **Reason:** The current application already has a Tauri desktop shell, React UI, and Windows installer workflow. Rewriting the UI or changing the shell would increase migration risk without helping the port.
-- **Consequence:** Windows behavior must be checked after platform changes. macOS and Linux packaging and runtime support remain unverified until tested on their native runners.
+- **Consequence:** Windows remains the regression reference. GitHub Actions now builds Windows NSIS/MSI, Linux AppImage/DEB, and macOS DMG packages on their native runners; runtime workflows, installed Windows upgrades, macOS signing/notarization, and cross-OS backup compatibility remain separate verification gates.
 
 ## D-01: Canonical imported relative paths
 
