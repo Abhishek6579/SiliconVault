@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
-import { extractOfficeText } from './officeDocument';
+import { extractOfficeDocument, officeBlocksToText, type OfficeBlock } from './officeDocument';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
 
@@ -18,6 +18,39 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
   return rows.slice(0, 200).map((r) => r.slice(0, 30));
 }
 
+
+function renderOfficeBlocks(blocks: OfficeBlock[], prefix = 'block'): React.ReactNode {
+  return blocks.map((block, index) => {
+    const key = `${prefix}-${index}`;
+    if (block.type === 'table') {
+      return <table className="office-document-table" key={key}><tbody>
+        {(block.rows ?? []).map((row, rowIndex) => <tr key={`${key}-row-${rowIndex}`}>
+          {row.map((cell, cellIndex) => <td key={`${key}-cell-${cellIndex}`}>{renderOfficeBlocks(cell, `${key}-${rowIndex}-${cellIndex}`)}</td>)}
+        </tr>)}
+      </tbody></table>;
+    }
+    const styleClass = block.styleName?.replace(/[^a-z0-9_-]/gi, '') ?? '';
+    const style: React.CSSProperties = {
+      textAlign: block.alignment,
+      marginTop: block.spaceBefore === undefined ? undefined : `${block.spaceBefore}pt`,
+      marginBottom: block.spaceAfter === undefined ? undefined : `${block.spaceAfter}pt`,
+      marginLeft: block.indentLeft === undefined ? undefined : `${block.indentLeft}pt`,
+      textIndent: block.indentFirstLine === undefined ? undefined : `${block.indentFirstLine}pt`,
+    };
+    return <p key={key} className={`office-document-paragraph ${styleClass ? `office-style-${styleClass}` : ''}`} style={style}>
+      {(block.runs ?? [{ text: block.text ?? '' }]).map((run, runIndex) => <span key={`${key}-run-${runIndex}`} style={{
+        fontWeight: run.bold ? 700 : undefined,
+        fontStyle: run.italic ? 'italic' : undefined,
+        textDecoration: [run.underline ? 'underline' : '', run.strike ? 'line-through' : ''].filter(Boolean).join(' ') || undefined,
+        color: run.color,
+        backgroundColor: run.highlight,
+        fontSize: run.fontSize ? `${run.fontSize}pt` : undefined,
+        verticalAlign: run.verticalAlign === 'superscript' ? 'super' : run.verticalAlign === 'subscript' ? 'sub' : undefined,
+      }}>{run.text}</span>)}
+    </p>;
+  });
+}
+
 export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
@@ -28,11 +61,12 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [officeText, setOfficeText] = useState('');
+  const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
   const [copyError, setCopyError] = useState('');
-  const officeContentRef = useRef<HTMLPreElement>(null);
+  const officeContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setError(''); setText(''); setUrl(''); setZoom(1);
@@ -53,6 +87,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     if (!isOffice) return;
     let active = true;
     setOfficeText('');
+    setOfficeBlocks([]);
     setOfficeError('');
     setCopyError('');
     setOfficeLoading(true);
@@ -62,8 +97,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       setOfficeLoading(false);
       return;
     }
-    extractOfficeText(data, ext)
-      .then((value) => { if (active) setOfficeText(value); })
+    extractOfficeDocument(data, ext)
+      .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
       .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
       .finally(() => { if (active) setOfficeLoading(false); });
     return () => { active = false; };
@@ -120,7 +155,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       </div>
       {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
     </div>
-    {officeLoading ? <div className="loading-state">Extracting document text…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <pre ref={officeContentRef} className="office-document-content" style={{ zoom }}>{officeText}</pre>}
+    {officeLoading ? <div className="loading-state">Preparing document preview…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
