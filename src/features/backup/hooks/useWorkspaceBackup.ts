@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { db } from '../../../storage/database';
-import { downloadBackup, exportBackupStream, importBackup } from '../../../storage/backup';
 import { parseBackupFile } from '../parse';
-import { isDesktopApp, platform } from '../../../platform';
+import { platform } from '../../../platform';
+import { exportWorkspaceBackup } from '../../../services/exportBackup';
+import { restoreWorkspaceBackup } from '../../../services/restoreBackup';
 
 type RequestConfirmation = (title: string, message: string, confirmLabel: string, onConfirm: () => void | Promise<void>, destructive?: boolean) => void;
 
@@ -22,7 +23,7 @@ export function useWorkspaceBackup(
         'Restore backup',
         async () => {
           await flushPendingSaves();
-          await importBackup(db, backup);
+          await restoreWorkspaceBackup(db, backup);
           await onRestored();
         },
         true,
@@ -32,15 +33,14 @@ export function useWorkspaceBackup(
   }, [flushPendingSaves, onError, onRestored, requestConfirmation]);
 
   const restoreFromPicker = useCallback(async (input?: HTMLInputElement | null) => {
-    if (!isDesktopApp()) { input?.click(); return; }
+    if (!platform.capabilities.nativeBackupOpen) { input?.click(); return; }
     try { await openBackup(await platform.chooseBackup() ?? undefined, input); }
     catch (reason) { onError(reason instanceof Error ? reason.message : 'Could not open the backup picker.'); }
   }, [onError, openBackup]);
 
   const saveWorkspaceBackup = useCallback(async () => {
     try {
-      if (isDesktopApp()) await platform.saveBackup(exportBackupStream(db));
-      else await downloadBackup(db);
+      await exportWorkspaceBackup(db, platform);
     } catch (reason) { onError(reason instanceof Error ? reason.message : 'Could not create the workspace backup.'); }
   }, [onError]);
 

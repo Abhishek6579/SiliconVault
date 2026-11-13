@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { HardDrive } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
-import { isDesktopApp } from './platform';
+import { platform } from './platform';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
@@ -314,7 +314,7 @@ export default function AppShell() {
 
     <DialogHost onError={setError} />
 
-    {migrationBackup && <MigrationDialog error={migrationError} upgrading={upgrading} desktopApp={isDesktopApp()} onUpgrade={() => void downloadMigrationBackupAndUpgrade()} />}
+    {migrationBackup && <MigrationDialog error={migrationError} upgrading={upgrading} nativeBackupSave={platform.capabilities.nativeBackupSave} onUpgrade={() => void downloadMigrationBackupAndUpgrade()} />}
 
     <UpdateManager />
     {loading && <StartupScreen />}

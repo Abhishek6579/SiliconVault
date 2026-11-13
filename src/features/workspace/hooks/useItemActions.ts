@@ -1,10 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { db } from '../../../storage/database';
-import { moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from '../../../storage/hierarchy';
+import { moveFile, moveFolder, renameFolder, restoreProject as unarchiveProject, softDeleteProject } from '../../../storage/hierarchy';
 import { countFolderItems, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from '../../../storage/files';
 import type { FileMeta, Folder as FolderRecord, Project } from '../../../storage/types';
 import type { Tab } from '../../tabs/types';
-import type { ImportTarget } from './useImportActions';
+import type { ImportTarget } from '../../../services/importFolder';
 
 type View = 'workspace' | 'recent' | 'trash';
 export type ContextItemType = 'file' | 'folder' | 'project';
@@ -80,7 +80,7 @@ export function useItemActions(options: UseItemActionsOptions) {
       if (name.trim() === meta.name) return;
       if ('kind' in meta) await renameFile(db, meta.id, name.trim());
       else if ('archived' in meta) await db.projects.update(meta.id, { name: name.trim(), updatedAt: Date.now() });
-      else await db.folders.update(meta.id, { name: name.trim(), updatedAt: Date.now() });
+      else await renameFolder(db, meta.id, name.trim());
       if ('kind' in meta) setTabs((current) => current.map((tab) => tab.id === meta.id ? { ...tab, meta: { ...tab.meta, name: name.trim(), kind: kindForFile(name.trim(), tab.meta.mimeType) } } : tab));
       await refresh();
     });

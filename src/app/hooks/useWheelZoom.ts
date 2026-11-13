@@ -1,5 +1,6 @@
 import { useEffect, type MutableRefObject } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { isModKey } from '../../shared/keyboard/modifier';
 
 type LastFocusedSurface = 'pdf' | 'editor' | 'document' | null;
 
@@ -10,7 +11,7 @@ export function useWheelZoom(
 ) {
   useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
+      if (!isModKey(event)) return;
       const target = event.target instanceof Element
         ? event.target
         : event.target instanceof Node

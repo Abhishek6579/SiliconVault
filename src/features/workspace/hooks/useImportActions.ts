@@ -1,17 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { db } from '../../../storage/database';
-import { createFolder } from '../../../storage/hierarchy';
-import { importFile } from '../../../storage/files';
-import { normalizeRelativePath } from '../../../shared/utils/relativePath';
 import { platform } from '../../../platform';
-import { OPENABLE_KINDS } from '../../../shared/constants/fileKinds';
+import { importFiles } from '../../../services/importFiles';
+import { importFolder, type ImportTarget } from '../../../services/importFolder';
 import type { FileMeta } from '../../../storage/types';
-
-export interface ImportTarget {
-  folderId: string | null;
-  projectId: string | null;
-  workspaceId: string;
-}
 
 interface UseImportActionsOptions {
   openFile: (file: FileMeta) => Promise<void>;
@@ -36,28 +28,7 @@ export function useImportActions(options: UseImportActionsOptions) {
   } = options;
 
   async function importFolderFiles(selectedFiles: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
-    const folderIds = new Map<string, string>();
-    let imported = 0;
-    for await (const file of selectedFiles) {
-      const relativePath = normalizeRelativePath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name);
-      const segments = relativePath.split('/').filter(Boolean);
-      const directorySegments = segments.slice(0, -1);
-      let parentFolderId = target.folderId;
-      let currentPath = '';
-      for (const segment of directorySegments) {
-        currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-        let folderId = folderIds.get(currentPath);
-        if (!folderId) {
-          const folder = await createFolder(db, segment, parentFolderId, target.projectId, target.workspaceId);
-          folderId = folder.id;
-          folderIds.set(currentPath, folderId);
-        }
-        parentFolderId = folderId;
-      }
-      await importFile(db, file, { parentFolderId, projectId: target.projectId, workspaceId: target.workspaceId });
-      imported += 1;
-    }
-    const rootFolderId = folderIds.values().next().value as string | undefined;
+    const { imported, rootFolderId } = await importFolder(db, selectedFiles, target, platform.getRelativePath);
     if (rootFolderId) {
       setSelectedFolder(rootFolderId);
       setActiveProject(target.projectId);
@@ -71,10 +42,7 @@ export function useImportActions(options: UseImportActionsOptions) {
     if (!fileList?.length) return;
     setImporting(true);
     try {
-      for (const file of Array.from(fileList)) {
-        const meta = await importFile(db, file, { parentFolderId: destinationFolderId, projectId: destinationProjectId, workspaceId: destinationWorkspaceId });
-        if (OPENABLE_KINDS.has(meta.kind)) await openFile(meta);
-      }
+      await importFiles(db, Array.from(fileList), { folderId: destinationFolderId, projectId: destinationProjectId, workspaceId: destinationWorkspaceId }, openFile);
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not import the selected file.');
@@ -86,10 +54,7 @@ export function useImportActions(options: UseImportActionsOptions) {
   async function handlePickedImport(files: Iterable<File> | AsyncIterable<File>, target: ImportTarget) {
     setImporting(true);
     try {
-      for await (const file of files) {
-        const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
-        if (OPENABLE_KINDS.has(meta.kind)) await openFile(meta);
-      }
+      await importFiles(db, files, target, openFile);
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not import the selected files.');

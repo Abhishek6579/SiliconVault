@@ -1,9 +1,27 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { Workspace } from './types';
 import { collectDescendantIds } from './tree';
+import { duplicateKey, validateFileName } from '../domain/names';
+import { assertUniqueFileName } from './files';
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+async function assertUniqueFolderName(
+  database: WorkspaceDatabase,
+  name: string,
+  location: { workspaceId: string; parentFolderId: string | null; projectId: string | null },
+  ignoreId?: string,
+): Promise<void> {
+  const siblings = location.parentFolderId
+    ? database.folders.where('parentFolderId').equals(location.parentFolderId)
+    : database.folders.toCollection();
+  const duplicate = await siblings
+    .filter((folder) => folder.parentFolderId === location.parentFolderId && folder.workspaceId === location.workspaceId && folder.projectId === location.projectId &&
+      folder.id !== ignoreId && duplicateKey(folder.name) === duplicateKey(name))
+    .first();
+  if (duplicate) throw new Error(`A folder named “${name}” already exists here. Names are treated as case-insensitive on all platforms.`);
 }
 
 async function destinationFor(database: WorkspaceDatabase, parentFolderId: string | null, requestedProjectId?: string | null, requestedWorkspaceId?: string): Promise<{ projectId: string | null; workspaceId: string }> {
@@ -28,8 +46,29 @@ async function destinationFor(database: WorkspaceDatabase, parentFolderId: strin
 }
 
 export async function createFolder(database: WorkspaceDatabase, name: string, parentFolderId: string | null = null, projectId?: string | null, workspaceId?: string) {
+  validateFileName(name);
   return database.transaction('rw', database.folders, database.projects, database.workspaces, async () => {
     const destination = await destinationFor(database, parentFolderId, projectId, workspaceId);
+    await assertUniqueFolderName(database, name, { ...destination, parentFolderId });
+    const now = Date.now();
+    const folder = { id: newId(), name, parentFolderId, projectId: destination.projectId, workspaceId: destination.workspaceId, createdAt: now, updatedAt: now };
+    await database.folders.add(folder);
+    return folder;
+  });
+}
+
+/** Reuses an existing case-insensitive sibling when reconstructing imported folder paths. */
+export async function getOrCreateImportedFolder(database: WorkspaceDatabase, name: string, parentFolderId: string | null, projectId: string | null, workspaceId: string) {
+  validateFileName(name);
+  return database.transaction('rw', database.folders, database.projects, database.workspaces, async () => {
+    const destination = await destinationFor(database, parentFolderId, projectId, workspaceId);
+    const siblings = parentFolderId
+      ? database.folders.where('parentFolderId').equals(parentFolderId)
+      : database.folders.toCollection();
+    const existing = await siblings
+      .filter((folder) => folder.parentFolderId === parentFolderId && folder.workspaceId === destination.workspaceId && folder.projectId === destination.projectId && duplicateKey(folder.name) === duplicateKey(name))
+      .first();
+    if (existing) return existing;
     const now = Date.now();
     const folder = { id: newId(), name, parentFolderId, projectId: destination.projectId, workspaceId: destination.workspaceId, createdAt: now, updatedAt: now };
     await database.folders.add(folder);
@@ -46,6 +85,9 @@ export async function moveFolder(database: WorkspaceDatabase, folderId: string, 
     const descendants = collectDescendantIds(allFolders, folderId);
     const descendantSet = new Set(descendants);
     if (parentFolderId && descendantSet.has(parentFolderId)) throw new Error('A folder cannot be moved into its own subtree.');
+    if (folder.parentFolderId !== parentFolderId || folder.workspaceId !== destination.workspaceId || folder.projectId !== destination.projectId) {
+      await assertUniqueFolderName(database, folder.name, { ...destination, parentFolderId }, folderId);
+    }
     const foldersById = new Map(allFolders.map((item) => [item.id, item]));
     const now = Date.now();
     await database.folders.bulkPut(descendants.map((descendantId) => {
@@ -67,7 +109,18 @@ export async function moveFile(database: WorkspaceDatabase, fileId: string, pare
     const file = await database.files.get(fileId);
     if (!file) throw new Error('The file does not exist.');
     const destination = await destinationFor(database, parentFolderId, projectId, workspaceId ?? (parentFolderId ? undefined : file.workspaceId));
+    await assertUniqueFileName(database, file.name, { ...destination, parentFolderId }, fileId);
     await database.files.update(fileId, { parentFolderId, projectId: destination.projectId, workspaceId: destination.workspaceId, updatedAt: Date.now() });
+  });
+}
+
+export async function renameFolder(database: WorkspaceDatabase, folderId: string, name: string): Promise<void> {
+  validateFileName(name);
+  await database.transaction('rw', database.folders, async () => {
+    const folder = await database.folders.get(folderId);
+    if (!folder) throw new Error('The folder does not exist.');
+    await assertUniqueFolderName(database, name, folder, folderId);
+    await database.folders.update(folderId, { name, updatedAt: Date.now() });
   });
 }
 

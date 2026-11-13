@@ -10,6 +10,7 @@
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "check:architecture": "node scripts/check-architecture.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

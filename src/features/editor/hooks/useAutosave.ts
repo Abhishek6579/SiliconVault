@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { flushPendingAutosaves } from '../../../storage/autosave';
 import { db } from '../../../storage/database';
 import { saveFileText } from '../../../storage/files';
-import { isDesktopApp, platform } from '../../../platform';
+import { platform } from '../../../platform';
 import type { Tab } from '../../tabs/types';
 
 type SetTabs = Dispatch<SetStateAction<Tab[]>>;
@@ -116,7 +116,7 @@ export function useAutosave(
   const waitForSave = useCallback((id: string) => saveChains.current.get(id) ?? Promise.resolve(), []);
 
   useEffect(() => {
-    if (!isDesktopApp()) {
+    if (!platform.capabilities.safeShutdown) {
       const warnBeforeUnload = (event: BeforeUnloadEvent) => {
         if (pendingDrafts.current.size === 0) return;
         event.preventDefault();

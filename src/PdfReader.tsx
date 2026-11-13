@@ -5,6 +5,7 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { disposePdfResources } from './pdf/lifecycle';
 import { MAX_PDF_FILE_SIZE_BYTES } from './storage/limits';
+import { isModKey } from './shared/keyboard/modifier';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -176,7 +177,7 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
     const host = hostRef.current;
     if (!host) return;
     const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
+      if (!isModKey(event)) return;
       event.preventDefault();
       setFit(false);
       setZoom((value) => Math.max(.5, Math.min(2, Math.round((value + (event.deltaY < 0 ? .1 : -.1)) * 100) / 100)));

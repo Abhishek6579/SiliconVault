@@ -1,5 +1,13 @@
 export interface PlatformAdapter {
-  readonly kind: 'web' | 'desktop';
+  readonly capabilities: {
+    nativeBackupSave: boolean;
+    nativeBackupOpen: boolean;
+    systemDiagnostics: boolean;
+    systemStats: boolean;
+    officeConversion: boolean;
+    updates: boolean;
+    safeShutdown: boolean;
+  };
   log(level: string, event: string, message: string): Promise<void>;
   getSystemStats(): Promise<{ cpu: number | null; ram: number | null; gpu: number | null }>;
   getDiagnostics(): Promise<unknown>;
@@ -14,4 +22,5 @@ export interface PlatformAdapter {
   chooseBackup(): Promise<File | null>;
   chooseFiles(): AsyncGenerator<File>;
   chooseFolderFiles(): AsyncGenerator<File>;
+  getRelativePath(file: File): string;
 }

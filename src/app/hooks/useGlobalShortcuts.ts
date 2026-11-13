@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { isModKey } from '../../shared/keyboard/modifier';
 
 export function useGlobalShortcuts(
   setZoom: React.Dispatch<React.SetStateAction<number>>,
@@ -15,7 +16,7 @@ export function useGlobalShortcuts(
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (!isModKey(event) || event.altKey) return;
       if (!['=', '+', '-', '_', '0'].includes(event.key)) return;
       const target = event.target instanceof Element ? event.target : null;
       const pdfFocused = Boolean(target?.closest('.pdf-shell')) || lastFocusedSurface === 'pdf';

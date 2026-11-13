@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeRelativePath } from '../src/shared/utils/relativePath';
+import { basename, extname, normalizeRelativePath, parentPath, splitPath } from '../src/domain/paths';
 
 describe('normalizeRelativePath', () => {
   it('normalizes mixed Windows and POSIX separators', () => {
@@ -16,5 +16,17 @@ describe('normalizeRelativePath', () => {
 
   it('rejects parent traversal', () => {
     expect(() => normalizeRelativePath('folder/../outside.md')).toThrow(/above the selected folder/);
+  });
+
+  it('splits normalized paths and handles empty input', () => {
+    expect(splitPath('a\\b/c.md')).toEqual(['a', 'b', 'c.md']);
+    expect(splitPath('')).toEqual([]);
+  });
+
+  it('returns filename, parent, and extension from either separator style', () => {
+    expect(basename('a\\b/report.tar.gz')).toBe('report.tar.gz');
+    expect(parentPath('a\\b/report.tar.gz')).toBe('a/b');
+    expect(extname('a\\b/report.tar.gz')).toBe('.gz');
+    expect(extname('a\\b/.env')).toBe('');
   });
 });

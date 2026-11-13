@@ -39,7 +39,7 @@ function download(content: string, filename: string, type: string): boolean {
 }
 
 export const webPlatform: PlatformAdapter = {
-  kind: 'web',
+  capabilities: { nativeBackupSave: false, nativeBackupOpen: false, systemDiagnostics: false, systemStats: false, officeConversion: false, updates: false, safeShutdown: false },
   async log() {},
   async getSystemStats() { throw new Error('System statistics are available in the desktop application.'); },
   async getDiagnostics() { throw new Error('System diagnostics are available in the desktop application.'); },
@@ -65,4 +65,5 @@ export const webPlatform: PlatformAdapter = {
   },
   chooseFiles,
   chooseFolderFiles,
+  getRelativePath: (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
 };

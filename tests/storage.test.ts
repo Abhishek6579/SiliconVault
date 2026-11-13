@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
 import { exportBackup, exportBackupStream, importBackup } from '../src/storage/backup';
-import { createFolder, deleteWorkspace, moveFile, moveFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
-import { createTextFile, emptyTrash, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
+import { createFolder, deleteWorkspace, getOrCreateImportedFolder, moveFile, moveFolder, renameFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
+import { createTextFile, emptyTrash, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
 import { assertBackupFileSize, assertImportFileSize, MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_TOTAL_CONTENT_BYTES, MAX_IMPORT_FILE_SIZE_BYTES, MAX_PDF_FILE_SIZE_BYTES } from '../src/storage/limits';
 import { parseBackupFile } from '../src/features/backup/parse';
@@ -112,6 +112,60 @@ describe('file rename validation', () => {
     await expect(renameFile(database, file.id, 'notes.pdf')).rejects.toThrow(/does not convert/);
     await renameFile(database, file.id, 'engineering-notes.md');
     expect(await database.files.get(file.id)).toMatchObject({ name: 'engineering-notes.md', kind: 'markdown' });
+  });
+
+  it('rejects case-insensitive file duplicates within a folder but allows them elsewhere', async () => {
+    const database = createDatabase();
+    await database.open();
+    const folder = await createFolder(database, 'Designs');
+    const original = await createTextFile(database, 'Notes.md', 'text', { parentFolderId: folder.id, kind: 'markdown' });
+    await expect(createTextFile(database, 'notes.MD', 'duplicate', { parentFolderId: folder.id, kind: 'markdown' }))
+      .rejects.toThrow(/case-insensitive/);
+    await expect(renameFile(database, original.id, 'NOTES.md')).resolves.toBeUndefined();
+    const otherFolder = await createFolder(database, 'Other');
+    await expect(createTextFile(database, 'notes.md', 'different folder', { parentFolderId: otherFolder.id, kind: 'markdown' }))
+      .resolves.toBeDefined();
+    await expect(importFile(database, new File(['duplicate'], 'NOTES.md'), { parentFolderId: folder.id }))
+      .rejects.toThrow(/case-insensitive/);
+  });
+
+  it('applies case-insensitive sibling rules to folder creation, rename, and move', async () => {
+    const database = createDatabase();
+    await database.open();
+    const parent = await createFolder(database, 'Parent');
+    const left = await createFolder(database, 'Left');
+    const right = await createFolder(database, 'Right');
+    const folder = await createFolder(database, 'Notes', left.id);
+    await expect(createFolder(database, 'notes', left.id)).rejects.toThrow(/case-insensitive/);
+    const sibling = await createFolder(database, 'Other', left.id);
+    await expect(renameFolder(database, sibling.id, 'NOTES')).rejects.toThrow(/case-insensitive/);
+    await createFolder(database, 'notes', right.id);
+    await createFolder(database, 'notes', parent.id);
+    await expect(moveFolder(database, folder.id, parent.id)).rejects.toThrow(/case-insensitive/);
+    const destination = await createFolder(database, 'Destination');
+    await moveFolder(database, folder.id, destination.id);
+    expect((await database.folders.get(folder.id))?.parentFolderId).toBe(destination.id);
+  });
+
+  it('reuses a matching folder when importing into an existing hierarchy', async () => {
+    const database = createDatabase();
+    await database.open();
+    const existing = await createFolder(database, 'Designs');
+    const imported = await getOrCreateImportedFolder(database, 'designs', null, null, DEFAULT_WORKSPACE_ID);
+    expect(imported.id).toBe(existing.id);
+    expect(imported.name).toBe('Designs');
+    expect(await database.folders.count()).toBe(1);
+  });
+
+  it('rejects a file move that would collide with a destination sibling', async () => {
+    const database = createDatabase();
+    await database.open();
+    const left = await createFolder(database, 'Left');
+    const right = await createFolder(database, 'Right');
+    const first = await createTextFile(database, 'Report.md', '', { parentFolderId: left.id, kind: 'markdown' });
+    await createTextFile(database, 'report.md', '', { parentFolderId: right.id, kind: 'markdown' });
+    await expect(moveFile(database, first.id, right.id)).rejects.toThrow(/case-insensitive/);
+    expect((await database.files.get(first.id))?.parentFolderId).toBe(left.id);
   });
 });
 

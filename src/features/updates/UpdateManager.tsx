@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { isDesktopApp, platform } from '../../platform';
+import { platform } from '../../platform';
 
 interface UpdateInfo {
   version: string;
@@ -24,7 +24,7 @@ export default function UpdateManager() {
   const busyRef = useRef(false);
 
   const checkForUpdates = useCallback(async (manual = false) => {
-    if (!isDesktopApp()) return;
+    if (!platform.capabilities.updates) return;
     if (manual) { setVisible(true); setMessage('Checking for updates…'); }
     if (busyRef.current) return;
     busyRef.current = true;
@@ -43,7 +43,7 @@ export default function UpdateManager() {
   }, []);
 
   useEffect(() => {
-    if (!isDesktopApp()) return;
+    if (!platform.capabilities.updates) return;
     let disposed = false;
     let unlistenProgress: (() => void) | undefined;
     let unlistenReleaseNotes: (() => void) | undefined;
@@ -88,7 +88,7 @@ export default function UpdateManager() {
     }
   };
 
-  if (!isDesktopApp() || (!visible && !installing && !releaseNotes)) return null;
+  if (!platform.capabilities.updates || (!visible && !installing && !releaseNotes)) return null;
   const percent = progress?.contentLength
     ? Math.min(100, Math.round((progress.downloaded / progress.contentLength) * 100))
     : null;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { isModKey } from '../shared/keyboard/modifier';
 
 interface Props {
   data: Blob;
@@ -141,13 +142,13 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     const host = hostRef.current;
     if (!host) return;
     const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
+      if (!isModKey(event)) return;
       event.preventDefault();
       event.stopPropagation();
       changeScale(scale + (event.deltaY < 0 ? 0.1 : -0.1));
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (!isModKey(event) || event.altKey) return;
       if (!['=', '+', '-', '_', '0'].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();

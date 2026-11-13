@@ -82,7 +82,7 @@ async function saveDiagnosticsExport(content: string): Promise<boolean> {
 }
 
 export const desktopPlatform: PlatformAdapter = {
-  kind: 'desktop',
+  capabilities: { nativeBackupSave: true, nativeBackupOpen: true, systemDiagnostics: true, systemStats: true, officeConversion: true, updates: true, safeShutdown: true },
   log: (level, event, message) => invoke('log_frontend_event', { level, event, message }),
   getSystemStats: () => invoke('get_system_stats'),
   getDiagnostics: () => invoke('get_diagnostics'),
@@ -100,4 +100,5 @@ export const desktopPlatform: PlatformAdapter = {
   chooseBackup: chooseBackupToRestore,
   chooseFiles: iterateDesktopFiles,
   chooseFolderFiles: iterateDesktopFolder,
+  getRelativePath: (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
 };

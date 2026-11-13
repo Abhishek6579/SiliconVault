@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import PdfReader from '../PdfReader';
-import { isDesktopApp, platform } from '../platform';
+import { platform } from '../platform';
 import OfficeOoxmlViewer from './OfficeOoxmlViewer';
 import type { PdfViewState, ViewerViewState } from '../features/tabs/types';
+import { isModKey } from '../shared/keyboard/modifier';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; tabId: string; initialState?: ViewerViewState; initialPdfState?: PdfViewState; onStateChange: (tabId: string, state: ViewerViewState) => void; onPdfStateChange: (tabId: string, state: PdfViewState) => void; }
 
@@ -105,7 +106,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
       return () => { active = false; };
     }
 
-    if (!isDesktopApp()) {
+    if (!platform.capabilities.officeConversion) {
       const message = hasOfficeRenderFailure
         ? `The browser Office renderer failed: ${officeRenderFailure?.message ?? 'Unknown rendering error.'}`
         : 'This legacy Office format requires the desktop app with LibreOffice or ONLYOFFICE Document Builder configured.';
@@ -272,7 +273,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     const root = rootRef.current;
     if (!root) return;
     const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || (event.target instanceof Element && event.target.closest('.pdf-shell'))) return;
+      if (!isModKey(event) || (event.target instanceof Element && event.target.closest('.pdf-shell'))) return;
       event.preventDefault();
       applyZoom(zoom + (event.deltaY < 0 ? 0.1 : -0.1));
     };
@@ -284,7 +285,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     emitViewState({ scrollTop: target.scrollTop, scrollLeft: target.scrollLeft });
   };
   const handleZoomKeys = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!(event.ctrlKey || event.metaKey)) return;
+    if (!isModKey(event)) return;
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
     else if (event.key === '-') { event.preventDefault(); zoomOut(); }
     else if (event.key === '0') { event.preventDefault(); applyZoom(1); }

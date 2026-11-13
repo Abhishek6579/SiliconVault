@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../../../storage/database';
 import { migrateLegacyUiPreferences } from '../../../storage/preferences';
 import { downloadBackup, exportBackupStream } from '../../../storage/backup';
-import { isDesktopApp, platform } from '../../../platform';
+import { platform } from '../../../platform';
 import type { Workspace } from '../../../storage/types';
 
 interface Options {
@@ -30,7 +30,7 @@ export function useMigrationUpgrade(options: Options) {
     const previous = migrationBackup === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
     try {
       await previous.open();
-      if (!isDesktopApp()) {
+      if (!platform.capabilities.nativeBackupSave) {
         await downloadBackup(previous);
         setMigrationError('The browser cannot confirm that the backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
         return;

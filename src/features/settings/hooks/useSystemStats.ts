@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { isDesktopApp, platform } from '../../../platform';
+import { platform } from '../../../platform';
 import { logger } from '../../../logger.js';
 
 export interface SystemStats { cpu: number | null; ram: number | null; gpu: number | null; }
@@ -8,7 +8,7 @@ const EMPTY_STATS: SystemStats = { cpu: null, ram: null, gpu: null };
 export function useSystemStats() {
   const [stats, setStats] = useState<SystemStats>(EMPTY_STATS);
   useEffect(() => {
-    if (!isDesktopApp()) return;
+    if (!platform.capabilities.systemStats) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let failureReported = false;

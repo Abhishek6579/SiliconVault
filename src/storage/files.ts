@@ -3,6 +3,8 @@ import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { FileKind } from './types';
 import { collectDescendantIds } from './tree';
 import { assertImportFileSize } from './limits';
+import { duplicateKey, validateFileName } from '../domain/names';
+export { validateFileName } from '../domain/names';
 
 const CODE_EXTENSIONS = new Set(['v', 'sv', 'vh', 'svh', 'vhd', 'vhdl', 'c', 'h', 'cpp', 'py', 'js', 'ts', 'sh', 's', 'asm']);
 const TEXT_EXTENSIONS = new Set(['txt', 'log', 'ini', 'conf', 'env', 'json', 'xml', 'yaml', 'yml', 'toml']);
@@ -18,7 +20,25 @@ export function kindForFile(name: string, mimeType = ''): FileKind {
   return 'other';
 }
 
+export async function assertUniqueFileName(
+  database: WorkspaceDatabase,
+  name: string,
+  location: { workspaceId: string; parentFolderId: string | null; projectId: string | null },
+  ignoreId?: string,
+): Promise<void> {
+  const key = duplicateKey(name);
+  const siblings = location.parentFolderId
+    ? database.files.where('parentFolderId').equals(location.parentFolderId)
+    : database.files.toCollection();
+  const duplicate = await siblings
+    .filter((file) => file.parentFolderId === location.parentFolderId && file.workspaceId === location.workspaceId && file.projectId === location.projectId &&
+      file.deletedAt === null && file.id !== ignoreId && duplicateKey(file.name) === key)
+    .first();
+  if (duplicate) throw new Error(`A file named “${name}” already exists here. Names are treated as case-insensitive on all platforms.`);
+}
+
 export async function createTextFile(database: WorkspaceDatabase, name: string, text: string, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string; kind?: FileKind } = {}) {
+  validateFileName(name);
   const now = Date.now();
   const id = crypto.randomUUID();
   const kind = options.kind ?? kindForFile(name, 'text/plain');
@@ -32,6 +52,7 @@ export async function createTextFile(database: WorkspaceDatabase, name: string, 
     createdAt: now, updatedAt: now, deletedAt: null,
   };
   await database.transaction('rw', database.files, database.contents, async () => {
+    await assertUniqueFileName(database, name, { workspaceId: meta.workspaceId, parentFolderId: meta.parentFolderId, projectId: meta.projectId });
     await database.files.add(meta);
     await database.contents.add({ fileId: id, data: text });
   });
@@ -40,6 +61,7 @@ export async function createTextFile(database: WorkspaceDatabase, name: string, 
 
 export async function importFile(database: WorkspaceDatabase, file: File, options: { parentFolderId?: string | null; projectId?: string | null; workspaceId?: string } = {}) {
   assertImportFileSize(file.name, file.size, file.type);
+  validateFileName(file.name);
   const now = Date.now();
   const id = crypto.randomUUID();
   const meta = {
@@ -51,38 +73,21 @@ export async function importFile(database: WorkspaceDatabase, file: File, option
     createdAt: now, updatedAt: now, deletedAt: null,
   };
   await database.transaction('rw', database.files, database.contents, async () => {
+    await assertUniqueFileName(database, file.name, { workspaceId: meta.workspaceId, parentFolderId: meta.parentFolderId, projectId: meta.projectId });
     await database.files.add(meta);
     await database.contents.add({ fileId: id, data: file });
   });
   return meta;
 }
 
-function fileExtension(name: string): string {
-  const dot = name.lastIndexOf('.');
-  return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : '';
-}
-
-export function validateFileName(name: string, currentName?: string): void {
-  if (!name || name !== name.trim() || name === '.' || name === '..') {
-    throw new Error('Enter a valid file name without leading or trailing whitespace.');
-  }
-  if (name.length > 255) throw new Error('File names cannot exceed 255 characters.');
-  if (/[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name)) {
-    throw new Error('The file name contains characters or trailing punctuation that Windows does not support.');
-  }
-  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(name)) {
-    throw new Error('This file name is reserved by Windows.');
-  }
-  if (currentName !== undefined && fileExtension(name) !== fileExtension(currentName)) {
-    throw new Error('Changing a file extension does not convert its contents. Keep the existing extension; format conversion is not supported.');
-  }
-}
-
 export async function renameFile(database: WorkspaceDatabase, id: string, name: string): Promise<void> {
-  const file = await database.files.get(id);
-  if (!file) throw new Error('The file does not exist.');
-  validateFileName(name, file.name);
-  await database.files.update(id, { name, updatedAt: Date.now() });
+  await database.transaction('rw', database.files, async () => {
+    const file = await database.files.get(id);
+    if (!file) throw new Error('The file does not exist.');
+    validateFileName(name, file.name);
+    await assertUniqueFileName(database, name, file, id);
+    await database.files.update(id, { name, updatedAt: Date.now() });
+  });
 }
 
 export async function saveFileText(database: WorkspaceDatabase, id: string, text: string): Promise<void> {

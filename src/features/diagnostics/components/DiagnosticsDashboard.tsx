@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Download, FileText, RefreshCw, ShieldCheck } from 'lucide-react';
-import { isDesktopApp, platform } from '../../../platform';
+import { platform } from '../../../platform';
 import { logger } from '../../../logger.js';
 
 interface DiagnosticsSnapshot {
@@ -24,7 +24,7 @@ export default function DiagnosticsDashboard() {
   const [exporting, setExporting] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!isDesktopApp()) { setError('System diagnostics are available in the desktop application.'); setLoading(false); return; }
+    if (!platform.capabilities.systemDiagnostics) { setError('System diagnostics are available in the desktop application.'); setLoading(false); return; }
     setLoading(true);
     try { setSnapshot(await platform.getDiagnostics() as DiagnosticsSnapshot); setError(''); }
     catch (reason) {

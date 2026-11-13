@@ -15,9 +15,10 @@
 
 ## D-02: Case-insensitive duplicate names
 
-- **Status:** Open
-- **Decision:** No duplicate-name policy is introduced by this change. Existing import behavior and database records must be characterized before enforcing case-insensitive uniqueness, especially for existing workspaces with colliding names.
-- **Reason:** Rejecting imports or renames is a user-visible change and requires a migration/compatibility policy for existing data.
+- **Status:** Accepted for new and moved items
+- **Decision:** Compare sibling file and folder names using NFC normalization and locale-independent lowercase. Reject new imports, creations, renames, and moves that collide within the same workspace, project, and parent folder. Existing records are preserved; no startup migration or deletion is performed.
+- **Reason:** Windows and default macOS filesystems are case-insensitive while common Linux filesystems are case-sensitive. A consistent rule avoids workspaces that cannot be represented on every target.
+- **User impact:** On Linux, users can no longer create or import `notes.md` beside `Notes.md`. Existing collisions remain visible and are not silently modified; users must resolve them before moving/renaming into a colliding destination.
 
 ## D-03: macOS trackpad zoom
 

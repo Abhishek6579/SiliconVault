@@ -1,5 +1,6 @@
 import { useEffect, type MutableRefObject, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { EditorView } from '@codemirror/view';
+import { isModKey } from '../../../shared/keyboard/modifier';
 
 type FocusedSurface = 'pdf' | 'editor' | 'document' | null;
 
@@ -22,7 +23,7 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       else lastFocusedSurfaceRef.current = null;
     };
     const handleShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+      if (!isModKey(event) || event.altKey) {
         if (event.key === 'Escape') {
           setSearchPopupOpen(false);
           setRightPanel((current) => current === 'search' ? null : current);
