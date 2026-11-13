@@ -35,7 +35,8 @@
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.0",
-    "remark-math": "^6.0.0"
+    "remark-math": "^6.0.0",
+    "@silurus/ooxml": "0.89.9"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
