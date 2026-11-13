@@ -64,20 +64,20 @@ export default function WorkspaceEditor({
     let result: ReturnType<SearchCursor['next']> | undefined;
     if (direction > 0) {
       const start = Math.min(view.state.doc.length, findPositionRef.current);
-      result = new SearchCursor(view.state.doc, needle, start, undefined, { caseSensitive: false }).next();
+      result = new SearchCursor(view.state.doc, needle, start, undefined).next();
       if (result.done && start > 0) {
-        result = new SearchCursor(view.state.doc, needle, 0, start, { caseSensitive: false }).next();
+        result = new SearchCursor(view.state.doc, needle, 0, start).next();
       }
     } else {
       const upper = Math.max(0, findPositionRef.current - 1);
-      const cursor = new SearchCursor(view.state.doc, needle, 0, upper, { caseSensitive: false });
+      const cursor = new SearchCursor(view.state.doc, needle, 0, upper);
       let previous = cursor.next();
       while (!previous.done) {
         result = previous;
         previous = cursor.next();
       }
       if (result === undefined) {
-        const wrap = new SearchCursor(view.state.doc, needle, 0, view.state.doc.length, { caseSensitive: false });
+        const wrap = new SearchCursor(view.state.doc, needle, 0, view.state.doc.length);
         let last = wrap.next();
         while (!last.done) { result = last; last = wrap.next(); }
       }
