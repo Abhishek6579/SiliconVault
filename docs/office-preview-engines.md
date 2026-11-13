@@ -13,7 +13,7 @@ The official CLI executable names are `docbuilder.exe` on Windows and `documentb
 Example PowerShell configuration for the current process:
 
 ```powershell
-$env:SILICONVAULT_DOCBUILDER_PATH = "C:\\Program Files\\ONLYOFFICE\\DocumentBuilder\\docbuilder.exe"
+$env:SILICONVAULT_DOCBUILDER_PATH = "C:\Program Files\ONLYOFFICE\DocumentBuilder\docbuilder.exe"
 ```
 
 Example Linux configuration:
