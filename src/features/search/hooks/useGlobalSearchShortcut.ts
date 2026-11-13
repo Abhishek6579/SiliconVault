@@ -26,14 +26,15 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, setSearchPopupO
       }
       if (event.key.toLowerCase() !== 'k' && event.key.toLowerCase() !== 'f') return;
       event.preventDefault();
+      event.stopPropagation();
       setSearchPopupOpen(true);
       setRightPanel('search');
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
-    window.addEventListener('keydown', handleShortcut);
+    window.addEventListener('keydown', handleShortcut, true);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown, true);
-      window.removeEventListener('keydown', handleShortcut);
+      window.removeEventListener('keydown', handleShortcut, true);
     };
   }, [lastFocusedSurfaceRef, setRightPanel, setSearchPopupOpen]);
 }
