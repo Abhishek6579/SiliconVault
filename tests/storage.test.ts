@@ -261,6 +261,46 @@ describe('workspace storage', () => {
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
   });
 
+  it('rejects backup export when a single file exceeds the restore limit', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.files.add({
+      id: 'oversized-export', workspaceId: DEFAULT_WORKSPACE_ID, kind: 'pdf', name: 'oversized.pdf',
+      parentFolderId: null, projectId: null, size: MAX_BACKUP_INDIVIDUAL_FILE_BYTES + 1,
+      mimeType: 'application/pdf', createdAt: now, updatedAt: now, deletedAt: null,
+    });
+    await database.contents.add({ fileId: 'oversized-export', data: new Blob([]) });
+    await expect(new Response(exportBackupStream(database)).text()).rejects.toThrow(/per-file backup limit of 100 MiB/);
+  });
+
+  it('rejects backup export when aggregate content exceeds the restore limit', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    const size = 60 * 1024 * 1024;
+    await database.files.bulkAdd(['large-a', 'large-b'].map((id) => ({
+      id, workspaceId: DEFAULT_WORKSPACE_ID, kind: 'pdf' as const, name: `${id}.pdf`,
+      parentFolderId: null, projectId: null, size, mimeType: 'application/pdf',
+      createdAt: now, updatedAt: now, deletedAt: null,
+    })));
+    await database.contents.bulkAdd(['large-a', 'large-b'].map((fileId) => ({ fileId, data: new Blob([]) })));
+    await expect(new Response(exportBackupStream(database)).text()).rejects.toThrow(/total backup limit of 100 MiB/);
+  });
+
+  it('rejects export when file metadata and stored content sizes disagree', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.files.add({
+      id: 'size-mismatch', workspaceId: DEFAULT_WORKSPACE_ID, kind: 'text', name: 'note.txt',
+      parentFolderId: null, projectId: null, size: 99, mimeType: 'text/plain',
+      createdAt: now, updatedAt: now, deletedAt: null,
+    });
+    await database.contents.add({ fileId: 'size-mismatch', data: 'short' });
+    await expect(new Response(exportBackupStream(database)).text()).rejects.toThrow(/size metadata is inconsistent/);
+  });
+
   it('exports file contents one record at a time instead of materializing the contents table', async () => {
     const database = createDatabase();
     await database.open();

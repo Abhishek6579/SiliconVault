@@ -5,6 +5,10 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { readDir, readFile, stat, writeFile } from '@tauri-apps/plugin-fs';
 import { assertBackupFileSize, assertImportFileSize } from '../storage/limits';
 import type { PlatformAdapter } from './types';
+import { supportsWindowsX64Updater } from './target';
+
+const userAgentData = (navigator as Navigator & { userAgentData?: { platform?: string; architecture?: string } }).userAgentData;
+const updatesSupported = supportsWindowsX64Updater(navigator.userAgent, userAgentData?.platform, userAgentData?.architecture);
 
 async function* iterateDesktopFiles(): AsyncGenerator<File> {
   const paths = await open({ multiple: true, title: 'Import files' });
@@ -82,7 +86,7 @@ async function saveDiagnosticsExport(content: string): Promise<boolean> {
 }
 
 export const desktopPlatform: PlatformAdapter = {
-  capabilities: { nativeBackupSave: true, nativeBackupOpen: true, systemDiagnostics: true, systemStats: true, officeConversion: true, updates: true, safeShutdown: true },
+  capabilities: { nativeBackupSave: true, nativeBackupOpen: true, systemDiagnostics: true, systemStats: true, officeConversion: true, updates: updatesSupported, safeShutdown: true },
   log: (level, event, message) => invoke('log_frontend_event', { level, event, message }),
   getSystemStats: () => invoke('get_system_stats'),
   getDiagnostics: () => invoke('get_diagnostics'),

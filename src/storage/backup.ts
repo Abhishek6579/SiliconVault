@@ -1,7 +1,7 @@
 import type { Table } from 'dexie';
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { BackupFile, FileMeta, Workspace, WorkspaceBackup, WorkspacePreference } from './types';
-import { MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_RECORDS, MAX_BACKUP_TOTAL_CONTENT_BYTES } from './limits';
+import { MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_RECORDS, MAX_BACKUP_TOTAL_CONTENT_BYTES } from './limits';
 
 const FORMAT = 'engineering-workspace-backup';
 const VERSION = 1;
@@ -12,6 +12,15 @@ type BackupDatabase = Pick<WorkspaceDatabase, 'files' | 'contents' | 'folders' |
   preferences?: Table<WorkspacePreference, string>;
   workspaces?: Table<Workspace, string>;
 };
+
+export interface BackupExportSnapshot {
+  files: FileMeta[];
+  folders: import('./types').Folder[];
+  projects: import('./types').Project[];
+  preferences: WorkspacePreference[];
+  workspaces: Workspace[];
+  exportedAt: number;
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   const parts: string[] = [];
@@ -37,6 +46,69 @@ async function contentToBytes(data: Blob | string): Promise<Uint8Array> {
 async function checksum(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes.slice().buffer);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function createBackupFile(database: BackupDatabase, meta: FileMeta): Promise<BackupFile> {
+  const record = await database.contents.get(meta.id);
+  if (!record) throw new Error(`Missing content for file ${meta.id}`);
+  const isText = typeof record.data === 'string';
+  const bytes = await contentToBytes(record.data);
+  if (bytes.byteLength !== meta.size) {
+    throw new Error(`File size metadata is inconsistent for "${meta.name}". Save or re-import the file before creating a backup.`);
+  }
+  return {
+    meta,
+    content: { encoding: isText ? 'text' : 'base64', value: isText ? record.data as string : bytesToBase64(bytes) },
+    sha256: await checksum(bytes),
+  };
+}
+
+/** Preflight every limit before showing a save dialog or writing any backup bytes. */
+export async function prepareBackupExport(database: BackupDatabase): Promise<BackupExportSnapshot> {
+  const [files, folders, projects, preferences, workspaces] = await Promise.all([
+    database.files.toArray(), database.folders.toArray(), database.projects.toArray(),
+    database.preferences ? database.preferences.toArray() : [],
+    database.workspaces ? database.workspaces.toArray() : [],
+  ]);
+  const recordCount = files.length + folders.length + projects.length + preferences.length + workspaces.length;
+  if (recordCount > MAX_BACKUP_RECORDS) {
+    throw new Error(`This workspace exceeds the supported backup limit of ${MAX_BACKUP_RECORDS.toLocaleString()} records.`);
+  }
+
+  const exportedAt = Date.now();
+  const encoder = new TextEncoder();
+  const prefix = `{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${exportedAt},"files":[`;
+  let serializedBytes = encoder.encode(prefix).byteLength;
+  let aggregateContentBytes = 0;
+  let first = true;
+
+  for (const meta of files) {
+    if (!Number.isSafeInteger(meta.size) || meta.size < 0) {
+      throw new Error(`File "${meta.name}" has invalid size metadata and cannot be backed up.`);
+    }
+    if (meta.size > MAX_BACKUP_INDIVIDUAL_FILE_BYTES) {
+      throw new Error(`File "${meta.name}" exceeds the per-file backup limit of ${Math.floor(MAX_BACKUP_INDIVIDUAL_FILE_BYTES / (1024 * 1024))} MiB.`);
+    }
+    aggregateContentBytes += meta.size;
+    if (aggregateContentBytes > MAX_BACKUP_TOTAL_CONTENT_BYTES) {
+      throw new Error(`Workspace content exceeds the total backup limit of ${Math.floor(MAX_BACKUP_TOTAL_CONTENT_BYTES / (1024 * 1024))} MiB.`);
+    }
+
+    const item = await createBackupFile(database, meta);
+    serializedBytes += encoder.encode(`${first ? '' : ','}${JSON.stringify(item)}`).byteLength;
+    first = false;
+    if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
+      throw new Error(`The generated backup would exceed the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+    }
+  }
+
+  const suffix = `],"folders":${JSON.stringify(folders)},"projects":${JSON.stringify(projects)},"preferences":${JSON.stringify(preferences)},"workspaces":${JSON.stringify(workspaces)}}`;
+  serializedBytes += encoder.encode(suffix).byteLength;
+  if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
+    throw new Error(`The generated backup would exceed the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+  }
+
+  return { files, folders, projects, preferences, workspaces, exportedAt };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,25 +199,14 @@ function validateBackup(value: unknown): asserts value is WorkspaceBackup {
 }
 
 export async function exportBackup(database: BackupDatabase): Promise<WorkspaceBackup> {
-  // Read metadata independently; never materialize the entire contents store.
-  const [files, folders, projects, preferences, workspaces] = await Promise.all([
-    database.files.toArray(), database.folders.toArray(), database.projects.toArray(),
-    database.preferences ? database.preferences.toArray() : [],
-    database.workspaces ? database.workspaces.toArray() : [],
-  ]);
+  const snapshot = await prepareBackupExport(database);
   const backupFiles: BackupFile[] = [];
-  for (const meta of files) {
-    const content = await database.contents.get(meta.id);
-    if (!content) throw new Error(`Missing content for file ${meta.id}`);
-    const isText = typeof content.data === 'string';
-    const bytes = await contentToBytes(content.data);
-    backupFiles.push({
-      meta,
-      content: { encoding: isText ? 'text' : 'base64', value: isText ? content.data as string : bytesToBase64(bytes) },
-      sha256: await checksum(bytes),
-    });
-  }
-  return { format: FORMAT, version: VERSION, exportedAt: Date.now(), files: backupFiles, folders, projects, preferences, workspaces };
+  for (const meta of snapshot.files) backupFiles.push(await createBackupFile(database, meta));
+  return {
+    format: FORMAT, version: VERSION, exportedAt: snapshot.exportedAt,
+    files: backupFiles, folders: snapshot.folders, projects: snapshot.projects,
+    preferences: snapshot.preferences, workspaces: snapshot.workspaces,
+  };
 }
 
 export function downloadBackupFile(backup: WorkspaceBackup): void {
@@ -160,33 +221,33 @@ export function downloadBackupFile(backup: WorkspaceBackup): void {
 
 export function serializeBackup(backup: WorkspaceBackup): string { return JSON.stringify(backup); }
 
-async function* backupJsonChunks(database: BackupDatabase): AsyncGenerator<string> {
-  const [files, folders, projects, preferences, workspaces] = await Promise.all([
-    database.files.toArray(), database.folders.toArray(), database.projects.toArray(),
-    database.preferences ? database.preferences.toArray() : [],
-    database.workspaces ? database.workspaces.toArray() : [],
-  ]);
-  const exportedAt = Date.now();
-  yield `{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${exportedAt},"files":[`;
+async function* backupJsonChunks(
+  database: BackupDatabase,
+  prepared?: BackupExportSnapshot,
+): AsyncGenerator<string> {
+  const snapshot = prepared ?? await prepareBackupExport(database);
+  const encoder = new TextEncoder();
+  let serializedBytes = 0;
+  const emit = (chunk: string): string => {
+    serializedBytes += encoder.encode(chunk).byteLength;
+    if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
+      throw new Error(`The generated backup exceeded the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+    }
+    return chunk;
+  };
+
+  yield emit(`{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${snapshot.exportedAt},"files":[`);
   let first = true;
-  for (const meta of files) {
-    const record = await database.contents.get(meta.id);
-    if (!record) throw new Error(`Missing content for file ${meta.id}`);
-    const isText = typeof record.data === 'string';
-    const bytes = await contentToBytes(record.data);
-    const item: BackupFile = {
-      meta,
-      content: { encoding: isText ? 'text' : 'base64', value: isText ? record.data as string : bytesToBase64(bytes) },
-      sha256: await checksum(bytes),
-    };
-    yield `${first ? '' : ','}${JSON.stringify(item)}`;
+  for (const meta of snapshot.files) {
+    const item = await createBackupFile(database, meta);
+    yield emit(`${first ? '' : ','}${JSON.stringify(item)}`);
     first = false;
   }
-  yield `],"folders":${JSON.stringify(folders)},"projects":${JSON.stringify(projects)},"preferences":${JSON.stringify(preferences)},"workspaces":${JSON.stringify(workspaces)}}`;
+  yield emit(`],"folders":${JSON.stringify(snapshot.folders)},"projects":${JSON.stringify(snapshot.projects)},"preferences":${JSON.stringify(snapshot.preferences)},"workspaces":${JSON.stringify(snapshot.workspaces)}}`);
 }
 
-export function exportBackupStream(database: BackupDatabase): ReadableStream<Uint8Array> {
-  const iterator = backupJsonChunks(database);
+export function exportBackupStream(database: BackupDatabase, prepared?: BackupExportSnapshot): ReadableStream<Uint8Array> {
+  const iterator = backupJsonChunks(database, prepared);
   const encoder = new TextEncoder();
   let pending: Uint8Array | null = null;
   let offset = 0;
@@ -212,12 +273,13 @@ export function exportBackupStream(database: BackupDatabase): ReadableStream<Uin
   return stream;
 }
 
-async function createBackupBlob(database: BackupDatabase): Promise<Blob> {
-  return new Response(exportBackupStream(database), { headers: { 'Content-Type': 'application/json' } }).blob();
+async function createBackupBlob(database: BackupDatabase, prepared: BackupExportSnapshot): Promise<Blob> {
+  return new Response(exportBackupStream(database, prepared), { headers: { 'Content-Type': 'application/json' } }).blob();
 }
 
 export async function downloadBackup(database: BackupDatabase): Promise<void> {
-  const blob = await createBackupBlob(database);
+  const prepared = await prepareBackupExport(database);
+  const blob = await createBackupBlob(database, prepared);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
