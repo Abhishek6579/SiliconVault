@@ -7,15 +7,13 @@ import {
   Import, LayoutGrid, Menu, MoreHorizontal, Plus, Search, Settings2,
   Trash2, X, Clock3, Bookmark, Pencil, Save, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
-import { DEFAULT_WORKSPACE_ID, db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
+import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
 import { formatSize } from './utils/format';
-import { migrateLegacyUiPreferences } from './storage/preferences';
 import { saveWorkspaceSession } from './storage/tabSession';
 import { createFolder } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
-import { downloadBackup, exportBackupStream } from './storage/backup';
-import { isDesktopApp, saveBackupToDesktop } from './platform/desktop';
+import { isDesktopApp } from './platform/desktop';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
@@ -57,6 +55,7 @@ import { useImportActions, type ImportTarget } from './features/workspace/hooks/
 import { useItemActions, type ContextItemType, type ContextMenuState, type MoveDialogState } from './features/workspace/hooks/useItemActions';
 import { useProjectActions } from './features/workspace/hooks/useProjectActions';
 import { useFolderActions } from './features/workspace/hooks/useFolderActions';
+import { useMigrationUpgrade } from './features/workspace/hooks/useMigrationUpgrade';
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import RightPanel from './features/workspace/components/RightPanel';
@@ -79,9 +78,6 @@ export default function AppShell() {
   const currentWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const getProjectName = (id: string | null) => id ? projectNames.get(id) : undefined;
-  const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
-  const [migrationError, setMigrationError] = useState('');
-  const [upgrading, setUpgrading] = useState(false);
   const { view, setView, activeProject, setActiveProject, selectedFolder, setSelectedFolder, expanded, setExpanded } = useWorkspaceNav();
   const { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession } = useWorkspaceTabs(activeWorkspaceId, loading, setError);
   const [query, setQuery] = useState('');
@@ -95,6 +91,10 @@ export default function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { darkTheme, setDarkTheme, appZoom, setAppZoom, editorFontSize, setEditorFontSize, setReady: setUiPreferencesReady, toggleTheme } = useUiSettings(setError);
   const systemStats = useSystemStats();
+  const { migrationBackup, setMigrationBackup, migrationError, upgrading, downloadMigrationBackupAndUpgrade } = useMigrationUpgrade({
+    setLoading, setError, setAppZoom, setEditorFontSize, setPreferencesReady: setUiPreferencesReady,
+    setDarkTheme, setWorkspaces, setActiveWorkspaceId, refresh,
+  });
   const [focusMode, setFocusMode] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
@@ -121,43 +121,6 @@ export default function AppShell() {
 
   const { prompt: requestInput, confirm: requestConfirmation } = useDialog();
 
-  async function downloadMigrationBackupAndUpgrade() {
-    if (migrationBackup === null) return;
-    setUpgrading(true);
-    setMigrationError('');
-    const previous = migrationBackup === 1 ? new WorkspaceDatabaseV1() : new WorkspaceDatabaseV2();
-    try {
-      await previous.open();
-      if (!isDesktopApp()) {
-        await downloadBackup(previous);
-        setMigrationError('The browser cannot confirm that the backup was saved. The migration was not started. Use the desktop app and save the backup through its native save dialog.');
-        return;
-      }
-      const backupSaved = await saveBackupToDesktop(exportBackupStream(previous));
-      if (!backupSaved) {
-        setMigrationError('Backup saving was cancelled. The database migration was not started; your existing database remains unchanged.');
-        return;
-      }
-      previous.close();
-      await db.open();
-      const uiPreferences = await migrateLegacyUiPreferences(db, localStorage);
-      setAppZoom(uiPreferences.appZoom); setEditorFontSize(uiPreferences.editorFontSize); setUiPreferencesReady(true);
-      const theme = await db.preferences.get('theme');
-      setDarkTheme(theme ? theme.value === 'dark' : true);
-      const selectedPreference = await db.preferences.get('activeWorkspace');
-      const nextWorkspaces = await db.workspaces.toArray();
-      setWorkspaces(nextWorkspaces);
-      setActiveWorkspaceId(nextWorkspaces.find((workspace) => workspace.id === selectedPreference?.value)?.id ?? nextWorkspaces[0]?.id ?? null);
-      setMigrationBackup(null);
-      await refresh();
-    } catch (reason) {
-      setMigrationError(reason instanceof Error ? reason.message : 'The workspace upgrade could not be completed. Your existing database remains unchanged unless the upgrade completed.');
-      setLoading(false);
-    } finally {
-      previous.close();
-      setUpgrading(false);
-    }
-  }
   const { persistEditorViewState, updateViewerView, updatePdfView } = useTabViewState({ setTabs, setError });
 
   useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel });
