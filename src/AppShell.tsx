@@ -22,7 +22,7 @@ import BackgroundTabStrip from './features/tabs/components/BackgroundTabStrip';
 import EditorSurface from './features/tabs/components/EditorSurface';
 import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
 import ErrorBanner from './shared/ui/ErrorBanner';
-import BusyPill from './shared/ui/BusyPill';
+import { ActivityCenter } from './shared/activity/ActivityContext';
 import StartupScreen from './shared/ui/StartupScreen';
 import WelcomePage from './features/workspace/components/WelcomePage';
 import { useClickOutside } from './shared/hooks/useClickOutside';
@@ -83,7 +83,6 @@ export default function AppShell() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [moveDialog, setMoveDialog] = useState<MoveDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
-  const [importing, setImporting] = useState(false);
   const editorWorkspaceRef = useRef<HTMLDivElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
@@ -180,7 +179,7 @@ export default function AppShell() {
 
   const { handleImport, startImportInto, startImportFolderInto } = useImportActions({
     openFile, refresh, selectedFolder, activeProject, currentWorkspaceId,
-    setError, setImporting, setSelectedFolder, setActiveProject,
+    setError, setSelectedFolder, setActiveProject,
     setView, setExpanded, setStatus,
   });
   const { handleDrop } = useDragAndDrop({ activeProject, currentWorkspaceId, handleImport, refresh, setError });
@@ -320,7 +319,6 @@ export default function AppShell() {
 
     <UpdateManager />
     {loading && <StartupScreen />}
-    {importing && <BusyPill label="Importing files…" />}
-  </div></div>;
+  </div><ActivityCenter /></div>;
 }
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WORKSPACE_ID, WorkspaceDatabase, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from '../src/storage/database';
-import { exportBackup, exportBackupStream, importBackup } from '../src/storage/backup';
+import { exportBackup, exportBackupStream, importBackup, prepareBackupExport } from '../src/storage/backup';
 import { createFolder, deleteWorkspace, getOrCreateImportedFolder, moveFile, moveFolder, renameFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
@@ -28,6 +28,13 @@ describe('application import and backup size limits', () => {
     expect(() => assertImportFileSize('manual.bin', MAX_PDF_FILE_SIZE_BYTES + 1, 'application/pdf')).toThrow(/PDF files are limited to 100 MiB/);
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES)).not.toThrow();
     expect(() => assertImportFileSize('manual.pdf', MAX_PDF_FILE_SIZE_BYTES + 1)).toThrow(/PDF files are limited to 100 MiB/);
+  });
+
+  it('reports parsing phases while loading a backup file', async () => {
+    const file = new File(['{}'], 'valid.json');
+    const stages: string[] = [];
+    await expect(parseBackupFile(file, (stage) => stages.push(stage))).resolves.toEqual({});
+    expect(stages).toEqual(['Reading backup file in background…', 'Parsing backup JSON in background…']);
   });
 
   it('rejects an oversized browser backup before reading its text', async () => {
@@ -251,7 +258,11 @@ describe('workspace storage', () => {
     await database.projects.clear();
     await database.preferences.clear();
     await database.workspaces.clear();
-    await importBackup(database, backup);
+    const restoreStages: string[] = [];
+    await importBackup(database, backup, (progress) => restoreStages.push(progress.stage));
+    expect(restoreStages).toContain('Verifying backup files');
+    expect(restoreStages).toContain('Restoring file content');
+    expect(restoreStages).toContain('Workspace restored');
 
     expect(await database.files.toArray()).toEqual(expected.files);
     expect(await database.contents.toArray()).toEqual(expected.contents);
@@ -259,6 +270,22 @@ describe('workspace storage', () => {
     expect(await database.projects.toArray()).toEqual(expected.projects);
     expect(await database.preferences.toArray()).toEqual(expected.preferences);
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
+  });
+
+  it('reports backup preparation and streaming progress', async () => {
+    const database = createDatabase();
+    await database.open();
+    await createTextFile(database, 'progress.md', 'backup progress', { kind: 'markdown' });
+
+    const preparationStages: string[] = [];
+    const snapshot = await prepareBackupExport(database, (progress) => preparationStages.push(progress.stage));
+    expect(preparationStages).toContain('Reading workspace metadata');
+    expect(preparationStages).toContain('Checking backup content');
+
+    const writingStages: string[] = [];
+    const serialized = await new Response(exportBackupStream(database, snapshot, (progress) => writingStages.push(progress.stage))).text();
+    expect(JSON.parse(serialized).files).toHaveLength(1);
+    expect(writingStages).toContain('Writing backup');
   });
 
   it('rejects backup export when a single file exceeds the restore limit', async () => {

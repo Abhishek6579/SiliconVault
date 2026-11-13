@@ -1,4 +1,4 @@
-import type { Table } from 'dexie';
+import Dexie, { type Table } from 'dexie';
 import { DEFAULT_WORKSPACE_ID, type WorkspaceDatabase } from './database';
 import type { BackupFile, FileMeta, Workspace, WorkspaceBackup, WorkspacePreference } from './types';
 import { MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_RECORDS, MAX_BACKUP_TOTAL_CONTENT_BYTES } from './limits';
@@ -22,6 +22,14 @@ export interface BackupExportSnapshot {
   exportedAt: number;
 }
 
+export interface BackupProgressUpdate {
+  stage: string;
+  current: number;
+  total: number | null;
+  item?: string;
+}
+export type BackupProgressReporter = (progress: BackupProgressUpdate) => void;
+
 function bytesToBase64(bytes: Uint8Array): string {
   const parts: string[] = [];
   const chunkSize = 0x8000;
@@ -31,12 +39,32 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(parts.join(''));
 }
 
-function base64ToBytes(value: string): Uint8Array {
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
-    throw new Error('This backup contains invalid base64 file content.');
+async function base64ToBytesChunked(value: string, yieldBetweenChunks?: () => Promise<unknown>): Promise<Uint8Array> {
+  if (value.length % 4 !== 0) throw new Error('This backup contains invalid base64 file content.');
+  const outputLength = Math.floor(value.length * 3 / 4) - (value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0);
+  const output = new Uint8Array(outputLength);
+  const chunkCharacters = 4 * 16 * 1024;
+  let outputOffset = 0;
+  for (let offset = 0; offset < value.length; offset += chunkCharacters) {
+    const end = Math.min(offset + chunkCharacters, value.length);
+    const chunk = value.slice(offset, end);
+    const finalChunk = end === value.length;
+    if (!(finalChunk
+      ? /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(chunk)
+      : /^(?:[A-Za-z0-9+/]{4})*$/.test(chunk))) {
+      throw new Error('This backup contains invalid base64 file content.');
+    }
+    const binary = atob(chunk);
+    for (let index = 0; index < binary.length; index += 1) output[outputOffset + index] = binary.charCodeAt(index);
+    outputOffset += binary.length;
+    if (yieldBetweenChunks && end < value.length) await yieldBetweenChunks();
   }
-  const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  if (outputOffset !== outputLength) throw new Error('This backup contains invalid base64 file content.');
+  return output;
+}
+
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function contentToBytes(data: Blob | string): Promise<Uint8Array> {
@@ -48,23 +76,87 @@ async function checksum(bytes: Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function createBackupFile(database: BackupDatabase, meta: FileMeta): Promise<BackupFile> {
-  const record = await database.contents.get(meta.id);
-  if (!record) throw new Error(`Missing content for file ${meta.id}`);
-  const isText = typeof record.data === 'string';
-  const bytes = await contentToBytes(record.data);
+async function createBackupFileFromData(meta: FileMeta, data: Blob | string): Promise<BackupFile> {
+  const isText = typeof data === 'string';
+  const bytes = await contentToBytes(data);
   if (bytes.byteLength !== meta.size) {
     throw new Error(`File size metadata is inconsistent for "${meta.name}". Save or re-import the file before creating a backup.`);
   }
   return {
     meta,
-    content: { encoding: isText ? 'text' : 'base64', value: isText ? record.data as string : bytesToBase64(bytes) },
+    content: { encoding: isText ? 'text' : 'base64', value: isText ? data as string : bytesToBase64(bytes) },
     sha256: await checksum(bytes),
   };
 }
 
+interface BackupFileWorkerResult { id: number; ok: boolean; byteLength?: number; serialized?: string; serializedBytes?: ArrayBuffer; error?: string }
+
+/** Performs the expensive binary encoding, checksum and JSON serialization outside the UI thread. */
+class BackupFileProcessor {
+  private worker: Worker | null = null;
+  private sequence = 0;
+  private pending = new Map<number, { resolve: (value: { byteLength: number; serialized?: string; bytes?: Uint8Array }) => void; reject: (error: Error) => void }>();
+
+  constructor() {
+    if (typeof Worker === 'undefined') return;
+    try {
+      this.worker = new Worker(new URL('./backupExport.worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (event: MessageEvent<BackupFileWorkerResult>) => {
+        const response = event.data;
+        const pending = this.pending.get(response.id);
+        if (!pending) return;
+        this.pending.delete(response.id);
+        if (!response.ok || typeof response.byteLength !== 'number') pending.reject(new Error(response.error || 'Could not encode a backup file.'));
+        else pending.resolve({ byteLength: response.byteLength, serialized: response.serialized, bytes: response.serializedBytes ? new Uint8Array(response.serializedBytes) : undefined });
+      };
+      this.worker.onerror = (event) => {
+        const error = new Error(event.message || 'The backup processing worker failed.');
+        for (const pending of this.pending.values()) pending.reject(error);
+        this.pending.clear();
+        this.worker?.terminate();
+        this.worker = null;
+      };
+    } catch {
+      this.worker = null;
+    }
+  }
+
+  async process(database: BackupDatabase, meta: FileMeta, includeSerialized: boolean): Promise<{ byteLength: number; serialized?: string; bytes?: Uint8Array }> {
+    const record = await database.contents.get(meta.id);
+    if (!record) throw new Error(`Missing content for file ${meta.id}`);
+    if (!this.worker) {
+      const serialized = JSON.stringify(await createBackupFileFromData(meta, record.data));
+      return { byteLength: new TextEncoder().encode(serialized).byteLength, serialized: includeSerialized ? serialized : undefined };
+    }
+    const id = ++this.sequence;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      try {
+        this.worker!.postMessage({ id, meta, data: record.data, includeSerialized });
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error('Could not send file content to the backup worker.'));
+      }
+    });
+  }
+
+  close(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    for (const pending of this.pending.values()) pending.reject(new Error('Backup processing was cancelled.'));
+    this.pending.clear();
+  }
+}
+
+async function createBackupFile(database: BackupDatabase, meta: FileMeta): Promise<BackupFile> {
+  const record = await database.contents.get(meta.id);
+  if (!record) throw new Error(`Missing content for file ${meta.id}`);
+  return createBackupFileFromData(meta, record.data);
+}
+
 /** Preflight every limit before showing a save dialog or writing any backup bytes. */
-export async function prepareBackupExport(database: BackupDatabase): Promise<BackupExportSnapshot> {
+export async function prepareBackupExport(database: BackupDatabase, onProgress?: BackupProgressReporter): Promise<BackupExportSnapshot> {
+  onProgress?.({ stage: 'Reading workspace metadata', current: 0, total: null });
   const [files, folders, projects, preferences, workspaces] = await Promise.all([
     database.files.toArray(), database.folders.toArray(), database.projects.toArray(),
     database.preferences ? database.preferences.toArray() : [],
@@ -93,14 +185,20 @@ export async function prepareBackupExport(database: BackupDatabase): Promise<Bac
     }
   }
 
-  let first = true;
-  for (const meta of files) {
-    const item = await createBackupFile(database, meta);
-    serializedBytes += encoder.encode(`${first ? '' : ','}${JSON.stringify(item)}`).byteLength;
-    first = false;
-    if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
-      throw new Error(`The generated backup would exceed the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+  onProgress?.({ stage: 'Checking backup content', current: 0, total: files.length });
+  const processor = new BackupFileProcessor();
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const meta = files[index];
+      const processed = await processor.process(database, meta, false);
+      serializedBytes += processed.byteLength + (index === 0 ? 0 : 1);
+      if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
+        throw new Error(`The generated backup would exceed the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
+      }
+      onProgress?.({ stage: 'Checking backup content', current: index + 1, total: files.length, item: meta.name });
     }
+  } finally {
+    processor.close();
   }
 
   const suffix = `],"folders":${JSON.stringify(folders)},"projects":${JSON.stringify(projects)},"preferences":${JSON.stringify(preferences)},"workspaces":${JSON.stringify(workspaces)}}`;
@@ -225,30 +323,52 @@ export function serializeBackup(backup: WorkspaceBackup): string { return JSON.s
 async function* backupJsonChunks(
   database: BackupDatabase,
   prepared?: BackupExportSnapshot,
-): AsyncGenerator<string> {
-  const snapshot = prepared ?? await prepareBackupExport(database);
+  onProgress?: BackupProgressReporter,
+): AsyncGenerator<string | Uint8Array> {
+  const snapshot = prepared ?? await prepareBackupExport(database, onProgress);
   const encoder = new TextEncoder();
   let serializedBytes = 0;
-  const emit = (chunk: string): string => {
-    serializedBytes += encoder.encode(chunk).byteLength;
+  const assertWithinLimit = () => {
     if (serializedBytes > MAX_BACKUP_FILE_SIZE_BYTES) {
       throw new Error(`The generated backup exceeded the maximum backup size of ${Math.floor(MAX_BACKUP_FILE_SIZE_BYTES / (1024 * 1024))} MiB.`);
     }
+  };
+  const emit = (chunk: string): string => {
+    serializedBytes += encoder.encode(chunk).byteLength;
+    assertWithinLimit();
+    return chunk;
+  };
+  const emitBytes = (chunk: Uint8Array): Uint8Array => {
+    serializedBytes += chunk.byteLength;
+    assertWithinLimit();
     return chunk;
   };
 
   yield emit(`{"format":${JSON.stringify(FORMAT)},"version":${VERSION},"exportedAt":${snapshot.exportedAt},"files":[`);
-  let first = true;
-  for (const meta of snapshot.files) {
-    const item = await createBackupFile(database, meta);
-    yield emit(`${first ? '' : ','}${JSON.stringify(item)}`);
-    first = false;
+  const processor = new BackupFileProcessor();
+  try {
+    onProgress?.({ stage: 'Writing backup', current: 0, total: snapshot.files.length });
+    for (let index = 0; index < snapshot.files.length; index += 1) {
+      const meta = snapshot.files[index];
+      const processed = await processor.process(database, meta, true);
+      if (processed.bytes) {
+        if (index > 0) yield emit(',');
+        yield emitBytes(processed.bytes);
+      } else if (processed.serialized !== undefined) {
+        yield emit(`${index === 0 ? '' : ','}${processed.serialized}`);
+      } else {
+        throw new Error('The backup worker did not return serialized file content.');
+      }
+      onProgress?.({ stage: 'Writing backup', current: index + 1, total: snapshot.files.length, item: meta.name });
+    }
+    yield emit(`],"folders":${JSON.stringify(snapshot.folders)},"projects":${JSON.stringify(snapshot.projects)},"preferences":${JSON.stringify(snapshot.preferences)},"workspaces":${JSON.stringify(snapshot.workspaces)}}`);
+  } finally {
+    processor.close();
   }
-  yield emit(`],"folders":${JSON.stringify(snapshot.folders)},"projects":${JSON.stringify(snapshot.projects)},"preferences":${JSON.stringify(snapshot.preferences)},"workspaces":${JSON.stringify(snapshot.workspaces)}}`);
 }
 
-export function exportBackupStream(database: BackupDatabase, prepared?: BackupExportSnapshot): ReadableStream<Uint8Array> {
-  const iterator = backupJsonChunks(database, prepared);
+export function exportBackupStream(database: BackupDatabase, prepared?: BackupExportSnapshot, onProgress?: BackupProgressReporter): ReadableStream<Uint8Array> {
+  const iterator = backupJsonChunks(database, prepared, onProgress);
   const encoder = new TextEncoder();
   let pending: Uint8Array | null = null;
   let offset = 0;
@@ -258,7 +378,7 @@ export function exportBackupStream(database: BackupDatabase, prepared?: BackupEx
         if (!pending) {
           const next = await iterator.next();
           if (next.done) { controller.close(); return; }
-          pending = encoder.encode(next.value);
+          pending = typeof next.value === 'string' ? encoder.encode(next.value) : next.value;
           offset = 0;
         }
         const end = Math.min(offset + BACKUP_STREAM_CHUNK_BYTES, pending.length);
@@ -274,13 +394,13 @@ export function exportBackupStream(database: BackupDatabase, prepared?: BackupEx
   return stream;
 }
 
-async function createBackupBlob(database: BackupDatabase, prepared: BackupExportSnapshot): Promise<Blob> {
-  return new Response(exportBackupStream(database, prepared), { headers: { 'Content-Type': 'application/json' } }).blob();
+async function createBackupBlob(database: BackupDatabase, prepared: BackupExportSnapshot, onProgress?: BackupProgressReporter): Promise<Blob> {
+  return new Response(exportBackupStream(database, prepared, onProgress), { headers: { 'Content-Type': 'application/json' } }).blob();
 }
 
-export async function downloadBackup(database: BackupDatabase): Promise<void> {
-  const prepared = await prepareBackupExport(database);
-  const blob = await createBackupBlob(database, prepared);
+export async function downloadBackup(database: BackupDatabase, onProgress?: BackupProgressReporter): Promise<void> {
+  const prepared = await prepareBackupExport(database, onProgress);
+  const blob = await createBackupBlob(database, prepared, onProgress);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -289,7 +409,8 @@ export async function downloadBackup(database: BackupDatabase): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 500);
 }
 
-export async function importBackup(database: WorkspaceDatabase, value: unknown): Promise<void> {
+export async function importBackup(database: WorkspaceDatabase, value: unknown, onProgress?: BackupProgressReporter): Promise<void> {
+  onProgress?.({ stage: 'Validating backup structure', current: 0, total: null });
   validateBackup(value);
   const backup = value;
   const workspaces: Workspace[] = backup.workspaces?.length ? backup.workspaces : [{
@@ -348,11 +469,17 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     }
   }
 
-  // Validate before replacing live data, retaining only one decoded payload at a time.
-  for (const item of backup.files) {
+  // Validate checksums before replacing live data. Chunked decoding yields to the UI
+  // between base64 blocks so a large backup does not monopolize the main thread.
+  onProgress?.({ stage: 'Verifying backup files', current: 0, total: backup.files.length });
+  for (let index = 0; index < backup.files.length; index += 1) {
+    const item = backup.files[index];
+    if (index > 0 && index % 3 === 0) await yieldToMain();
     let bytes: Uint8Array;
     try {
-      bytes = item.content.encoding === 'text' ? new TextEncoder().encode(item.content.value) : base64ToBytes(item.content.value);
+      bytes = item.content.encoding === 'text'
+        ? new Uint8Array(await new Blob([item.content.value]).arrayBuffer())
+        : await base64ToBytesChunked(item.content.value, yieldToMain);
     } catch {
       throw new Error(`File content for ${item.meta.name} is not valid.`);
     }
@@ -360,8 +487,10 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     if (!SHA256_PATTERN.test(item.sha256) || await checksum(bytes) !== item.sha256) {
       throw new Error(`Checksum validation failed for ${item.meta.name}.`);
     }
+    onProgress?.({ stage: 'Verifying backup files', current: index + 1, total: backup.files.length, item: item.meta.name });
   }
 
+  onProgress?.({ stage: 'Restoring workspace records', current: 0, total: backup.files.length });
   await database.transaction('rw', [database.files, database.contents, database.folders, database.projects, database.preferences, database.workspaces], async () => {
     await database.files.clear();
     await database.contents.clear();
@@ -373,20 +502,24 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown):
     await database.projects.bulkAdd(normalizedProjects);
     await database.folders.bulkAdd(normalizedFolders);
     await database.files.bulkAdd(normalizedFileMeta);
-    // Decode and persist bounded batches; never retain the complete restored content set.
-    for (let offset = 0; offset < backup.files.length; offset += 50) {
-      const batch = backup.files.slice(offset, offset + 50).map((item) => {
+    // Decode and persist small batches; Dexie.waitFor keeps the atomic transaction
+    // alive while yielding during unusually large base64 payloads.
+    const batchSize = 5;
+    for (let offset = 0; offset < backup.files.length; offset += batchSize) {
+      const batch = [];
+      for (const item of backup.files.slice(offset, offset + batchSize)) {
         const meta = normalizedMetaById.get(item.meta.id)!;
-        const data = item.content.encoding === 'text'
-          ? item.content.value
-          : (() => {
-              const bytes = base64ToBytes(item.content.value);
-              return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: meta.mimeType });
-            })();
-        return { fileId: meta.id, data };
-      });
+        let data: Blob | string = item.content.value;
+        if (item.content.encoding === 'base64') {
+          const bytes = await base64ToBytesChunked(item.content.value, () => Dexie.waitFor(yieldToMain()));
+          data = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: meta.mimeType });
+        }
+        batch.push({ fileId: meta.id, data });
+      }
       await database.contents.bulkAdd(batch);
+      onProgress?.({ stage: 'Restoring file content', current: Math.min(offset + batch.length, backup.files.length), total: backup.files.length });
     }
     await database.preferences.bulkAdd(backup.preferences ?? []);
   });
+  onProgress?.({ stage: 'Workspace restored', current: backup.files.length, total: backup.files.length });
 }

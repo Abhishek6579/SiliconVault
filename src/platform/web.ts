@@ -16,8 +16,15 @@ function chooseFolderFiles(): AsyncGenerator<File> {
   return yieldFiles(selectFiles(input));
 }
 
-async function* yieldFiles(selected: Promise<File[]>): AsyncGenerator<File> {
-  for (const file of await selected) yield file;
+function yieldFiles(selected: Promise<File[]>): AsyncGenerator<File> {
+  let total: number | null = null;
+  const iterator = (async function* () {
+    const files = await selected;
+    total = files.length;
+    for (const file of files) yield file;
+  })();
+  Object.defineProperty(iterator, 'length', { get: () => total });
+  return iterator;
 }
 
 function selectFiles(input: HTMLInputElement): Promise<File[]> {

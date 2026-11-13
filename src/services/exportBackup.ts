@@ -1,4 +1,4 @@
-import { downloadBackup, exportBackupStream, prepareBackupExport } from '../storage/backup';
+import { downloadBackup, exportBackupStream, prepareBackupExport, type BackupProgressReporter } from '../storage/backup';
 import type { PlatformAdapter } from '../platform/types';
 
 type BackupDatabase = Parameters<typeof exportBackupStream>[0];
@@ -7,12 +7,16 @@ type BackupDatabase = Parameters<typeof exportBackupStream>[0];
 export async function exportWorkspaceBackup(
   database: BackupDatabase,
   platform: Pick<PlatformAdapter, 'capabilities' | 'saveBackup'>,
+  onProgress?: BackupProgressReporter,
 ): Promise<boolean> {
   if (platform.capabilities.nativeBackupSave) {
-    const prepared = await prepareBackupExport(database);
-    return platform.saveBackup(exportBackupStream(database, prepared));
+    const prepared = await prepareBackupExport(database, onProgress);
+    onProgress?.({ stage: 'Waiting for save location', current: 0, total: null });
+    const saved = await platform.saveBackup(exportBackupStream(database, prepared, onProgress));
+    if (saved) onProgress?.({ stage: 'Backup saved', current: prepared.files.length, total: prepared.files.length });
+    return saved;
   }
 
-  await downloadBackup(database as Parameters<typeof downloadBackup>[0]);
+  await downloadBackup(database, onProgress);
   return true;
 }

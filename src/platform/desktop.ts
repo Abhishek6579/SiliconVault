@@ -10,42 +10,55 @@ import { supportsWindowsX64Updater } from './target';
 const userAgentData = (navigator as Navigator & { userAgentData?: { platform?: string; architecture?: string } }).userAgentData;
 const updatesSupported = supportsWindowsX64Updater(navigator.userAgent, userAgentData?.platform, userAgentData?.architecture);
 
-async function* iterateDesktopFiles(): AsyncGenerator<File> {
-  const paths = await open({ multiple: true, title: 'Import files' });
-  if (!paths) return;
-  const selected = Array.isArray(paths) ? paths : [paths];
-  // Read and yield one selected file at a time; the caller persists it before
-  // the next file is read, avoiding a Promise.all-sized memory spike.
-  for (const path of selected) {
-    const name = path.split(/[\\\\/]/).pop() || 'Imported file';
-    const info = await stat(path);
-    assertImportFileSize(name, info.size, mimeType(name));
-    const bytes = await readFile(path);
-    yield new File([bytes], name, { type: mimeType(name) });
-  }
+function iterateDesktopFiles(): AsyncGenerator<File> {
+  let total: number | null = null;
+  const iterator = (async function* () {
+    const paths = await open({ multiple: true, title: 'Import files' });
+    if (!paths) return;
+    const selected = Array.isArray(paths) ? paths : [paths];
+    total = selected.length;
+    // Read and yield one selected file at a time to keep peak memory bounded.
+    for (const path of selected) {
+      const name = path.split(/[\\\\/]/).pop() || 'Imported file';
+      const info = await stat(path);
+      assertImportFileSize(name, info.size, mimeType(name));
+      const bytes = await readFile(path);
+      yield new File([bytes], name, { type: mimeType(name) });
+    }
+  })();
+  Object.defineProperty(iterator, 'length', { get: () => total });
+  return iterator;
 }
 
-async function* iterateDesktopFolder(): AsyncGenerator<File> {
-  const root = await open({ directory: true, recursive: true, title: 'Import folder' });
-  if (!root) return;
-  async function* visit(directory: string, relative = ''): AsyncGenerator<File> {
-    for (const entry of await readDir(directory)) {
-      if (entry.isSymlink) continue;
-      const path = `${directory.replace(/[\\\\/]$/, '')}/${entry.name}`;
-      const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory) {
-        yield* visit(path, childRelative);
-      } else if (entry.isFile) {
-        const info = await stat(path);
-        assertImportFileSize(entry.name, info.size, mimeType(entry.name));
-        const bytes = await readFile(path);
-        const file = new File([bytes], entry.name, { type: mimeType(entry.name) });
-        Object.defineProperty(file, 'webkitRelativePath', { value: childRelative });
-        yield file;
+function iterateDesktopFolder(): AsyncGenerator<File> {
+  let total: number | null = null;
+  const iterator = (async function* () {
+    const root = await open({ directory: true, recursive: true, title: 'Import folder' });
+    if (!root) return;
+    const selected: Array<{ path: string; name: string; relativePath: string }> = [];
+    async function collect(directory: string, relative = ''): Promise<void> {
+      for (const entry of await readDir(directory)) {
+        if (entry.isSymlink) continue;
+        const path = `${directory.replace(/[\\\\/]$/, '')}/${entry.name}`;
+        const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+        if (entry.isDirectory) await collect(path, childRelative);
+        else if (entry.isFile) selected.push({ path, name: entry.name, relativePath: childRelative });
       }
     }
-  }
-  yield* visit(root);
+    await collect(root);
+    total = selected.length;
+    // Directory enumeration is complete before reading file bytes, so the UI can show an exact count.
+    for (const item of selected) {
+      const info = await stat(item.path);
+      assertImportFileSize(item.name, info.size, mimeType(item.name));
+      const bytes = await readFile(item.path);
+      const file = new File([bytes], item.name, { type: mimeType(item.name) });
+      Object.defineProperty(file, 'webkitRelativePath', { value: item.relativePath });
+      yield file;
+    }
+  })();
+  Object.defineProperty(iterator, 'length', { get: () => total });
+  return iterator;
 }
 
 

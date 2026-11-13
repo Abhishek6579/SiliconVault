@@ -25,13 +25,16 @@ describe('file import services', () => {
     await database.open();
     const files = [new File(['a'], 'a.md'), new File(['b'], 'b.md')];
     const paths = new Map([[files[0], 'Designs\\Nested\\a.md'], [files[1], 'designs/NESTED/b.md']]);
+    const folderProgress: Array<{ completed: number; total: number | null; fileName: string }> = [];
     const first = await importFolder(
       database,
       files,
       { folderId: null, projectId: null, workspaceId: DEFAULT_WORKSPACE_ID },
       (file) => paths.get(file)!,
+      (progress) => folderProgress.push(progress),
     );
     expect(first.imported).toBe(2);
+    expect(folderProgress.at(-1)).toMatchObject({ completed: 2, total: 2, fileName: 'b.md' });
     expect((await database.folders.toArray()).map((folder) => folder.name).sort()).toEqual(['Designs', 'Nested']);
     const nested = (await database.folders.toArray()).find((folder) => folder.name === 'Nested')!;
     expect((await database.files.toArray()).map((file) => file.parentFolderId)).toEqual([nested.id, nested.id]);
@@ -52,13 +55,16 @@ describe('file import services', () => {
     await database.open();
     const folder = await createFolder(database, 'Inbox');
     const openFile = vi.fn(async (_file: FileMeta) => undefined);
+    const progress: Array<{ completed: number; total: number | null; fileName: string }> = [];
     const imported = await importFiles(
       database,
       [new File(['note'], 'note.md'), new File(['data'], 'data.bin')],
       { folderId: folder.id, projectId: null, workspaceId: DEFAULT_WORKSPACE_ID },
       openFile,
+      (update) => progress.push(update),
     );
     expect(imported).toBe(2);
+    expect(progress.at(-1)).toMatchObject({ completed: 2, total: 2, fileName: 'data.bin' });
     expect(openFile).toHaveBeenCalledTimes(1);
     expect(openFile.mock.calls[0][0]).toMatchObject({ name: 'note.md', kind: 'markdown', parentFolderId: folder.id });
     expect((await database.files.toArray()).every((file) => file.parentFolderId === folder.id)).toBe(true);
