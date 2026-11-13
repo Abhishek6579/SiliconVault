@@ -44,6 +44,33 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
     onStateChange(viewer.getScale());
   };
 
+  // OOXML renders into its own scrolling host. Handle zoom here in capture
+  // phase so embedded document elements cannot swallow Ctrl/Cmd zoom input.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      changeScale(scale + (event.deltaY < 0 ? 0.1 : -0.1));
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (!['=', '+', '-', '_', '0'].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === '0') changeScale(1);
+      else changeScale(scale + (event.key === '-' || event.key === '_' ? -0.1 : 0.1));
+    };
+    host.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    host.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      host.removeEventListener('wheel', handleWheel, true);
+      host.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [scale]);
+
   useEffect(() => {
     let active = true;
     let viewer: ViewerHandle | null = null;
