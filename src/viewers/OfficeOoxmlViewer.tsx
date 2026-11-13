@@ -6,6 +6,8 @@ interface Props {
   extension: string;
   onError: (error: Error) => void;
   zoom: number;
+  initialScrollTop: number;
+  initialScrollLeft: number;
   onStateChange: (scale: number) => void;
   onScrollStateChange: (scrollTop: number, scrollLeft: number) => void;
 }
@@ -23,7 +25,7 @@ function asError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error('The Office renderer could not open this document.');
 }
 
-export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onStateChange, onScrollStateChange }: Props) {
+export default function OfficeOoxmlViewer({ data, extension, onError, zoom, initialScrollTop, initialScrollLeft, onStateChange, onScrollStateChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(zoom);
@@ -109,6 +111,8 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, onSt
       await viewer.load(source);
       if (active) {
         viewer.setScale(zoom);
+        host.scrollTop = initialScrollTop;
+        host.scrollLeft = initialScrollLeft;
         setScale(viewer.getScale());
         onStateChange(viewer.getScale());
         setLoading(false);
