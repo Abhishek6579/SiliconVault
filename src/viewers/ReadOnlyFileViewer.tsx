@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import PdfReader from '../PdfReader';
 import { isDesktopApp } from '../platform/desktop';
@@ -26,7 +26,22 @@ export function rowsFrom(source: string, delimiter: string): string[][] {
 export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, initialState, initialPdfState, onStateChange, onPdfStateChange }: Props) {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
-  const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
+  const textExtensions = new Set([
+    'txt', 'text', 'md', 'markdown', 'mdx', 'rst', 'adoc', 'log', 'out', 'err',
+    'v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv',
+    'json', 'jsonc', 'jsonl', 'ndjson', 'xml', 'xsd', 'xsl', 'xslt', 'html', 'htm',
+    'css', 'scss', 'sass', 'less', 'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx',
+    'py', 'pyw', 'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'java', 'kt', 'kts',
+    'rs', 'go', 'rb', 'php', 'swift', 'm', 'mm', 'r', 'jl', 'lua', 'pl', 'pm',
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd', 'sql', 'graphql',
+    'gql', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'env',
+    'gitignore', 'gitattributes', 'dockerfile', 'makefile', 'gradle', 'tf',
+    'tex', 'bib', 'diff', 'patch', 'asm', 's', 'hex', 'mem'
+  ]);
+  const isTextPreview = mimeType.startsWith('text/')
+    || /(?:json|xml|javascript|typescript|yaml|toml|x-sh|x-shellscript|sql)/i.test(mimeType)
+    || textExtensions.has(ext)
+    || ['dockerfile', 'makefile', '.gitignore', '.env'].includes(fileName.toLowerCase());
   const officePdfExtensions = ['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'rtf', 'odt', 'fodt', 'xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'fodp'];
   const browserOoxmlExtensions = ['docx', 'docm', 'xlsx', 'xlsm', 'pptx', 'pptm'];
   const isOffice = officePdfExtensions.includes(ext);
@@ -36,6 +51,12 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(initialState?.zoom ?? 1);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const findCursorRef = useRef({ query: '', offset: -1 });
+  const findTextIndexRef = useRef<{ lower: string; segments: Array<{ node: Text; start: number; end: number }> } | null>(null);
+  const findTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const stateTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const latestState = useRef<ViewerViewState>({ zoom: initialState?.zoom ?? 1, scrollTop: initialState?.scrollTop ?? 0, scrollLeft: initialState?.scrollLeft ?? 0 });
   const [officePdf, setOfficePdf] = useState<Blob | null>(null);
@@ -144,8 +165,106 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     };
   }, [tabId]);
   useEffect(() => {
+    findTextIndexRef.current = null;
+    findCursorRef.current = { query: '', offset: -1 };
     if (text) restoreScrollPosition();
   }, [text, tabId]);
+  const clearViewerFindHighlight = () => {
+    const highlights = (window.CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights;
+    highlights?.delete('siliconvault-find');
+  };
+  const applyViewerFindHighlight = (range: Range) => {
+    const css = window.CSS as typeof CSS & { highlights?: { set: (name: string, value: unknown) => void } };
+    const HighlightConstructor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+    if (css.highlights && HighlightConstructor) {
+      css.highlights.set('siliconvault-find', new HighlightConstructor(range));
+    }
+  };
+
+  const findInViewer = (query: string, direction: 1 | -1 = 1) => {
+    const root = rootRef.current;
+    const needle = query.trim().toLocaleLowerCase();
+    if (!root) return;
+    if (!needle) { clearViewerFindHighlight(); findCursorRef.current = { query: '', offset: -1 }; return; }
+
+    // Index the rendered text once instead of walking the full DOM and
+    // allocating every one-character match on every input event.
+    let index = findTextIndexRef.current;
+    if (!index) {
+      const segments: Array<{ node: Text; start: number; end: number }> = [];
+      let combined = '';
+      let previousBlock: Element | null = null;
+      const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let current = walker.nextNode();
+      while (current) {
+        const node = current as Text;
+        const parent = node.parentElement;
+        if (!parent?.closest('.viewer-zoom-controls, .viewer-meta, .viewer-find')) {
+          const block = parent?.closest('pre, p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
+          if (block && previousBlock && block !== previousBlock) combined += '\n';
+          const value = node.textContent ?? '';
+          if (value) {
+            segments.push({ node, start: combined.length, end: combined.length + value.length });
+            combined += value;
+          }
+          previousBlock = block ?? previousBlock;
+        }
+        current = walker.nextNode();
+      }
+      index = { lower: combined.toLocaleLowerCase(), segments };
+      findTextIndexRef.current = index;
+    }
+
+    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, offset: -1 };
+    const cursorOffset = findCursorRef.current.offset;
+    let matchOffset: number;
+    if (direction > 0) {
+      matchOffset = index.lower.indexOf(needle, cursorOffset + 1);
+      if (matchOffset < 0) matchOffset = index.lower.indexOf(needle);
+    } else {
+      // Previous means strictly before the current occurrence. Starting at
+      // -1 or at the first occurrence wraps to the final occurrence.
+      matchOffset = cursorOffset < 0 ? -1 : index.lower.lastIndexOf(needle, cursorOffset - 1);
+      if (matchOffset < 0) matchOffset = index.lower.lastIndexOf(needle);
+    }
+    if (matchOffset < 0) return;
+    findCursorRef.current = { query: needle, offset: matchOffset };
+
+    const locate = (offset: number) => {
+      let low = 0;
+      let high = index!.segments.length - 1;
+      while (low <= high) {
+        const middle = (low + high) >>> 1;
+        const segment = index!.segments[middle];
+        if (offset < segment.start) high = middle - 1;
+        else if (offset >= segment.end) low = middle + 1;
+        else return segment;
+      }
+      return null;
+    };
+    const startSegment = locate(matchOffset);
+    const endSegment = locate(matchOffset + needle.length - 1);
+    if (!startSegment || !endSegment) return;
+    const range = window.document.createRange();
+    range.setStart(startSegment.node, matchOffset - startSegment.start);
+    range.setEnd(endSegment.node, matchOffset + needle.length - endSegment.start);
+    applyViewerFindHighlight(range);
+    endSegment.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (!isTextPreview) return;
+    const openFind = (event: Event) => {
+      const requestedTabId = (event as CustomEvent<{ tabId?: string }>).detail?.tabId;
+      if (requestedTabId && requestedTabId !== tabId) return;
+      setFindOpen(true);
+      window.setTimeout(() => findInputRef.current?.focus(), 0);
+    };
+    window.addEventListener('siliconvault:open-document-search', openFind);
+    return () => window.removeEventListener('siliconvault:open-document-search', openFind);
+  }, [isTextPreview, tabId]);
+
+  const findBar = findOpen && <div className="viewer-find file-find-bar"><Search size={14} /><input ref={findInputRef} aria-label="Find in file" placeholder="Find in file" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInViewer(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInViewer(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>;
   const applyZoom = (next: number) => {
     const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
     setZoom(bounded);
@@ -197,7 +316,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
+              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} tabId={tabId} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
@@ -205,11 +324,11 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
           : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError || 'The Office document could not be rendered.'}</p></div>}
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div ref={rootRef} className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
-    {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
+    {controls}{findBar}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
     <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
   </div>;
   if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" data-viewer-scroll tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
-    {controls}<div className="viewer-zoom-content" style={{ zoom }}>
+    {controls}{findBar}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
       <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><table><thead><tr><th>Identifier</th><th>Width</th><th>Signal</th></tr></thead><tbody>{signals.map((v, i) => <tr key={i}><td>{v[2]}</td><td>{v[1]}</td><td>{v[3]}</td></tr>)}</tbody></table></div>
@@ -218,7 +337,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   </div>;
   if (['fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
   return <div ref={rootRef} className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
-    {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
+    {controls}{findBar}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
     <pre data-viewer-scroll onScroll={handleScroll} style={{ zoom }}>{text || 'No text content.'}</pre>
   </div>;
 }

@@ -19,7 +19,14 @@ The frontend is not a client for a remote application server. The Tauri entry po
 
 ## Important source paths
 
-- `src/App.tsx`: application layout composition and cross-feature coordination.
+- `src/App.tsx`: provider/composition root only.
+- `src/AppShell.tsx`: application orchestration; still a migration target for a smaller controller/layout split.
+- `src/features/workspace/context/WorkspaceNavContext.tsx` and `DialogContext.tsx`: navigation reducer and prompt/confirmation state.
+- `src/features/workspace/hooks/`: workspace navigation, import, item lifecycle, project/folder creation, drag-and-drop, and migration upgrade workflows.
+- `src/features/workspace/components/topbar/`: workspace switcher, import menu, topbar actions, and topbar composition.
+- `src/features/workspace/components/file-list/` and `overview/`: file list, workspace overview, and details panel.
+- `src/features/tabs/components/`: tab strip, background tabs, editor titlebar, and editor surface.
+- `src/features/search/components/`: global search popup and search results panel.
 - `src/features/workspace/hooks/useWorkspace.ts`: workspace catalog, selection, refresh, and persisted switching.
 - `src/features/workspace/hooks/useWorkspaceInitialization.ts`: database startup, UI preference restoration, and active-workspace recovery.
 - `src/features/editor/hooks/useAutosave.ts`: draft recovery, serialized autosaves, save shortcut, and safe shutdown.
