@@ -1,6 +1,5 @@
 import { useEffect, type MutableRefObject, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { openSearchPanel } from '@codemirror/search';
 
 type FocusedSurface = 'pdf' | 'editor' | 'document' | null;
 
@@ -46,7 +45,10 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
         }
         if (focusedSurface === 'editor') {
           const view = editorViewRef.current;
-          if (view?.dom.isConnected) { openSearchPanel(view); return; }
+          if (view?.dom.isConnected) {
+            window.dispatchEvent(new CustomEvent('siliconvault:open-editor-search', { detail: { tabId: activeTabId } }));
+            return;
+          }
         }
         if (focusedSurface === 'document') {
           window.dispatchEvent(new CustomEvent('siliconvault:open-document-search', { detail: { tabId: activeTabId } }));
