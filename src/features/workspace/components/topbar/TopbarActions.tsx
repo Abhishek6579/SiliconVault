@@ -36,9 +36,9 @@ export default function TopbarActions({ data, actions }: { data: Data; actions: 
     <ImportMenu data={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, open: importMenuOpen, menuRef: importMenuRef }} actions={{ setOpen: setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent, createWorkspaceFile }} />
     {searchOpen ? <div className="global-search-inline">
       <Search size={16} />
-      <input ref={searchInputRef} value={query} autoFocus aria-label="Search files and folders" placeholder="Search files and folders…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setSearchPopupOpen(false); } }} />
+      <input ref={searchInputRef} value={query} autoFocus aria-label="Search files and folders" placeholder="Search files and folders…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setSearchPopupOpen(false); setRightPanel((current) => current === 'search' ? null : current); } }} />
       <kbd>ESC</kbd>
-      <button type="button" className="global-search-close" aria-label="Close search" title="Close search" onClick={() => setSearchPopupOpen(false)}><X size={14} /></button>
+      <button type="button" className="global-search-close" aria-label="Close search" title="Close search" onClick={() => { setSearchPopupOpen(false); setRightPanel((current) => current === 'search' ? null : current); }}><X size={14} /></button>
     </div> : <button className="global-search-trigger" onClick={() => { setSearchPopupOpen(true); setRightPanel('search'); }} title="Search files and folders (Ctrl+F)"><Search size={16} /><span>Search files and folders</span><kbd>Ctrl F</kbd></button>}
     <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
     <span className={`save-status ${status === 'Saved locally' ? 'saved' : ''}`}><span className="status-dot" />{status}</span>
