@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Search, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search, ZoomIn, ZoomOut, X } from 'lucide-react';
 import { GlobalWorkerOptions, getDocument, TextLayer, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -46,6 +46,8 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   const [hostWidth, setHostWidth] = useState(0);
   const [layoutVersion, setLayoutVersion] = useState(0);
   const [query, setQuery] = useState('');
+  const [pdfSearchOpen, setPdfSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [matches, setMatches] = useState<Match[]>([]);
   const [searching, setSearching] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
@@ -147,6 +149,25 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
 
     return cleanup;
   }, [source]);
+
+  useEffect(() => {
+    const openSearch = () => {
+      setPdfSearchOpen(true);
+      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    };
+    const zoomPdf = (event: Event) => {
+      const direction = (event as CustomEvent<{ direction: number }>).detail?.direction ?? 0;
+      if (direction === 0) { setFit(true); return; }
+      setFit(false);
+      setZoom((value) => Math.max(.5, Math.min(2, Math.round((value + direction * .1) * 100) / 100)));
+    };
+    window.addEventListener('siliconvault:open-file-search', openSearch);
+    window.addEventListener('siliconvault:pdf-zoom', zoomPdf);
+    return () => {
+      window.removeEventListener('siliconvault:open-file-search', openSearch);
+      window.removeEventListener('siliconvault:pdf-zoom', zoomPdf);
+    };
+  }, []);
 
   // Use a non-passive native listener so Ctrl/Cmd+wheel prevents WebView/browser zoom.
   useEffect(() => {
@@ -412,12 +433,13 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
         <span className="muted">of {pageCount || '—'}</span>
         <button className="icon-button" title="Next page" disabled={pageNumber >= pageCount} onClick={() => goTo(Math.min(pageCount, pageNumber + 1))}><ArrowRight size={16} /></button>
       </div>
-      <div className="pdf-find">
+      {pdfSearchOpen && <div className="pdf-find">
         <Search size={15} />
-        <input aria-label="Search PDF" placeholder="Find in document" value={query} onChange={(event) => { cancelSearch(); setQuery(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter') void searchPdf(); }} />
+        <input ref={searchInputRef} aria-label="Search PDF" placeholder={`Find in ${title}`} value={query} onChange={(event) => { cancelSearch(); setQuery(event.target.value); }} onKeyDown={(event) => { if (event.key === 'Enter') void searchPdf(); if (event.key === 'Escape') setPdfSearchOpen(false); }} />
         <button onClick={() => searching ? cancelSearch() : void searchPdf()}>{searching ? 'Cancel' : 'Find'}</button>
         {matches.length > 0 && <span className="muted">{matches.length} hits</span>}
-      </div>
+        <button className="icon-button" aria-label="Close PDF search" title="Close search" onClick={() => setPdfSearchOpen(false)}><X size={14} /></button>
+      </div>}
       <div className="pdf-zoom">
         <button className={`text-button ${fit ? 'selected' : ''}`} onClick={() => setFit(true)}>Fit</button>
         <button className="icon-button" title="Zoom out" onClick={() => { setFit(false); setZoom((value) => Math.max(.5, value - .1)); }}><ZoomOut size={16} /></button>

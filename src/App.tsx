@@ -8,6 +8,7 @@ import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
+import { openSearchPanel } from '@codemirror/search';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -83,6 +84,10 @@ export default function App() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession } = useWorkspaceTabs(activeWorkspaceId, loading, setError);
   const [query, setQuery] = useState('');
+  const [searchPopupOpen, setSearchPopupOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const lastFocusedSurfaceRef = useRef<'pdf' | 'editor' | null>(null);
   const [sort, setSort] = useState<'name' | 'type' | 'size' | 'updatedAt'>('name');
   const [sortDesc, setSortDesc] = useState(false);
   const [rightPanel, setRightPanel] = useState<'details' | 'search' | null>(null);
@@ -111,7 +116,7 @@ export default function App() {
     setPreferencesReady: setUiPreferencesReady, setDarkTheme, setWorkspaces, setActiveWorkspaceId,
     restoreTabs: restoreWorkspaceTabs,
   });
-  useGlobalShortcuts(setAppZoom);
+  useGlobalShortcuts(setAppZoom, setEditorFontSize);
   useEffect(() => {
     const root = editorWorkspaceRef.current;
     if (!root) return;
@@ -122,9 +127,14 @@ export default function App() {
         : event.target instanceof Node
           ? event.target.parentElement
           : null;
-      if (!target?.closest('.code-editor, .markdown-preview')) return;
+      if (target?.closest('.pdf-shell')) return;
+      if (target?.closest('.code-editor, .markdown-preview')) {
+        event.preventDefault();
+        setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
+        return;
+      }
       event.preventDefault();
-      setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
+      setAppZoom((current) => Math.max(.8, Math.min(1.4, Math.round((current + (event.deltaY < 0 ? .05 : -.05)) * 100) / 100)));
     };
     root.addEventListener('wheel', handleWheel, { capture: true, passive: false });
     return () => root.removeEventListener('wheel', handleWheel, true);
@@ -243,16 +253,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        document.querySelector<HTMLInputElement>('.global-search input')?.focus();
-      }
-      if (event.key === 'Escape') document.querySelector<HTMLInputElement>('.global-search input')?.blur();
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.pdf-shell')) lastFocusedSurfaceRef.current = 'pdf';
+      else if (target?.closest('.code-editor, .markdown-preview')) lastFocusedSurfaceRef.current = 'editor';
+      else lastFocusedSurfaceRef.current = null;
     };
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+        if (event.key === 'Escape') {
+          setSearchPopupOpen(false);
+          if (rightPanel === 'search') setRightPanel(null);
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === 'k' || event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        const target = event.target instanceof Element ? event.target : null;
+        const pdfFocused = target?.closest('.pdf-shell') || lastFocusedSurfaceRef.current === 'pdf';
+        const editorFocused = target?.closest('.code-editor, .markdown-preview') || lastFocusedSurfaceRef.current === 'editor';
+        if (event.key.toLowerCase() === 'f' && pdfFocused) {
+          window.dispatchEvent(new Event('siliconvault:open-file-search'));
+        } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current) {
+          openSearchPanel(editorViewRef.current);
+        } else {
+          setSearchPopupOpen(true);
+          setRightPanel('search');
+        }
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('keydown', handleShortcut);
-    return () => window.removeEventListener('keydown', handleShortcut);
-  }, []);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('keydown', handleShortcut);
+    };
+  }, [rightPanel]);
+  useEffect(() => {
+    if (searchPopupOpen) searchInputRef.current?.focus();
+  }, [searchPopupOpen]);
   useEffect(() => { if (!activeTabId) setFocusMode(false); }, [activeTabId]);
   useEffect(() => {
     const closeMenus = (event: PointerEvent) => {
@@ -319,6 +358,13 @@ export default function App() {
   ], [excludedMoveFolders, folders, projects, workspaces]);
 
   const searchResults = useWorkspaceSearch(liveFiles, query, setError);
+  const folderSearchResults = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return [];
+    return folders.filter((folder) =>
+      folder.workspaceId === activeWorkspaceId && folder.name.toLocaleLowerCase().includes(needle)
+    ).slice(0, 50);
+  }, [folders, query, activeWorkspaceId]);
 
   const openFile = useCallback(async (fileMeta: FileMeta) => {
     // Reclassify on open so legacy HDL records cannot remain editable.
@@ -866,13 +912,19 @@ export default function App() {
               <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('code'); }}><Code2 size={15} /><span>New code file</span></button>
             </div>}
           </div>}
-          <label className="global-search"><Search size={16} /><input placeholder="Search files and notes" value={query} onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} /><kbd>⌘ K</kbd></label>
-          <div className="app-zoom-controls" title="App zoom: Ctrl+= to increase, Ctrl+- to decrease, Ctrl+0 to reset"><button className="icon-button" aria-label="Decrease app size" title="Decrease app size (Ctrl+-)" onClick={() => setAppZoom((value) => Math.max(0.8, Math.round((value - 0.1) * 100) / 100))}><ZoomOut size={15} /></button><span>{Math.round(appZoom * 100)}%</span><button className="icon-button" aria-label="Increase app size" title="Increase app size (Ctrl+=)" onClick={() => setAppZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100))}><ZoomIn size={15} /></button><button className="icon-button" aria-label="Reset app size" title="Reset app size (Ctrl+0)" onClick={() => setAppZoom(1)}><span className="zoom-reset-label">100</span></button></div>
+          <button className="global-search-trigger" onClick={() => { setSearchPopupOpen(true); setRightPanel('search'); }} title="Search files and folders (Ctrl+F)"><Search size={16} /><span>Search files and folders</span><kbd>Ctrl F</kbd></button>
           <button className="icon-button theme-toggle" title={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} aria-label={darkTheme ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => void toggleTheme()}>{darkTheme ? <Sun size={16} /> : <Moon size={16} />}</button>
           <span className={`save-status ${status === 'Saved locally' ? 'saved' : ''}`}><span className="status-dot" />{status}</span>
           <button className="icon-button" title="Details" onClick={() => setRightPanel((value) => value === 'details' ? null : 'details')}><Settings2 size={17} /></button>
         </div>
       </header>
+
+      {searchPopupOpen && <div className="search-popup-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setSearchPopupOpen(false); }}>
+        <section className="search-popup" role="dialog" aria-modal="true" aria-label="Search files and folders">
+          <div className="search-popup-input"><Search size={17} /><input ref={searchInputRef} value={query} placeholder="Search file names and folders…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchPopupOpen(false); if (event.key === 'Enter') setSearchPopupOpen(false); }} /><kbd>ESC</kbd><button className="icon-button" aria-label="Close search" onClick={() => setSearchPopupOpen(false)}><X size={15} /></button></div>
+          <div className="search-popup-scope">Searching file names and folders in this workspace</div>
+        </section>
+      </div>}
 
       <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
       <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleFolderImport(event.target.files, target); }} />
@@ -916,7 +968,7 @@ export default function App() {
         )}
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
           <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
-            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
+            {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => { editorViewRef.current = view; restoreEditorViewState(view, activeTab.editorState); }} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
               code({ className, children, ...props }) {
                 const code = String(children).replace(/\n$/, '');
@@ -973,6 +1025,7 @@ export default function App() {
               </div>)}
             </>}
             {/* {view === 'workspace' && !activeProject && !selectedFolder && <div className="workspace-files-heading"><span>{visibleFiles.length} file{visibleFiles.length === 1 ? '' : 's'}</span></div>} */}
+            {view === 'trash' && trashedFiles.length > 0 && <div className="trash-actions"><span>{trashedFiles.length} item{trashedFiles.length === 1 ? '' : 's'} in Trash</span><button className="outline-button danger-outline" onClick={() => void doEmptyTrash()}><Trash2 size={14} /> Empty Trash</button></div>}
             <div className="list-header"><button onClick={() => { setSort('name'); setSortDesc(sort === 'name' ? !sortDesc : false); }}>Name <ArrowDownUp size={12} /></button><button onClick={() => { setSort('type'); setSortDesc(sort === 'type' ? !sortDesc : false); }}>Kind <ArrowDownUp size={12} /></button><button onClick={() => { setSort('size'); setSortDesc(sort === 'size' ? !sortDesc : false); }}>Size <ArrowDownUp size={12} /></button><button onClick={() => { setSort('updatedAt'); setSortDesc(sort === 'updatedAt' ? !sortDesc : true); }}>Modified <ArrowDownUp size={12} /></button><span /></div>
             {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
               <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
@@ -994,10 +1047,13 @@ export default function App() {
         <div className="detail-row"><span>Total files</span><b>{liveFiles.length}</b></div><div className="detail-row"><span>Projects</span><b>{activeProjects.length}</b></div><div className="detail-row"><span>Folders</span><b>{folders.filter((folder) => folder.workspaceId === activeWorkspaceId).length}</b></div><div className="detail-row"><span>Storage used</span><b>{formatSize(liveFiles.reduce((sum, item) => sum + item.size, 0))}</b></div>
         <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void backup.saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
       </div> : <div className="search-results-panel">
-        {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and text in notes or code.</span></div> : searchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Try a different word or phrase.</span></div> : searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => void openFile(file)}>
+        {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and folder names, plus text in notes and code.</span></div> : searchResults.length === 0 && folderSearchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Searching file names and folders. Try a different word or phrase.</span></div> : <>
+        {folderSearchResults.map((folder) => <button className="search-result" key={`folder-${folder.id}`} onClick={() => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); }}><span className="search-result-title"><Folder size={15} /><b>{folder.name}</b></span><span className="search-result-location">Folder · {projects.find((project) => project.id === folder.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">Open folder</span></button>)}
+        {searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => { void openFile(file); setSearchPopupOpen(false); }}>
           <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
         </button>)}
-        {query.trim() && searchResults.length > 0 && <div className="search-count">{searchResults.length} matching file{searchResults.length === 1 ? '' : 's'}</div>}
+        {query.trim() && (searchResults.length > 0 || folderSearchResults.length > 0) && <div className="search-count">{searchResults.length} file{searchResults.length === 1 ? '' : 's'} · {folderSearchResults.length} folder{folderSearchResults.length === 1 ? '' : 's'}</div>}
+        </>}
       </div>}
     </aside>}
 
