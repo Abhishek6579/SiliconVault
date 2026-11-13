@@ -4243,3 +4243,53 @@ body,
 .global-search-dropdown .search-result-snippet { padding-left: 22px; overflow-wrap: anywhere; }
 .global-search-dropdown .search-count { padding: 7px; }
 .app-shell[data-theme="dark"] .global-search-dropdown { border-color: #383d45; box-shadow: 0 12px 32px #0008; }
+
+
+/* Unified, theme-aware in-file search controls. */
+.editor-find-bar,
+.file-find-bar {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 10px;
+  color: var(--muted, #858c98);
+  background: var(--panel, #fff);
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  font-size: 11px;
+}
+.editor-find-bar { position: absolute; z-index: 12; top: 8px; right: 12px; min-height: 34px; border: 1px solid var(--line, #383d45); border-radius: 7px; box-shadow: 0 5px 18px #0002; }
+.code-editor { position: relative; }
+.editor-find-label { flex: 0 0 auto; font-size: 10px; font-weight: 600; }
+.editor-find-bar input,
+.file-find-bar input {
+  box-sizing: border-box;
+  width: min(250px, 38vw);
+  min-width: 90px;
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid var(--line, #dfe3e9);
+  border-radius: 5px;
+  outline: none;
+  background: var(--surface, #f7f8fa);
+  color: var(--text-primary, #252a33);
+  font: inherit;
+  font-size: 11px;
+}
+.editor-find-bar input:focus,
+.file-find-bar input:focus { border-color: var(--accent, #7189bd); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #7189bd) 15%, transparent); }
+.editor-find-bar .icon-button,
+.file-find-bar .icon-button { display: inline-grid; place-items: center; width: 25px; height: 25px; min-width: 25px; padding: 0; border-radius: 5px; color: var(--muted, #737b87); }
+.editor-find-bar .icon-button:hover,
+.file-find-bar .icon-button:hover { background: var(--surface-hover, #edf0f4); color: var(--text-primary, #252a33); }
+.file-find-bar { justify-content: flex-start; }
+.file-find-bar input { width: min(300px, 48vw); }
+::highlight(siliconvault-find) { background: #e9bd4d99; color: inherit; text-decoration: underline; text-decoration-color: #d49b24; }
+.app-shell[data-theme="dark"] .editor-find-bar,
+.app-shell[data-theme="dark"] .file-find-bar { background: #202328; border-color: #383d45; color: #aeb5c0; }
+.app-shell[data-theme="dark"] .editor-find-bar input,
+.app-shell[data-theme="dark"] .file-find-bar input { background: #17191d; border-color: #3b414b; color: #e0e4ea; }
+.app-shell[data-theme="dark"] .editor-find-bar .icon-button:hover,
+.app-shell[data-theme="dark"] .file-find-bar .icon-button:hover { background: #303640; color: #f0f2f5; }
