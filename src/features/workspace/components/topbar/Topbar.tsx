@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import TopbarActions from './TopbarActions';
+import type { SearchResult } from '../../../search/components/SearchResultsPanel';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from '../../../../storage/types';
 
 type View = 'workspace' | 'recent' | 'trash';
@@ -22,6 +23,7 @@ interface ActionsData {
   view: View; selectedFolder: string | null; activeProjectRecord: Project | null; activeProject: string | null;
   currentWorkspaceId: string; importMenuOpen: boolean; importMenuRef: RefObject<HTMLDivElement | null>;
   darkTheme: boolean; status: string; searchOpen: boolean; query: string; searchInputRef: RefObject<HTMLInputElement | null>;
+  searchResults: SearchResult[]; folderSearchResults: FolderRecord[]; getProjectName: (id: string | null) => string | undefined;
 }
 interface Actions {
   setImportMenuOpen: Dispatch<SetStateAction<boolean>>;
@@ -30,6 +32,7 @@ interface Actions {
   createFolderInCurrent: () => void; createWorkspaceFile: (kind: 'markdown' | 'code') => Promise<void>;
   setSearchPopupOpen: Dispatch<SetStateAction<boolean>>; setQuery: Dispatch<SetStateAction<string>>;
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
+  openSearchFile: (file: FileMeta) => void; openSearchFolder: (folder: FolderRecord) => void;
   toggleTheme: () => Promise<void>; setDetailsOpen: () => void;
 }
 export default function Topbar({ switcherData, switcherActions, actionsData, actions }: {
