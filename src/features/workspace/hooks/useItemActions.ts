@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { db } from '../../../storage/database';
 import { moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from '../../../storage/hierarchy';
-import { countFolderItems, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, softDeleteFile } from '../../../storage/files';
+import { countFolderItems, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from '../../../storage/files';
 import type { FileMeta, Folder as FolderRecord, Project } from '../../../storage/types';
 import type { Tab } from '../../tabs/types';
 import type { ImportTarget } from './useImportActions';
@@ -130,7 +130,7 @@ export function useItemActions(options: UseItemActionsOptions) {
     await refresh();
   }
 
-  async function doEmptyTrash() {
+  async function restoreTrashedFile(id: string) {\n    await restoreFile(db, id);\n    await refresh();\n  }\n\n  async function doEmptyTrash() {
     if (!trashedFiles.length) return;
     requestConfirmation('Empty Trash?', `Permanently delete ${trashedFiles.length} trashed file${trashedFiles.length === 1 ? '' : 's'}? This cannot be undone.`, 'Empty Trash', async () => {
       const trashIds = new Set(trashedFiles.map((file) => file.id));
@@ -175,5 +175,5 @@ export function useItemActions(options: UseItemActionsOptions) {
     if (action === 'delete') await deleteProject(project);
   }
 
-  return { moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject, doEmptyTrash, runContextAction };
+  return { moveItemTo, renameItem, deleteFile, deleteFolder, deleteProject, restoreProject, restoreTrashedFile, doEmptyTrash, runContextAction };
 }
