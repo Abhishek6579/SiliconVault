@@ -51,11 +51,21 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     onStateChange(viewer.getScale());
   };
 
+  const clearOfficeFindHighlight = () => {
+    const highlights = (window.CSS as typeof CSS & { highlights?: { delete: (name: string) => void } }).highlights;
+    highlights?.delete('siliconvault-find');
+  };
+  const applyOfficeFindHighlight = (range: Range) => {
+    const css = window.CSS as typeof CSS & { highlights?: { set: (name: string, value: unknown) => void } };
+    const HighlightConstructor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+    if (css.highlights && HighlightConstructor) css.highlights.set('siliconvault-find', new HighlightConstructor(range));
+  };
+
   const findInDocument = (query: string, direction: 1 | -1 = 1) => {
     const host = hostRef.current;
     const needle = query.trim().toLocaleLowerCase();
     if (!host) return;
-    if (!needle) { window.getSelection()?.removeAllRanges(); findCursorRef.current = { query: '', offset: -1 }; return; }
+    if (!needle) { clearOfficeFindHighlight(); findCursorRef.current = { query: '', offset: -1 }; return; }
 
     // Build the DOM text index once. The previous implementation rebuilt it and
     // collected every occurrence on each keystroke; a one-character query in a
@@ -111,9 +121,7 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
     const range = window.document.createRange();
     range.setStart(startSegment.node, matchOffset - startSegment.start);
     range.setEnd(endSegment.node, matchOffset + needle.length - endSegment.start);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    applyOfficeFindHighlight(range);
     endSegment.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
@@ -274,7 +282,7 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
   return (
     <div className="office-ooxml-viewer">
       <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document controls">
-        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInDocument(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
+        {findOpen && <div className="office-document-find file-find-bar"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { const next = event.target.value; setFindQuery(next); findCursorRef.current = { query: '', offset: -1 }; if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findTimerRef.current = window.setTimeout(() => findInDocument(next), 120); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (findTimerRef.current) window.clearTimeout(findTimerRef.current); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
         <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => changeScale(scale - 0.1)} disabled={scale <= 0.1}><ZoomOut size={15} /></button>
         <span aria-live="polite">{Math.round(scale * 100)}%</span>
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
