@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react';
+import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -97,6 +97,7 @@ export default function App() {
   const [dialog, setDialog] = useState<WorkspaceDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
+  const editorWorkspaceRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
@@ -110,6 +111,19 @@ export default function App() {
     restoreTabs: restoreWorkspaceTabs,
   });
   useGlobalShortcuts(setAppZoom);
+  useEffect(() => {
+    const root = editorWorkspaceRef.current;
+    if (!root) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (!(event.target instanceof Element) || !event.target.closest('.code-editor, .markdown-preview')) return;
+      event.preventDefault();
+      setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
+    };
+    root.addEventListener('wheel', handleWheel, { passive: false });
+    return () => root.removeEventListener('wheel', handleWheel);
+  }, [setEditorFontSize]);
+
 
   // Fixed near-black editor theme inspired by the supplied reference.
   const editorTheme = useMemo(() => EditorView.theme({
@@ -131,11 +145,6 @@ export default function App() {
     '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#30343d', color: '#ffffff' },
     '.cm-foldPlaceholder': { backgroundColor: '#292929', color: '#c7c7c7', border: 'none' },
   }, { dark: true }), [editorFontSize]);
-  const handleEditorZoomWheel = useCallback((event: ReactWheelEvent<HTMLElement>) => {
-    if (!(event.ctrlKey || event.metaKey)) return;
-    event.preventDefault();
-    setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
-  }, [setEditorFontSize]);
   const editorSyntax = useMemo(() => syntaxHighlighting(HighlightStyle.define([
     { tag: tags.comment, color: '#6a9955', fontStyle: 'italic' },
     { tag: tags.keyword, color: '#c586c0' },
@@ -864,7 +873,7 @@ export default function App() {
 
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
 
-      {activeTab ? <div className="editor-workspace">
+      {activeTab ? <div ref={editorWorkspaceRef} className="editor-workspace">
         <div className="tab-strip">
           <div className="tab-list">
             {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
@@ -900,7 +909,7 @@ export default function App() {
           </div>
         )}
         {activeTab.meta.kind === 'pdf' ? null : activeTab.meta.kind === 'markdown' ? (
-          <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`} onWheel={handleEditorZoomWheel}>
+          <div className={`note-layout ${activeTab.preview ? 'preview-only' : ''}`}>
             {!activeTab.preview && <div className="code-editor markdown-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }} /></div>}
             <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${editorFontSize}px` }}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={{
               code({ className, children, ...props }) {
@@ -911,7 +920,7 @@ export default function App() {
             }}>{normalizeMarkdownMath(activeTab.draft)}</ReactMarkdown></article></div>
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
-          <div className="code-editor" onWheel={handleEditorZoomWheel}><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
+          <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
         ) : activeTab.meta.kind === 'viewer' ? null
         : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
         {workspaceTabs.filter((tab) => tab.meta.kind === 'viewer' && tab.data instanceof Blob).map((tab) => (
