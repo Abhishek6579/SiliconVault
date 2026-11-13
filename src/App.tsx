@@ -42,7 +42,7 @@ import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
-import type { EditorViewState, PdfViewState, Tab } from './features/tabs/types';
+import type { EditorViewState, PdfViewState, Tab, ViewerViewState } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -208,6 +208,13 @@ export default function App() {
     });
   }, [setError]);
 
+  const updateViewerView = useCallback((id: string, state: ViewerViewState) => {
+    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, viewerState: state } : tab));
+    void db.preferences.put({ key: `viewer:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : 'Could not save this file viewing position.');
+    });
+  }, []);
+
   const updatePdfView = useCallback((id: string, state: PdfViewState) => {
     setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, pdfState: state } : tab));
     void db.preferences.put({ key: `pdf:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
@@ -335,7 +342,7 @@ export default function App() {
       if (!(await persistOpenTabSession())) return;
       setTabs((current) => current.map((tab) => {
         if (tab.id === meta.id) return hydrated;
-        if (!(tab.data instanceof Blob)) return tab;
+        if (!(tab.data instanceof Blob) || tab.meta.kind === 'viewer') return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return { ...withoutPdfData, hydrated: false };
       }));
@@ -900,9 +907,24 @@ export default function App() {
           </div>
         ) : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' ? (
           <div className="code-editor"><CodeMirror value={activeTab.draft} height="100%" theme={editorTheme} extensions={[activeTab.meta.kind === 'code' ? (['v', 'sv', 'vh', 'svh'].includes(activeTab.meta.name.split('.').pop()?.toLowerCase() ?? '') ? StreamLanguage.define(verilog) : javascript()) : [], editorSyntax]} onChange={(value) => updateDraft(activeTab.id, value)} onCreateEditor={(view) => restoreEditorViewState(view, activeTab.editorState)} onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) persistEditorViewState(activeTab.id, update.view, activeTab.preview); }} basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true, closeBrackets: true }} /></div>
-        ) : activeTab.meta.kind === 'viewer' ? (
-          <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}><ReadOnlyFileViewer fileName={activeTab.meta.name} data={activeTab.data} mimeType={activeTab.meta.mimeType} maximized={focusMode} onToggleMaximize={() => setFocusMode((value) => !value)} /></Suspense>
-        ) : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
+        ) : activeTab.meta.kind === 'viewer' ? null
+        : <div className="unsupported-file"><div className="unsupported-icon"><File size={26} /></div><h2>Preview unavailable</h2><p>This file is saved in your workspace. Download it through a backup or open it in another app.</p><span>{formatSize(activeTab.meta.size)} · {activeTab.meta.mimeType}</span></div>}
+        {workspaceTabs.filter((tab) => tab.meta.kind === 'viewer' && tab.data instanceof Blob).map((tab) => (
+          <div key={tab.id} className="persistent-viewer-panel" style={{ display: tab.id === activeTabId ? 'flex' : 'none' }}>
+            <Suspense fallback={<div className="loading-state">Loading file viewer…</div>}>
+              <ReadOnlyFileViewer
+                tabId={tab.id}
+                fileName={tab.meta.name}
+                data={tab.data}
+                mimeType={tab.meta.mimeType}
+                initialState={tab.viewerState}
+                initialPdfState={tab.pdfState}
+                onStateChange={updateViewerView}
+                onPdfStateChange={updatePdfView}
+              />
+            </Suspense>
+          </div>
+        ))}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
         {workspaceTabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{workspaceTabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
