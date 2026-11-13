@@ -12,7 +12,7 @@ pub struct UpdateInfo {
     notes: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateProgress {
     downloaded: u64,
