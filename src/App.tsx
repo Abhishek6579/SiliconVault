@@ -116,13 +116,18 @@ export default function App() {
     if (!root) return;
     const handleWheel = (event: WheelEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
-      if (!(event.target instanceof Element) || !event.target.closest('.code-editor, .markdown-preview')) return;
+      const target = event.target instanceof Element
+        ? event.target
+        : event.target instanceof Node
+          ? event.target.parentElement
+          : null;
+      if (!target?.closest('.code-editor, .markdown-preview')) return;
       event.preventDefault();
       setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
     };
-    root.addEventListener('wheel', handleWheel, { passive: false });
-    return () => root.removeEventListener('wheel', handleWheel);
-  }, [setEditorFontSize]);
+    root.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => root.removeEventListener('wheel', handleWheel, true);
+  }, [activeTabId, setEditorFontSize]);
 
 
   // Fixed near-black editor theme inspired by the supplied reference.
