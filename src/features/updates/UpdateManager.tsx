@@ -24,10 +24,11 @@ export default function UpdateManager() {
   const busyRef = useRef(false);
 
   const checkForUpdates = useCallback(async (manual = false) => {
-    if (!isDesktopApp() || busyRef.current) return;
+    if (!isDesktopApp()) return;
+    if (manual) { setVisible(true); setMessage('Checking for updates…'); }
+    if (busyRef.current) return;
     busyRef.current = true;
     setChecking(true);
-    if (manual) { setVisible(true); setMessage('Checking for updates…'); }
     try {
       const result = await invoke<UpdateInfo | null>('check_for_update');
       setUpdate(result);

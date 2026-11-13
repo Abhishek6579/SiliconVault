@@ -284,7 +284,7 @@ export default function App() {
         const editorFocused = target?.closest('.code-editor, .markdown-preview') || lastFocusedSurfaceRef.current === 'editor';
         if (event.key.toLowerCase() === 'f' && pdfFocused) {
           window.dispatchEvent(new Event('siliconvault:open-file-search'));
-        } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current) {
+        } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current?.dom.isConnected) {
           openSearchPanel(editorViewRef.current);
           window.setTimeout(() => {
             const searchField = document.querySelector<HTMLInputElement>('.cm-search input');
