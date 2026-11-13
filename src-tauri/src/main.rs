@@ -69,8 +69,14 @@ fn path_to_file_url(path: &Path) -> String {
 
 fn convert_office_document(bytes: Vec<u8>, extension: String) -> Result<Vec<u8>, String> {
     let extension = extension.to_ascii_lowercase();
-    if !matches!(extension.as_str(), "docx" | "docm") {
-        return Err("PDF conversion currently supports DOCX and DOCM files.".into());
+    if !matches!(
+        extension.as_str(),
+        "doc" | "docx" | "docm" | "dot" | "dotx" | "dotm" | "rtf" | "odt" | "fodt" |
+        "xls" | "xlsx" | "xlsm" | "xlsb" | "ods" | "fods" |
+        "ppt" | "pptx" | "pptm" | "pot" | "potx" | "potm" | "pps" | "ppsx" | "ppsm" |
+        "odp" | "fodp"
+    ) {
+        return Err("This Office file format is not supported by the PDF conversion pipeline.".into());
     }
     if bytes.is_empty() || bytes.len() > 100 * 1024 * 1024 {
         return Err("The Word document is empty or exceeds the 100 MB conversion limit.".into());
