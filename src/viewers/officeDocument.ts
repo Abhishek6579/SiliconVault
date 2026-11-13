@@ -68,7 +68,11 @@ async function readZipEntry(view: DataView, bytes: Uint8Array, entry: ZipEntry):
   if (entry.method === 0) content = compressed;
   else if (entry.method === 8) {
     if (typeof DecompressionStream === 'undefined') throw new Error('This runtime cannot decompress Office documents.');
-    const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    // Copy into an owned ArrayBuffer: Uint8Array<ArrayBufferLike> is not a valid BlobPart
+    // under newer TypeScript DOM typings because its backing store may be SharedArrayBuffer.
+    const compressedBuffer = new ArrayBuffer(compressed.byteLength);
+    new Uint8Array(compressedBuffer).set(compressed);
+    const stream = new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
     const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
