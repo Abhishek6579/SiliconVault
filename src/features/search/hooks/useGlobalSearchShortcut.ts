@@ -44,11 +44,10 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
           return;
         }
         if (focusedSurface === 'editor') {
-          const view = editorViewRef.current;
-          if (view?.dom.isConnected) {
-            window.dispatchEvent(new CustomEvent('siliconvault:open-editor-search', { detail: { tabId: activeTabId } }));
-            return;
-          }
+          // WorkspaceEditor also handles Markdown preview mode, where the
+          // CodeMirror view is intentionally unmounted.
+          window.dispatchEvent(new CustomEvent('siliconvault:open-editor-search', { detail: { tabId: activeTabId } }));
+          return;
         }
         if (focusedSurface === 'document') {
           window.dispatchEvent(new CustomEvent('siliconvault:open-document-search', { detail: { tabId: activeTabId } }));
