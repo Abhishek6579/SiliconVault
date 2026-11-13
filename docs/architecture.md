@@ -64,7 +64,9 @@ IndexedDB is scoped to a browser/WebView profile. Browser development data must 
 | CSV, TSV | Read-only table preview, maximum 200 rows and 30 columns |
 | VCD | Read-only declarations and basic activity inspection; no waveform traces |
 | SPICE (.sp/.cir/.lib), KiCad schematic (.kicad_sch) | Read-only source-text preview |
-| DOC/DOCX/PPTX/XLSX, FST, GDS/GDSII, KiCad PCB (.kicad_pcb) | Recognized, no dedicated renderer |
+| DOCX/DOCM | Read-only text extraction and preview; selected text and all extracted text can be copied |
+| PPTX/PPTM | Read-only slide text extraction and preview; selected text and all extracted text can be copied |
+| Legacy DOC/PPT, XLSX, FST, GDS/GDSII, KiCad PCB (.kicad_pcb) | Recognized, no dedicated renderer |
 | Other extensions | Generic unsupported/other-file handling |
 
 The Blob-backed text preview has a 24 MiB read guard. This is not an import-size limit. Extension classification alone does not establish usable rendering support.
@@ -75,7 +77,7 @@ Tauri capabilities currently grant core defaults, dialog open/save, and selected
 
 ## Known gaps
 
-- No dedicated Office, FST, GDS/GDSII, or KiCad PCB renderer.
+- Legacy binary DOC/PPT, XLSX, FST, GDS/GDSII, and KiCad PCB formats do not have dedicated renderers.
 - No interactive VCD waveform viewer.
 - No verified packaged Windows data-path or memory baseline documented.
 - Windows NSIS packaging is configured, but install/upgrade/uninstall persistence needs Windows validation.
