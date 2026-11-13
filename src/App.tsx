@@ -1,20 +1,18 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import type { DragEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { EditorView } from '@codemirror/view';
-import { openSearchPanel } from '@codemirror/search';
 import {
-  Activity, Archive, ArrowDownUp, BookOpen, Check, ChevronDown, ChevronRight, Code2, Command, Download,
+  Archive, ArrowDownUp, Check, ChevronDown, ChevronRight, Code2, Command, Download,
   Ellipsis, File, FileCode2, FilePlus2, FileText, Folder, FolderPlus, FolderTree, HardDrive,
-  Import, LayoutGrid, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2,
-  Trash2, X, Clock3, Bookmark, Pencil, Sparkles, Save, FileArchive, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
+  Import, LayoutGrid, Menu, MoreHorizontal, Plus, Search, Settings2,
+  Trash2, X, Clock3, Bookmark, Pencil, Save, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { DEFAULT_WORKSPACE_ID, db, WorkspaceDatabaseV1, WorkspaceDatabaseV2 } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
 import WorkspaceDialog, { type WorkspaceDialogState } from './components/WorkspaceDialog';
-import { buildWorkspaceTree, type WorkspaceTreeFolder } from './storage/tree';
 import { formatSize } from './utils/format';
 import { migrateLegacyUiPreferences } from './storage/preferences';
-import { hydrateWorkspaceTab, saveWorkspaceSession } from './storage/tabSession';
+import { saveWorkspaceSession } from './storage/tabSession';
 import { createFolder, moveFile, moveFolder, restoreProject as unarchiveProject, softDeleteProject } from './storage/hierarchy';
 import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, importFile, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { downloadBackup, exportBackupStream } from './storage/backup';
@@ -32,8 +30,27 @@ import { useAutosave } from './features/editor/hooks/useAutosave';
 import { useWorkspaceBackup } from './features/backup/hooks/useWorkspaceBackup';
 import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
+import { isEditableKind, OPENABLE_KINDS } from './shared/constants/fileKinds';
+import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
+import EmptyState from './shared/ui/EmptyState';
+import ErrorBanner from './shared/ui/ErrorBanner';
+import BusyPill from './shared/ui/BusyPill';
+import StartupScreen from './shared/ui/StartupScreen';
+import WelcomePage from './features/workspace/components/WelcomePage';
+import { useClickOutside } from './shared/hooks/useClickOutside';
+import { readDragPayload, writeDragPayload } from './shared/utils/dragPayload';
+import { useOpenFile } from './features/tabs/hooks/useOpenFile';
+import MoveDialog from './features/workspace/components/dialogs/MoveDialog';
+import MigrationDialog from './features/workspace/components/dialogs/MigrationDialog';
+import { useTabViewState } from './features/tabs/hooks/useTabViewState';
+import { useWheelZoom } from './app/hooks/useWheelZoom';
+import { useGlobalSearchShortcut } from './features/search/hooks/useGlobalSearchShortcut';
+import ItemContextMenu from './features/workspace/components/menus/ItemContextMenu';
+import Sidebar from './features/workspace/components/sidebar/Sidebar';
+import ProjectTree from './features/workspace/components/sidebar/ProjectTree';
+import { WorkspaceNavProvider, useWorkspaceNav } from './features/workspace/context/WorkspaceNavContext';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
-import type { EditorViewState, PdfViewState, Tab, ViewerViewState } from './features/tabs/types';
+import type { Tab } from './features/tabs/types';
 import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
@@ -46,18 +63,22 @@ interface ImportTarget { folderId: string | null; projectId: string | null; work
 interface SearchResult { file: FileMeta; text: string; }
 
 export default function App() {
+  return <WorkspaceNavProvider><AppShell /></WorkspaceNavProvider>;
+}
+
+function AppShell() {
   useEffect(() => collectFrontendDiagnostics(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const workspace = useWorkspace(setError, setLoading);
   const { files, folders, projects, workspaces, setWorkspaces, activeWorkspaceId, setActiveWorkspaceId, refresh } = workspace;
+  const currentWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+  const getProjectName = (id: string | null) => id ? projectNames.get(id) : undefined;
   const [migrationBackup, setMigrationBackup] = useState<number | null>(null);
   const [migrationError, setMigrationError] = useState('');
   const [upgrading, setUpgrading] = useState(false);
-  const [view, setView] = useState<View>('workspace');
-  const [activeProject, setActiveProject] = useState<string | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { view, setView, activeProject, setActiveProject, selectedFolder, setSelectedFolder, expanded, setExpanded } = useWorkspaceNav();
   const { tabs, setTabs, activeTabId, setActiveTabId, restoreWorkspaceTabs, flushWorkspaceSession } = useWorkspaceTabs(activeWorkspaceId, loading, setError);
   const [query, setQuery] = useState('');
   const [searchPopupOpen, setSearchPopupOpen] = useState(false);
@@ -82,7 +103,6 @@ export default function App() {
   const editorWorkspaceRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  const backupInput = useRef<HTMLInputElement>(null);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -93,38 +113,7 @@ export default function App() {
     restoreTabs: restoreWorkspaceTabs,
   });
   useGlobalShortcuts(setAppZoom, setEditorFontSize);
-  useEffect(() => {
-    const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const target = event.target instanceof Element
-        ? event.target
-        : event.target instanceof Node
-          ? event.target.parentElement
-          : null;
-      const overPdf = Boolean(target?.closest('.pdf-shell'));
-      const overEditor = Boolean(target?.closest('.code-editor, .markdown-preview'));
-      if (overPdf) {
-        if (target?.closest('.pdf-page-host')) return; // The PDF page host owns wheel zoom.
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', { detail: { direction: event.deltaY < 0 ? 1 : -1 } }));
-        return;
-      }
-      if (lastFocusedSurfaceRef.current === 'pdf') {
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent('siliconvault:pdf-zoom', { detail: { direction: event.deltaY < 0 ? 1 : -1 } }));
-        return;
-      }
-      if (overEditor || lastFocusedSurfaceRef.current === 'editor') {
-        event.preventDefault();
-        setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
-        return;
-      }
-      event.preventDefault();
-      setAppZoom((current) => Math.max(.8, Math.min(1.4, Math.round((current + (event.deltaY < 0 ? .05 : -.05)) * 100) / 100)));
-    };
-    window.addEventListener('wheel', handleWheel, { capture: true, passive: false });
-    return () => window.removeEventListener('wheel', handleWheel, true);
-  }, [activeTabId, setEditorFontSize, setAppZoom]);
+  useWheelZoom(lastFocusedSurfaceRef, setAppZoom, setEditorFontSize);
 
 
   function requestInput(title: string, initialValue: string, placeholder: string, confirmLabel: string, onConfirm: (value: string) => void | Promise<void>, message?: string) {
@@ -180,89 +169,16 @@ export default function App() {
       setUpgrading(false);
     }
   }
-  const persistEditorViewState = useCallback((id: string, view: EditorView, preview: boolean) => {
-    const selection = view.state.selection.main;
-    const state: EditorViewState = {
-      anchor: selection.anchor,
-      head: selection.head,
-      scrollTop: view.scrollDOM.scrollTop,
-      scrollLeft: view.scrollDOM.scrollLeft,
-      preview,
-    };
-    void db.preferences.put({ key: `editor:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : 'Could not save editor position.');
-    });
-  }, [setError]);
+  const { persistEditorViewState, updateViewerView, updatePdfView } = useTabViewState({ setTabs, setError });
 
-  const updateViewerView = useCallback((id: string, state: ViewerViewState) => {
-    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, viewerState: state } : tab));
-    void db.preferences.put({ key: `viewer:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : 'Could not save this file viewing position.');
-    });
-  }, []);
-
-  const updatePdfView = useCallback((id: string, state: PdfViewState) => {
-    setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, pdfState: state } : tab));
-    void db.preferences.put({ key: `pdf:${id}`, value: state, updatedAt: Date.now() }).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : 'Could not save this PDF reading position.');
-    });
-  }, []);
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('.pdf-shell')) lastFocusedSurfaceRef.current = 'pdf';
-      else if (target?.closest('.code-editor, .markdown-preview')) lastFocusedSurfaceRef.current = 'editor';
-      else lastFocusedSurfaceRef.current = null;
-    };
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
-        if (event.key === 'Escape') {
-          setSearchPopupOpen(false);
-          if (rightPanel === 'search') setRightPanel(null);
-        }
-        return;
-      }
-      if (event.key.toLowerCase() === 'k' || event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        const target = event.target instanceof Element ? event.target : null;
-        const pdfFocused = target?.closest('.pdf-shell') || lastFocusedSurfaceRef.current === 'pdf';
-        const editorFocused = target?.closest('.code-editor, .markdown-preview') || lastFocusedSurfaceRef.current === 'editor';
-        if (event.key.toLowerCase() === 'f' && pdfFocused) {
-          window.dispatchEvent(new Event('siliconvault:open-file-search'));
-        } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current?.dom.isConnected) {
-          openSearchPanel(editorViewRef.current);
-          window.setTimeout(() => {
-            const searchField = document.querySelector<HTMLInputElement>('.cm-search input');
-            if (searchField) searchField.placeholder = 'Find in current file…';
-          }, 0);
-        } else {
-          setSearchPopupOpen(true);
-          setRightPanel('search');
-        }
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    window.addEventListener('keydown', handleShortcut);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      window.removeEventListener('keydown', handleShortcut);
-    };
-  }, [rightPanel]);
+  useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel });
   useEffect(() => {
     if (searchPopupOpen) searchInputRef.current?.focus();
   }, [searchPopupOpen]);
   useEffect(() => { if (!activeTabId) setFocusMode(false); }, [activeTabId]);
-  useEffect(() => {
-    const closeMenus = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!workspaceMenuRef.current?.contains(target)) setWorkspaceMenuOpen(false);
-      if (!importMenuRef.current?.contains(target)) setImportMenuOpen(false);
-      if (!contextMenuRef.current?.contains(target)) setContextMenu(null);
-    };
-    window.addEventListener('pointerdown', closeMenus);
-    return () => window.removeEventListener('pointerdown', closeMenus);
-  }, []);
+  useClickOutside(workspaceMenuRef, () => setWorkspaceMenuOpen(false));
+  useClickOutside(importMenuRef, () => setImportMenuOpen(false));
+  useClickOutside(contextMenuRef, () => setContextMenu(null));
 
   const {
     activeProjectRecord, activeWorkspace, activeProjects, generalRootFolders,
@@ -292,30 +208,11 @@ export default function App() {
   });
   const { createWorkspace, renameWorkspace, deleteCurrentWorkspace } = workspaceActions;
 
-  const tree = useMemo(() => buildWorkspaceTree(folders, liveFiles, null, activeProject, activeWorkspaceId), [folders, liveFiles, activeProject, activeWorkspaceId]);
-  const excludedMoveFolders = useMemo(() => {
-    const ids = new Set<string>();
-    if (moveDialog?.type !== 'folder') return ids;
-    ids.add(moveDialog.id);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const folder of folders) if (folder.parentFolderId && ids.has(folder.parentFolderId) && !ids.has(folder.id)) { ids.add(folder.id); changed = true; }
-    }
-    return ids;
-  }, [folders, moveDialog]);
-  const moveDestinations = useMemo(() => [
-    ...workspaces.map((workspace) => ({ key: `workspace-${workspace.id}`, label: workspace.name, detail: 'Workspace root', folderId: null, projectId: null, workspaceId: workspace.id })),
-    ...projects.filter((project) => !project.archived).map((project) => ({ key: `project-${project.id}`, label: project.name, detail: `${workspaces.find((workspace) => workspace.id === project.workspaceId)?.name ?? 'Workspace'} · Project`, folderId: null, projectId: project.id, workspaceId: project.workspaceId })),
-    ...folders.filter((folder) => !excludedMoveFolders.has(folder.id) && (folder.projectId === null || projects.some((project) => project.id === folder.projectId && !project.archived))).map((folder) => ({
-      key: `folder-${folder.id}`,
-      label: folder.name,
-      detail: `${workspaces.find((workspace) => workspace.id === folder.workspaceId)?.name ?? 'Workspace'} · ${projects.find((project) => project.id === folder.projectId)?.name ?? 'General'} · Folder`,
-      folderId: folder.id,
-      projectId: folder.projectId,
-      workspaceId: folder.workspaceId,
-    })),
-  ], [excludedMoveFolders, folders, projects, workspaces]);
+
+  const moveDestinations = useMemo(
+    () => getMoveDestinations(workspaces, projects, folders, getExcludedFolderIds(folders, moveDialog?.type === 'folder' ? moveDialog.id : null)),
+    [folders, moveDialog, projects, workspaces],
+  );
 
   const searchResults = useWorkspaceSearch(liveFiles, query, setError);
   const folderSearchResults = useMemo(() => {
@@ -326,83 +223,21 @@ export default function App() {
     ).slice(0, 50);
   }, [folders, query, activeWorkspaceId]);
 
-  const openFile = useCallback(async (fileMeta: FileMeta) => {
-    // Reclassify on open so legacy HDL records cannot remain editable.
-    const meta: FileMeta = { ...fileMeta, kind: kindForFile(fileMeta.name, fileMeta.mimeType) };
-    let restoredTabs: Tab[] = [];
-    if (meta.workspaceId !== activeWorkspaceId) {
-      if (activeWorkspaceId) {
-        await saveWorkspaceSession(db, activeWorkspaceId, tabs.filter((tab) => tab.meta.workspaceId === activeWorkspaceId).map((tab) => tab.id), activeTabId);
-      }
-      await workspace.switchWorkspace(meta.workspaceId);
-      const restored = await restoreWorkspaceTabs(meta.workspaceId);
-      restoredTabs = restored.tabs;
-      setActiveProject(meta.projectId);
-      setSelectedFolder(meta.parentFolderId);
-      setView('workspace');
-    }
-    const existing = tabs.find((tab) => tab.id === meta.id) ?? restoredTabs.find((tab) => tab.id === meta.id);
-    const persistOpenTabSession = async () => {
-      const currentWorkspaceTabs = (meta.workspaceId === activeWorkspaceId ? tabs : restoredTabs)
-        .filter((tab) => tab.meta.workspaceId === meta.workspaceId);
-      const openFileIds = [...new Set([...currentWorkspaceTabs.map((tab) => tab.id), meta.id])];
-      try {
-        // Commit the session before publishing the tab in React state. A page reload
-        // immediately after the tab appears must not race the debounced session effect.
-        await saveWorkspaceSession(db, meta.workspaceId, openFileIds, meta.id);
-        return true;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : 'Could not save the open-tab session.');
-        return false;
-      }
-    };
-    if (existing) {
-      let hydrated: Tab;
-      try {
-        hydrated = existing.hydrated !== true ? await hydrateWorkspaceTab(db, existing) : existing;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
-        return;
-      }
-      if (hydrated.dirty) trackRecoveredDraft(meta.id, hydrated.draft);
-      if (!(await persistOpenTabSession())) return;
-      setTabs((current) => current.map((tab) => {
-        if (tab.id === meta.id) return hydrated;
-        if (!(tab.data instanceof Blob) || tab.meta.kind === 'viewer') return tab;
-        const { data: _released, ...withoutPdfData } = tab;
-        return { ...withoutPdfData, hydrated: false };
-      }));
-      setActiveTabId(meta.id);
-      setError('');
-      return;
-    }
-    let newTab: Tab;
-    try {
-      newTab = await hydrateWorkspaceTab(db, {
-        id: meta.id,
-        meta,
-        draft: '',
-        dirty: false,
-        preview: meta.kind === 'markdown',
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `Could not open “${meta.name}”.`);
-      return;
-    }
-    if (newTab.dirty) trackRecoveredDraft(meta.id, newTab.draft);
-    if (!(await persistOpenTabSession())) return;
-    setTabs((current) => [
-      ...current.map((tab) => {
-        if (!(tab.data instanceof Blob) || tab.meta.kind === 'viewer') return tab;
-        const { data: _released, ...withoutPdfData } = tab;
-        return { ...withoutPdfData, hydrated: false };
-      }),
-      newTab,
-    ]);
-    setActiveTabId(meta.id);
-    if (newTab.dirty) setStatus('Recovered an unsaved draft · Save to keep these changes');
-    setError('');
-  }, [activeWorkspaceId, restoreWorkspaceTabs, tabs, trackRecoveredDraft, workspace.switchWorkspace]);
+  const openFile = useOpenFile({
+    activeWorkspaceId,
+    activeTabId,
+    tabs,
+    setTabs,
+    setActiveTabId,
+    setActiveProject,
+    setSelectedFolder,
+    setView,
+    switchWorkspace: workspace.switchWorkspace,
+    restoreWorkspaceTabs,
+    trackRecoveredDraft,
+    setError,
+    setStatus,
+  });
 
   useEffect(() => {
     if (!activeTab || activeTab.hydrated === true || loading) return;
@@ -414,7 +249,7 @@ export default function App() {
   function createProject() {
     requestInput('Create project', '', 'Project name', 'Create project', async (name) => {
       const now = Date.now();
-      const project: Project = { id: crypto.randomUUID(), workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID, name: name.trim(), archived: false, createdAt: now, updatedAt: now };
+      const project: Project = { id: crypto.randomUUID(), workspaceId: currentWorkspaceId, name: name.trim(), archived: false, createdAt: now, updatedAt: now };
       await db.projects.add(project);
       await refresh();
       setActiveProject(project.id); setSelectedFolder(null); setActiveTabId(null); setView('workspace');
@@ -423,7 +258,7 @@ export default function App() {
 
   function createFolderInCurrent() {
     requestInput('Create folder', '', 'Folder name', 'Create folder', async (name) => {
-      const folder = await createFolder(db, name.trim(), selectedFolder, activeProject, activeWorkspaceId ?? DEFAULT_WORKSPACE_ID);
+      const folder = await createFolder(db, name.trim(), selectedFolder, activeProject, currentWorkspaceId);
       setExpanded((current) => new Set(current).add(folder.id));
       await refresh();
     });
@@ -433,19 +268,19 @@ export default function App() {
     const initial = kind === 'markdown' ? 'Untitled note.md' : 'Untitled.ts';
     requestInput(kind === 'markdown' ? 'Create note' : 'Create code file', initial, 'File name', 'Create file', async (name) => {
       const text = kind === 'markdown' ? `# ${name.replace(/\.(md|markdown)$/i, '')}\n\n` : '';
-      const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID, kind });
+      const meta = await createTextFile(db, name.trim(), text, { parentFolderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId, kind });
       await refresh();
       await openFile(meta);
     });
   }
 
-  async function handleImport(fileList: FileList | null, destinationFolderId = selectedFolder, destinationProjectId = activeProject, destinationWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID) {
+  async function handleImport(fileList: FileList | null, destinationFolderId = selectedFolder, destinationProjectId = activeProject, destinationWorkspaceId = currentWorkspaceId) {
     if (!fileList?.length) return;
     setImporting(true);
     try {
       for (const file of Array.from(fileList)) {
         const meta = await importFile(db, file, { parentFolderId: destinationFolderId, projectId: destinationProjectId, workspaceId: destinationWorkspaceId });
-        if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
+        if (OPENABLE_KINDS.has(meta.kind)) await openFile(meta);
       }
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected file.'); }
@@ -457,7 +292,7 @@ export default function App() {
     try {
       for await (const file of files) {
         const meta = await importFile(db, file, { parentFolderId: target.folderId, projectId: target.projectId, workspaceId: target.workspaceId });
-        if (['pdf', 'markdown', 'code', 'text', 'viewer'].includes(meta.kind)) await openFile(meta);
+        if (OPENABLE_KINDS.has(meta.kind)) await openFile(meta);
       }
       await refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import the selected files.'); }
@@ -658,7 +493,7 @@ export default function App() {
     requestConfirmation('Empty Trash?', `Permanently delete ${trashedFiles.length} trashed file${trashedFiles.length === 1 ? '' : 's'}? This cannot be undone.`, 'Empty Trash', async () => {
       const trashIds = new Set(trashedFiles.map((file) => file.id));
       await flushPendingSaves();
-      await emptyTrash(db, activeWorkspaceId ?? DEFAULT_WORKSPACE_ID);
+      await emptyTrash(db, currentWorkspaceId);
       setTabs((current) => current.filter((tab) => !trashIds.has(tab.id)));
       if (activeTabId && trashIds.has(activeTabId)) setActiveTabId(tabs.find((tab) => !trashIds.has(tab.id))?.id ?? null);
       await refresh();
@@ -682,20 +517,18 @@ export default function App() {
     close();
   }
 
-  function toggleFolder(id: string) {
-    setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  }
-
-  function handleDrop(event: DragEvent, folderId: string | null, destinationProjectId = activeProject, destinationWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID) {
+  function handleDrop(event: DragEvent, folderId: string | null, destinationProjectId = activeProject, destinationWorkspaceId = currentWorkspaceId) {
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer.files.length > 0) {
       void handleImport(event.dataTransfer.files, folderId, destinationProjectId, destinationWorkspaceId);
       return;
     }
-    const payload = event.dataTransfer.getData('application/x-workbench-item');
+    let payload: ReturnType<typeof readDragPayload>;
+    try { payload = readDragPayload(event.dataTransfer); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not read this dragged item.'); return; }
     if (!payload) return;
-    const { id, type } = JSON.parse(payload) as { id: string; type: 'file' | 'folder' };
+    const { id, type } = payload;
     void (async () => {
       try {
         if (type === 'file') await moveFile(db, id, folderId, destinationProjectId, destinationWorkspaceId);
@@ -705,126 +538,40 @@ export default function App() {
     })();
   }
 
-  function renderFolder(folder: WorkspaceTreeFolder, depth = 0) {
-    const isOpen = expanded.has(folder.record.id);
-    const selected = selectedFolder === folder.record.id;
-    return <div key={folder.record.id}>
-      <div className={`tree-row ${selected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('folder', folder.record.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.record.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.record.id, folder.record.projectId, folder.record.workspaceId)}>
-        <button className="tree-main" onClick={() => { setSelectedFolder(folder.record.id); setActiveProject(folder.record.projectId); setView('workspace'); setActiveTabId(null); }} onDoubleClick={() => toggleFolder(folder.record.id)}>
-          <span className="twisty" onClick={(event) => { event.stopPropagation(); toggleFolder(folder.record.id); }}>{isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-          {isOpen ? <Folder size={16} className="folder-icon open" /> : <Folder size={16} className="folder-icon" />}
-          <span className="truncate" title={folder.record.name}>{folder.record.name}</span>
-        </button>
-        <button className="mini-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.record.id, event)}><Ellipsis size={15} /></button>
-      </div>
-      {isOpen && <>
-        {folder.children.map((child) => renderFolder(child, depth + 1))}
-        {folder.files.sort((a, b) => a.name.localeCompare(b.name)).map((file) => renderFileTree(file, depth + 1))}
-      </>}
-    </div>;
-  }
-
-  function renderFileTree(file: FileMeta, depth = 0) {
-    return <div key={file.id} className={`tree-row file-row ${activeTabId === file.id ? 'selected' : ''}`} style={{ paddingLeft: `${31 + depth * 16}px` }} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-      <button className="tree-main" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={15} />}<span className="truncate" title={file.name}>{file.name}</span></button>
-      <button className="mini-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={15} /></button>
-    </div>;
-  }
-
-  function renderProjectTree(project: Project) {
-    const open = activeProject === project.id;
-    const projectTree = buildWorkspaceTree(folders, liveFiles, null, project.id, project.workspaceId);
-    const filesAtRoot = liveFiles.filter((file) => file.projectId === project.id && file.parentFolderId === null);
-    return <div key={project.id}>
-      <div className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => showContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, null, project.id, project.workspaceId)}>
-        <button className="tree-main" aria-expanded={open} onClick={() => { setActiveProject((current) => current === project.id ? null : project.id); setSelectedFolder(null); setView('workspace'); setActiveTabId(null); }}>
-          <span className="twisty">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-          <span className="project-dot" />
-          <span className="truncate" title={project.name}>{project.name}</span>
-        </button>
-        <button className="mini-action" title="Project actions" onClick={(event) => showContextMenu('project', project.id, event)}><Ellipsis size={15} /></button>
-      </div>
-      {open && <div className="project-children" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, null, project.id, project.workspaceId)}>
-        {projectTree.map((folder) => renderFolder(folder))}
-        {filesAtRoot.map((file) => renderFileTree(file))}
-        {projectTree.length === 0 && filesAtRoot.length === 0 && <button className="tree-empty" onClick={() => void createNewFile('markdown')}>Nothing here yet <span>+ add a note</span></button>}
-      </div>}
-    </div>;
-  }
-
   async function createWorkspaceFile(kind: 'markdown' | 'code') {
     if (view !== 'workspace') setView('workspace');
     await createNewFile(kind);
   }
 
-  const visibleFiles = view === 'trash' ? trashedFiles : view === 'recent'
-    ? [...liveFiles].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 40)
-    : view === 'workspace' && !activeProject && !selectedFolder
-      ? liveFiles
-      : liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === activeProject && file.parentFolderId === selectedFolder);
-  const sortedVisible = view === 'recent' || view === 'trash' ? [...visibleFiles] : [...visibleFiles].sort((a, b) => {
-    const order = sort === 'type' ? a.kind.localeCompare(b.kind) : sort === 'size' ? a.size - b.size : sort === 'updatedAt' ? a.updatedAt - b.updatedAt : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    return sortDesc ? -order : order;
-  });
+  const sortedVisible = useMemo(() => selectVisibleFiles(
+    view, liveFiles, trashedFiles, activeWorkspaceId, activeProject, selectedFolder, sort, sortDesc,
+  ), [view, liveFiles, trashedFiles, activeWorkspaceId, activeProject, selectedFolder, sort, sortDesc]);
 
   return <div className="app-viewport" data-theme={darkTheme ? 'dark' : 'light'}><div className={`app-shell ${focusMode ? 'focus-mode' : ''}`} data-theme={darkTheme ? 'dark' : 'light'} style={{ transform: `scale(${appZoom})`, width: `calc(100% / ${appZoom})`, height: `calc(100% / ${appZoom})` }}>
-    <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-      <div className="brand-row">
-        <div className="brand-mark"><Command size={19} strokeWidth={2.2} /></div>
-        {!sidebarCollapsed && <div className="brand-copy"><b>Workbench</b><span>Engineering workspace</span></div>}
-        <button className="icon-button sidebar-toggle" title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}</button>
-      </div>
-
-      {!sidebarCollapsed && <>
-        <div className="sidebar-primary">
-          <button className={`nav-item ${view === 'workspace' && activeProject === null ? 'active' : ''}`} onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={16} /> Workspace</button>
-          <button className={`nav-item ${view === 'recent' ? 'active' : ''}`} onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={16} /> Recent <span className="nav-count">{liveFiles.length}</span></button>
-          <button className={`nav-item ${view === 'trash' ? 'active' : ''}`} onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={16} /> Trash {trashedFiles.length > 0 && <span className="nav-count">{trashedFiles.length}</span>}</button>
-        </div>
-        <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={() => void createProject()}><Plus size={15} /></button></div>
-        <div className="project-tree">
-          {(buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).length > 0 || liveFiles.some((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null)) && <div className="sidebar-section-heading workspace-tree-heading"><span>WORKSPACE FILES</span></div>}
-          {buildWorkspaceTree(folders, liveFiles, null, null, activeWorkspaceId).map((folder) => renderFolder(folder))}
-          {liveFiles.filter((file) => file.workspaceId === activeWorkspaceId && file.projectId === null && file.parentFolderId === null).map((file) => renderFileTree(file))}
-          {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).map(renderProjectTree)}
-          {projects.filter((project) => !project.archived && project.workspaceId === activeWorkspaceId).length === 0 && <div className="sidebar-empty">Your projects<br /><span>show up here</span></div>}
-          {projects.some((project) => project.archived && project.workspaceId === activeWorkspaceId) && <>
-            <div className="sidebar-section-heading archived-heading"><span>ARCHIVED</span></div>
-            {projects.filter((project) => project.archived && project.workspaceId === activeWorkspaceId).map(renderProjectTree)}
-          </>}
-        </div>
-        <div className="sidebar-bottom">
-          <div className="system-monitor" aria-label="System utilisation">
-            <div className="system-monitor-heading"><Activity size={13} /><span>System</span><span className="system-monitor-live">LIVE</span></div>
-            {[
-              { label: 'CPU', value: systemStats.cpu },
-              { label: 'RAM', value: systemStats.ram },
-              { label: 'GPU', value: systemStats.gpu },
-            ].map(({ label, value }) => (
-              <div className="system-metric" key={label} title={value == null ? `${label} utilisation unavailable` : `${label} utilisation ${Math.round(value)}%`}>
-                <span className="system-metric-label">{label}</span>
-                <div className="system-metric-track" role="meter" aria-label={`${label} utilisation`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value ?? undefined}>
-                  <i style={{ width: `${value == null ? 0 : Math.min(100, Math.max(0, value))}%` }} />
-                </div>
-                <span className="system-metric-value">{value == null ? '—' : `${Math.round(value)}%`}</span>
-              </div>
-            ))}
-            <div className="system-storage">
-              <div className="storage-line"><HardDrive size={14} /><span>Stored on this device</span></div>
-              <div className="storage-meter"><i style={{ width: `${Math.min(100, storedBytes / (250 * 1024 * 1024) * 100)}%` }} /></div>
-              <span className="storage-caption">{formatSize(storedBytes)} used</span>
-            </div>
-          </div>
-          <div className="sidebar-actions">
-            <button onClick={() => void backup.saveWorkspaceBackup()} title="Save a workspace backup"><Download size={15} /> Backup</button>
-            <button onClick={() => void backup.restoreFromPicker(backupInput.current)} title="Restore from backup"><Import size={15} /> Restore</button>
-          </div>
-          <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={(event) => void backup.openBackup(event.target.files?.[0], event.currentTarget)} />
-        </div>
-      </>}
-      {sidebarCollapsed && <div className="collapsed-nav"><button title="Workspace" onClick={() => { setView('workspace'); setActiveProject(null); setSelectedFolder(null); setActiveTabId(null); }}><LayoutGrid size={18} /></button><button title="Recent" onClick={() => { setView('recent'); setActiveTabId(null); }}><Clock3 size={18} /></button><button title="Trash" onClick={() => { setView('trash'); setActiveTabId(null); }}><Trash2 size={18} /></button><button title="New project" onClick={() => void createProject()}><Plus size={18} /></button></div>}
-    </aside>
-
+    <Sidebar
+      data={{ collapsed: sidebarCollapsed, view, activeProjectId: activeProject, liveFileCount: liveFiles.length, trashCount: trashedFiles.length, cpu: systemStats.cpu, ram: systemStats.ram, gpu: systemStats.gpu, storedBytes }}
+      actions={{
+        onToggleCollapsed: () => setSidebarCollapsed((value) => !value),
+        onNavigate: (nextView) => { setView(nextView); if (nextView === 'workspace') { setActiveProject(null); setSelectedFolder(null); } setActiveTabId(null); },
+        onCreateProject: () => void createProject(),
+        onSaveBackup: () => void backup.saveWorkspaceBackup(),
+        onRestoreBackup: (input) => void backup.restoreFromPicker(input),
+        onBackupFileChange: (event) => void backup.openBackup(event.target.files?.[0], event.currentTarget),
+      }}
+    >
+      <ProjectTree
+        data={{ folders, files: liveFiles, projects, workspaceId: activeWorkspaceId, activeProjectId: activeProject, selectedFolderId: selectedFolder, activeTabId, expandedIds: expanded }}
+        actions={{
+          onContextMenu: showContextMenu,
+          onDrop: handleDrop,
+          onSelectFolder: (folderId, projectId) => { setSelectedFolder(folderId); setActiveProject(projectId); setView('workspace'); setActiveTabId(null); },
+          onSelectProject: (projectId) => { setActiveProject((current) => current === projectId ? null : projectId); setSelectedFolder(null); setView('workspace'); setActiveTabId(null); },
+          onOpenFile: (file) => void openFile(file),
+          onToggleFolder: (id) => setExpanded((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }),
+          onCreateNote: () => void createNewFile('markdown'),
+        }}
+      />
+    </Sidebar>
     <main className="main-area">
       <header className="topbar">
         <div className="workspace-switcher" ref={workspaceMenuRef}>
@@ -864,8 +611,8 @@ export default function App() {
             <button className="primary-button import-button" aria-expanded={importMenuOpen} onClick={() => setImportMenuOpen((open) => !open)}><Import size={15} /> Import <ChevronDown size={13} /></button>
             {importMenuOpen && <div className="import-menu">
               <div className="menu-heading">ADD TO {selectedFolder ? 'FOLDER' : activeProjectRecord?.name?.toLocaleUpperCase() ?? 'WORKSPACE'}</div>
-              <button onClick={() => { setImportMenuOpen(false); startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }); }}><FileText size={15} /><span>Import files</span></button>
-              <button onClick={() => { setImportMenuOpen(false); startImportFolderInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }); }}><FolderPlus size={15} /><span>Import folder</span></button>
+              <button onClick={() => { setImportMenuOpen(false); startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }); }}><FileText size={15} /><span>Import files</span></button>
+              <button onClick={() => { setImportMenuOpen(false); startImportFolderInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }); }}><FolderPlus size={15} /><span>Import folder</span></button>
               <div className="switch-menu-separator" />
               <button onClick={() => { setImportMenuOpen(false); void createFolderInCurrent(); }}><FolderPlus size={15} /><span>New folder</span></button>
               <button onClick={() => { setImportMenuOpen(false); void createWorkspaceFile('markdown'); }}><FilePlus2 size={15} /><span>New note</span></button>
@@ -886,10 +633,10 @@ export default function App() {
         </section>
       </div>}
 
-      <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
-      <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID }; void handleFolderImport(event.target.files, target); }} />
+      <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
+      <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleFolderImport(event.target.files, target); }} />
 
-      {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
+      <ErrorBanner message={error} onDismiss={() => setError('')} />
 
       {activeTab ? <div ref={editorWorkspaceRef} className="editor-workspace">
         <div className="tab-strip">
@@ -899,19 +646,19 @@ export default function App() {
               <span role="button" tabIndex={0} className="tab-close" aria-label={`Close ${tab.meta.name}`} onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.stopPropagation(); closeTab(tab.id); } }}><X size={14} /></span>
             </button>)}
           </div>
-          <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Plus size={16} /></button>
+          <button className="icon-button tab-plus" title="Import a file" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}><Plus size={16} /></button>
         </div>
         <div className="editor-titlebar">
-          <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? projects.find((project) => project.id === activeTab.meta.projectId)?.name : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
+          <div className="editor-file-title">{<FileKindIcon kind={activeTab.meta.kind} size={16} />}<b title={activeTab.meta.name}>{activeTab.meta.name}</b><span className="title-location" title={`${activeTab.meta.projectId ? getProjectName(activeTab.meta.projectId) : 'Workspace'}${activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}`}>{activeTab.meta.projectId ? getProjectName(activeTab.meta.projectId) : 'Workspace'}{activeTab.meta.parentFolderId ? ` / ${folders.find((folder) => folder.id === activeTab.meta.parentFolderId)?.name ?? ''}` : ''}</span></div>
           <div className="editor-tools">
-            {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
+            {isEditableKind(activeTab.meta.kind) && <div className="editor-font-controls" title="Editor text size"><button className="icon-button" aria-label="Decrease editor text size" title="Decrease editor text size" onClick={() => setEditorFontSize((value) => Math.max(11, value - 1))}><ZoomOut size={14} /></button><span>{editorFontSize}px</span><button className="icon-button" aria-label="Increase editor text size" title="Increase editor text size" onClick={() => setEditorFontSize((value) => Math.min(24, value + 1))}><ZoomIn size={14} /></button></div>}
             {activeTab.meta.kind === 'markdown' && <button className={`text-button ${activeTab.preview ? 'selected' : ''}`} onClick={() => {
               const preview = !activeTab.preview;
               const editorState = { anchor: activeTab.editorState?.anchor ?? 0, head: activeTab.editorState?.head ?? 0, scrollTop: activeTab.editorState?.scrollTop ?? 0, scrollLeft: activeTab.editorState?.scrollLeft ?? 0, preview };
               setTabs((current) => current.map((tab) => tab.id === activeTabId ? { ...tab, preview, editorState } : tab));
               void db.preferences.put({ key: `editor:${activeTab.id}`, value: editorState, updatedAt: Date.now() }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not save editor view state.'));
             }}>{activeTab.preview ? 'Edit note' : 'Preview'}</button>}
-            {(activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown') && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
+            {isEditableKind(activeTab.meta.kind) && <button className="text-button" title="Save changes (Ctrl+S)" disabled={!activeTab.dirty} onClick={() => void persistDraft(activeTab.id, activeTab.draft).catch(() => undefined)}><Save size={14} /> Save</button>}
             <button className="icon-button" title="Rename" onClick={() => void renameItem(activeTab.meta)}><Pencil size={15} /></button>
             <button className="icon-button" title="Move to trash" onClick={() => void deleteFile(activeTab.meta)}><Trash2 size={15} /></button>
             <button className="icon-button" title={focusMode ? 'Exit focus view' : 'Maximize file'} onClick={() => setFocusMode((value) => !value)}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
@@ -926,7 +673,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {activeTab.meta.kind === 'pdf' || activeTab.meta.kind === 'viewer' ? null : activeTab.meta.kind === 'code' || activeTab.meta.kind === 'text' || activeTab.meta.kind === 'markdown' ? (
+        {activeTab.meta.kind === 'pdf' || activeTab.meta.kind === 'viewer' ? null : isEditableKind(activeTab.meta.kind) ? (
           <WorkspaceEditor
             kind={activeTab.meta.kind}
             name={activeTab.meta.name}
@@ -958,18 +705,10 @@ export default function App() {
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
         {workspaceTabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{workspaceTabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
-        {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <div className="welcome-page">
-          <div className="welcome-kicker"><Sparkles size={15} /> LOCAL ENGINEERING WORKSPACE</div>
-          <h1>Your work, in one place.</h1>
-          <p>Keep technical notes, PDFs and source files organized on this device.</p>
-          <div className="welcome-actions"><button className="primary-button large" onClick={() => void createProject()}><Plus size={17} /> Create a project</button><button className="text-button large" onClick={() => startImportInto({ folderId: null, projectId: null, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={16} /> Import files</button></div>
-          <div className="feature-grid">
-            <button className="feature-card" onClick={() => void createWorkspaceFile('markdown')}><div className="feature-icon note"><BookOpen size={18} /></div><b>Technical notes</b><span>Markdown with math and diagrams</span><Plus size={15} className="feature-plus" /></button>
-            <button className="feature-card" onClick={() => void createWorkspaceFile('code')}><div className="feature-icon code"><Code2 size={18} /></div><b>Source files</b><span>Write and save code locally</span><Plus size={15} className="feature-plus" /></button>
-            <button className="feature-card" onClick={() => startImportInto({ folderId: null, projectId: null, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><div className="feature-icon pdf"><FileText size={18} /></div><b>Reference PDFs</b><span>Read and search your documents</span><Plus size={15} className="feature-plus" /></button>
-          </div>
+        {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <>
+          <WelcomePage onCreateProject={() => void createProject()} onImportFiles={() => startImportInto({ folderId: null, projectId: null, workspaceId: currentWorkspaceId })} onCreateNote={() => void createWorkspaceFile('markdown')} onCreateCodeFile={() => void createWorkspaceFile('code')} />
           <div className="privacy-note"><HardDrive size={15} /> Your files stay in this browser on this device.</div>
-        </div> : <div className="file-area" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
+        </> : <div className="file-area" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
           {view === 'workspace' && !activeProject && !selectedFolder && (activeProjects.length > 0 || generalRootFolders.length > 0) && <section className="workspace-overview">
             <div className="workspace-overview-heading"><div><span>YOUR WORKSPACE</span><h1>Projects and folders</h1><p>Choose a project to open its own files, or browse general workspace files below.</p></div><button className="outline-button" onClick={() => void createProject()}><Plus size={14} /> New project</button></div>
             {activeProjects.length > 0 && <><h2>Projects</h2><div className="overview-card-grid">{activeProjects.map((project) => <button className="overview-card" key={project.id} onClick={() => void switchProject(project.id)}><span className="overview-card-icon project-card-icon"><Layers size={17} /></span><b>{project.name}</b><small>{liveFiles.filter((file) => file.projectId === project.id).length} files · {folders.filter((folder) => folder.projectId === project.id).length} folders</small><ChevronRight size={15} className="overview-card-arrow" /></button>)}</div></>}
@@ -978,7 +717,7 @@ export default function App() {
           <div className="file-list-scroll">
             {view === 'workspace' && currentFolders.length > 0 && <>
               {selectedFolder && <div className="folder-contents-heading"><Folder size={14} /> Folders</div>}
-              {currentFolders.sort((a, b) => a.name.localeCompare(b.name)).map((folder) => <div className="file-list-row folder-list-row" key={folder.id} draggable onContextMenu={(event) => showContextMenu('folder', folder.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: folder.id, type: 'folder' }))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.id, folder.projectId, folder.workspaceId)}>
+              {currentFolders.sort((a, b) => a.name.localeCompare(b.name)).map((folder) => <div className="file-list-row folder-list-row" key={folder.id} draggable onContextMenu={(event) => showContextMenu('folder', folder.id, event)} onDragStart={(event) => writeDragPayload(event.dataTransfer, { id: folder.id, type: 'folder' })} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, folder.id, folder.projectId, folder.workspaceId)}>
                 <button className="file-name-button" onClick={() => { setSelectedFolder(folder.id); setActiveTabId(null); }}><Folder size={17} className="folder-icon" /><span>{folder.name}</span><small>Folder</small></button><span className="kind-cell">Folder</span><span className="size-cell">—</span><span className="date-cell">{new Date(folder.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Folder actions" onClick={(event) => showContextMenu('folder', folder.id, event)}><Ellipsis size={16} /></button>
               </div>)}
             </>}
@@ -988,9 +727,9 @@ export default function App() {
             {view === 'trash' ? sortedVisible.length === 0 ? <EmptyState title="Trash is empty" message="Files you delete will appear here until you permanently remove them." icon={<Trash2 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
               <button className="file-name-button" onClick={() => void restoreFile(db, file.id).then(refresh)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>Deleted {new Date(file.deletedAt!).toLocaleDateString()}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Restore" onClick={() => void restoreFile(db, file.id).then(refresh)}><Archive size={15} /></button>
             </div>) : view === 'recent' ? sortedVisible.length === 0 ? <EmptyState title="No recent files" message="Open a file or import one to start building your workspace." icon={<Clock3 size={20} />} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id}>
-              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
-            </div>) : sortedVisible.length === 0 && currentFolders.length === 0 && !(view === 'workspace' && !activeProject && activeProjects.length > 0) ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: activeWorkspaceId ?? DEFAULT_WORKSPACE_ID })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => event.dataTransfer.setData('application/x-workbench-item', JSON.stringify({ id: file.id, type: 'file' }))}>
-              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? projects.find((project) => project.id === file.projectId)?.name : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
+              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{getProjectName(file.projectId) ?? 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="Move to trash" onClick={() => void deleteFile(file)}><Trash2 size={15} /></button>
+            </div>) : sortedVisible.length === 0 && currentFolders.length === 0 && !(view === 'workspace' && !activeProject && activeProjects.length > 0) ? <EmptyState title={selectedFolder ? 'This folder is empty' : activeProjectRecord ? 'This project is empty' : 'Workspace is empty'} message="Create a note or file, or drag something in from your computer." icon={<FolderTree size={21} />} action={<><button className="primary-button" onClick={() => void createWorkspaceFile('markdown')}><FilePlus2 size={15} /> New note</button><button className="text-button" onClick={() => startImportInto({ folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId })}><Import size={15} /> Import</button></>} /> : sortedVisible.map((file) => <div className="file-list-row" key={file.id} draggable onContextMenu={(event) => showContextMenu('file', file.id, event)} onDragStart={(event) => writeDragPayload(event.dataTransfer, { id: file.id, type: 'file' })}>
+              <button className="file-name-button" onClick={() => void openFile(file)}>{<FileKindIcon kind={file.kind} size={17} />}<span>{file.name}</span><small>{file.projectId ? getProjectName(file.projectId) : 'Workspace'}</small></button><span className="kind-cell">{file.kind}</span><span className="size-cell">{formatSize(file.size)}</span><span className="date-cell">{new Date(file.updatedAt).toLocaleDateString()}</span><button className="row-action" title="File actions" onClick={(event) => showContextMenu('file', file.id, event)}><Ellipsis size={16} /></button>
             </div>)}
             {view === 'workspace' && <div className="root-drop-hint"><Import size={14} /> Drop files here to import them into {selectedFolder ? 'this folder' : activeProjectRecord?.name ?? 'the workspace'}</div>}
           </div>
@@ -1006,9 +745,9 @@ export default function App() {
         <div className="details-tip"><Bookmark size={15} /> Make regular backups to keep a copy of your workspace.</div><button className="outline-button full-width" onClick={() => void backup.saveWorkspaceBackup()}><Download size={15} /> Save backup</button>
       </div> : <div className="search-results-panel">
         {!query.trim() ? <div className="search-placeholder"><Search size={22} /><b>Search your workspace</b><span>Search file names and folder names, plus text in notes and code.</span></div> : searchResults.length === 0 && folderSearchResults.length === 0 ? <div className="search-placeholder"><Search size={22} /><b>No results found</b><span>Searching file names and folders. Try a different word or phrase.</span></div> : <>
-        {folderSearchResults.map((folder) => <button className="search-result" key={`folder-${folder.id}`} onClick={() => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); }}><span className="search-result-title"><Folder size={15} /><b>{folder.name}</b></span><span className="search-result-location">Folder · {projects.find((project) => project.id === folder.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">Open folder</span></button>)}
+        {folderSearchResults.map((folder) => <button className="search-result" key={`folder-${folder.id}`} onClick={() => { setSelectedFolder(folder.id); setActiveProject(folder.projectId); setView('workspace'); setRightPanel(null); setSearchPopupOpen(false); }}><span className="search-result-title"><Folder size={15} /><b>{folder.name}</b></span><span className="search-result-location">Folder · {getProjectName(folder.projectId) ?? 'Workspace'}</span><span className="search-result-snippet">Open folder</span></button>)}
         {searchResults.map(({ file, text }) => <button className="search-result" key={file.id} onClick={() => { void openFile(file); setSearchPopupOpen(false); }}>
-          <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{projects.find((project) => project.id === file.projectId)?.name ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
+          <span className="search-result-title">{<FileKindIcon kind={file.kind} size={15} />}<b>{file.name}</b></span><span className="search-result-location">{getProjectName(file.projectId) ?? 'Workspace'}</span><span className="search-result-snippet">{text.slice(Math.max(0, text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) - 42), text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 100) || file.name}</span>
         </button>)}
         {query.trim() && (searchResults.length > 0 || folderSearchResults.length > 0) && <div className="search-count">{searchResults.length} file{searchResults.length === 1 ? '' : 's'} · {folderSearchResults.length} folder{folderSearchResults.length === 1 ? '' : 's'}</div>}
         </>}
@@ -1016,49 +755,18 @@ export default function App() {
     </aside>}
 
     {contextMenu && <div ref={contextMenuRef} className="item-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>
-      <div className="context-menu-title">{contextMenu.type === 'file' ? files.find((file) => file.id === contextMenu.id)?.name : contextMenu.type === 'folder' ? folders.find((folder) => folder.id === contextMenu.id)?.name : projects.find((project) => project.id === contextMenu.id)?.name}</div>
-      <button onClick={() => void runContextAction('open')}><ExternalLink size={15} /><span>{contextMenu.type === 'file' ? 'Open' : contextMenu.type === 'folder' ? 'Open folder' : 'Switch to workspace'}</span></button>
-      <button onClick={() => void runContextAction('rename')}><Pencil size={15} /><span>Rename</span></button>
-      {contextMenu.type !== 'project' && <button onClick={() => void runContextAction('move')}><MoveRight size={15} /><span>Move to…</span></button>}
-      {contextMenu.type !== 'file' && <button onClick={() => void runContextAction('import')}><Import size={15} /><span>Import files here…</span></button>}
-      {contextMenu.type !== 'file' && <button onClick={() => void runContextAction('import-folder')}><FolderPlus size={15} /><span>Import folder here…</span></button>}
-      <div className="context-separator" />
-      <button className="context-danger" onClick={() => void runContextAction('delete')}><Trash2 size={15} /><span>{contextMenu.type === 'file' ? 'Move to Trash' : contextMenu.type === 'folder' ? 'Delete folder' : 'Delete project'}</span></button>
+      <ItemContextMenu type={contextMenu.type} name={contextMenu.type === 'file' ? files.find((file) => file.id === contextMenu.id)?.name ?? '' : contextMenu.type === 'folder' ? folders.find((folder) => folder.id === contextMenu.id)?.name ?? '' : projects.find((project) => project.id === contextMenu.id)?.name ?? ''} onAction={(action) => void runContextAction(action)} />
     </div>}
 
-    {moveDialog && <div className="modal-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setMoveDialog(null); }}>
-      <section className="move-dialog" role="dialog" aria-modal="true" aria-labelledby="move-title">
-        <div className="move-dialog-header"><div><div className="modal-eyebrow">MOVE ITEM</div><h2 id="move-title">Move “{moveDialog.name}”</h2></div><button className="icon-button" onClick={() => setMoveDialog(null)} aria-label="Close"><X size={17} /></button></div>
-        <p className="move-dialog-copy">Choose a workspace, project, or folder as the destination.</p>
-        <div className="destination-list">
-          {moveDestinations.map((destination) => <button key={destination.key} className="destination-option" onClick={() => void moveItemTo({ folderId: destination.folderId, projectId: destination.projectId, workspaceId: destination.workspaceId })}>
-            {destination.folderId ? <Folder size={16} /> : <Layers size={16} />}<span><b>{destination.label}</b><small>{destination.detail}</small></span><ChevronRight size={15} />
-          </button>)}
-          {moveDestinations.length === 1 && <div className="destination-empty">Create a project or folder to add more destinations.</div>}
-        </div>
-        <div className="move-dialog-footer"><button className="text-button" onClick={() => setMoveDialog(null)}>Cancel</button></div>
-      </section>
-    </div>}
+    {moveDialog && <MoveDialog itemName={moveDialog.name} destinations={moveDestinations} onClose={() => setMoveDialog(null)} onMove={(target) => void moveItemTo(target)} />}
 
     <WorkspaceDialog dialog={dialog} onClose={() => setDialog(null)} onSubmit={() => void submitDialog()} onChange={(value) => setDialog((current) => current ? { ...current, value } : current)} />
 
-    {migrationBackup && <div className="modal-backdrop upgrade-backdrop">
-      <section className="move-dialog upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-title">
-        <div className="upgrade-mark"><HardDrive size={21} /></div>
-        <div className="modal-eyebrow">SAFE WORKSPACE UPDATE</div>
-        <h2 id="upgrade-title">Back up before we continue</h2>
-        <p className="move-dialog-copy">This update adds separate workspaces and keeps your theme and PDF reading positions. Before the database changes, a full backup of your files, folders, projects, and settings will download.</p>
-        {migrationError && <div className="inline-error">The update did not finish: {migrationError}. Your old database is left in place; you can retry after saving the downloaded backup.</div>}
-        <button className="primary-button upgrade-button" disabled={upgrading} onClick={() => void downloadMigrationBackupAndUpgrade()}>{upgrading ? <><span className="spinner" /> Updating…</> : <><Download size={15} /> {isDesktopApp() ? 'Download backup & continue' : 'Download backup (desktop required)'}</>}</button>
-      </section>
-    </div>}
+    {migrationBackup && <MigrationDialog error={migrationError} upgrading={upgrading} desktopApp={isDesktopApp()} onUpgrade={() => void downloadMigrationBackupAndUpgrade()} />}
 
     <UpdateManager />
-    {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
-    {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
+    {loading && <StartupScreen />}
+    {importing && <BusyPill label="Importing files…" />}
   </div></div>;
 }
 
-function EmptyState({ title, message, icon, action }: { title: string; message: string; icon: ReactNode; action?: ReactNode }) {
-  return <div className="empty-state"><div className="empty-icon">{icon}</div><h2>{title}</h2><p>{message}</p>{action && <div className="empty-actions">{action}</div>}</div>;
-}
