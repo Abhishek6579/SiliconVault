@@ -75,9 +75,15 @@ export default function WorkspaceEditor({
     }
     const searchable = combined.toLocaleLowerCase();
     if (previewOffsetRef.current.query !== needle) previewOffsetRef.current = { query: needle, offset: -1 };
-    const from = direction > 0 ? previewOffsetRef.current.offset + 1 : Math.max(0, previewOffsetRef.current.offset - 1);
-    let offset = direction > 0 ? searchable.indexOf(needle, from) : searchable.lastIndexOf(needle, from);
-    if (offset < 0) offset = direction > 0 ? searchable.indexOf(needle) : searchable.lastIndexOf(needle);
+    const cursorOffset = previewOffsetRef.current.offset;
+    let offset: number;
+    if (direction > 0) {
+      offset = searchable.indexOf(needle, cursorOffset + 1);
+      if (offset < 0) offset = searchable.indexOf(needle);
+    } else {
+      offset = cursorOffset < 0 ? -1 : searchable.lastIndexOf(needle, cursorOffset - 1);
+      if (offset < 0) offset = searchable.lastIndexOf(needle);
+    }
     if (offset < 0) return;
     const locate = (position: number) => segments.find(segment => position >= segment.start && position < segment.end);
     const start = locate(offset), end = locate(offset + needle.length - 1);
