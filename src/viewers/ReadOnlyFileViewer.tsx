@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
+import { extractOfficeText } from './officeDocument';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
 
@@ -21,10 +22,16 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
+  const isOffice = ['docx', 'docm', 'pptx', 'pptm'].includes(ext);
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [officeText, setOfficeText] = useState('');
+  const [officeLoading, setOfficeLoading] = useState(false);
+  const [officeError, setOfficeError] = useState('');
+  const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
+  const officeContentRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     setError(''); setText(''); setUrl(''); setZoom(1);
@@ -41,6 +48,25 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     return () => { active = false; };
   }, [data, isImage, isTextPreview]);
 
+  useEffect(() => {
+    if (!isOffice) return;
+    let active = true;
+    setOfficeText('');
+    setOfficeError('');
+    setOfficeLoading(true);
+    setCopied(null);
+    if (!(data instanceof Blob)) {
+      setOfficeError('The Office document data is unavailable.');
+      setOfficeLoading(false);
+      return;
+    }
+    extractOfficeText(data, ext)
+      .then((value) => { if (active) setOfficeText(value); })
+      .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
+      .finally(() => { if (active) setOfficeLoading(false); });
+    return () => { active = false; };
+  }, [data, ext, isOffice]);
+
   const table = useMemo(() => ['csv', 'tsv'].includes(ext) ? rowsFrom(text, ext === 'tsv' ? '\t' : ',') : [], [ext, text]);
   const signals = useMemo(() => ext === 'vcd' ? [...text.matchAll(/^\s*\$var\s+\S+\s+(\d+)\s+(\S+)\s+(.+?)\s+\$end/gm)].slice(0, 500) : [], [ext, text]);
   const zoomIn = () => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 100) / 100));
@@ -50,6 +76,18 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomIn(); }
     else if (event.key === '-') { event.preventDefault(); zoomOut(); }
     else if (event.key === '0') { event.preventDefault(); setZoom(1); }
+  };
+  const copyOfficeText = async (selectionOnly: boolean) => {
+    const selected = window.getSelection()?.toString().trim() ?? '';
+    const selection = selected && officeContentRef.current?.contains(window.getSelection()?.anchorNode ?? null) ? selected : '';
+    const value = selectionOnly && selection ? selection : officeText;
+    if (!value || officeLoading) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(selectionOnly && selection ? 'selection' : 'all');
+    } catch {
+      setOfficeError('Clipboard access was blocked. Select the text and use Ctrl+C / Cmd+C instead.');
+    }
   };
   const controls = <div className="viewer-zoom-controls" role="toolbar" aria-label="Viewer zoom controls">
     <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out (Ctrl+-)" onClick={zoomOut} disabled={zoom <= 0.4}><ZoomOut size={15} /></button>
@@ -65,6 +103,17 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     </div></div>
   </div>;
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
+  if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
+    {controls}
+    <div className="office-viewer-toolbar">
+      <span>Read-only {ext.startsWith('ppt') ? 'slide text' : 'document text'} · Original file is unchanged</span>
+      <div>
+        <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(true)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'selection' ? <><Check size={13} /> Copied selection</> : 'Copy selection'}</button>
+        <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(false)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'all' ? <><Check size={13} /> Copied all</> : 'Copy all text'}</button>
+      </div>
+    </div>
+    {officeLoading ? <div className="loading-state">Extracting document text…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <pre ref={officeContentRef} className="office-document-content" style={{ zoom }}>{officeText}</pre>}
+  </div>;
   if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
     <div className="viewer-table-scroll"><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
@@ -77,7 +126,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       <p className="viewer-note">Signal metadata is shown here. Interactive timing traces are not part of this initial viewer.</p>
     </div>
   </div>;
-  if (['doc', 'docx', 'pptx', 'xlsx', 'fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>This format is recognized, but its dedicated binary/document renderer is not bundled yet. The original file remains stored unchanged.</p><span>Read-only · {mimeType}</span></div>;
+  if (['doc', 'ppt', 'xlsx', 'fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
   return <div className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
     <pre style={{ zoom }}>{text || 'No text content.'}</pre>
