@@ -61,7 +61,7 @@ export default function WorkspaceEditor({
     const needle = query.trim();
     if (!view || !view.dom.isConnected || !needle) return;
     if (restart) findPositionRef.current = 0;
-    let result: ReturnType<SearchCursor['next']>;
+    let result: ReturnType<SearchCursor['next']> | undefined;
     if (direction > 0) {
       const start = Math.min(view.state.doc.length, findPositionRef.current);
       result = new SearchCursor(view.state.doc, needle, start, undefined, { caseSensitive: false }).next();
