@@ -7,11 +7,12 @@ type FocusedSurface = 'pdf' | 'editor' | 'document' | null;
 interface GlobalSearchShortcutOptions {
   lastFocusedSurfaceRef: MutableRefObject<FocusedSurface>;
   editorViewRef: MutableRefObject<EditorView | null>;
+  activeTabId: string | null;
   setSearchPopupOpen: Dispatch<SetStateAction<boolean>>;
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
 }
 
-export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
+export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, activeTabId, setSearchPopupOpen, setRightPanel }: GlobalSearchShortcutOptions) {
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -39,7 +40,7 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
         : lastFocusedSurfaceRef.current;
       if (key === 'f') {
         if (focusedSurface === 'pdf') {
-          window.dispatchEvent(new Event('siliconvault:open-file-search'));
+          window.dispatchEvent(new CustomEvent('siliconvault:open-file-search', { detail: { tabId: activeTabId } }));
           return;
         }
         if (focusedSurface === 'editor') {
@@ -47,7 +48,7 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
           if (view?.dom.isConnected) { openSearchPanel(view); return; }
         }
         if (focusedSurface === 'document') {
-          window.dispatchEvent(new Event('siliconvault:open-document-search'));
+          window.dispatchEvent(new CustomEvent('siliconvault:open-document-search', { detail: { tabId: activeTabId } }));
           return;
         }
       }
@@ -60,5 +61,5 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       document.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('keydown', handleShortcut, true);
     };
-  }, [lastFocusedSurfaceRef, editorViewRef, setRightPanel, setSearchPopupOpen]);
+  }, [lastFocusedSurfaceRef, editorViewRef, activeTabId, setRightPanel, setSearchPopupOpen]);
 }
