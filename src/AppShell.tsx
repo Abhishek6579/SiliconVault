@@ -31,6 +31,7 @@ import { useWorkspaceTabs } from './features/tabs/hooks/useWorkspaceTabs';
 import { useTabLifecycle } from './features/tabs/hooks/useTabLifecycle';
 import TabStrip from './features/tabs/components/TabStrip';
 import EditorTitlebar from './features/tabs/components/EditorTitlebar';
+import BackgroundTabStrip from './features/tabs/components/BackgroundTabStrip';
 import WorkspaceEditor from './features/editor/components/WorkspaceEditor';
 import { isEditableKind } from './shared/constants/fileKinds';
 import { getExcludedFolderIds, getMoveDestinations, selectVisibleFiles } from './features/workspace/selectors/destinations';
@@ -417,7 +418,7 @@ export default function AppShell() {
         ))}
         <footer className="editor-footer"><span>{activeTab.meta.kind === 'code' ? 'Code editor' : activeTab.meta.kind === 'text' ? 'Text editor' : activeTab.meta.kind === 'viewer' ? 'Read-only viewer' : activeTab.meta.kind === 'markdown' ? 'Markdown' : activeTab.meta.kind === 'pdf' ? 'PDF document' : 'File'}{activeTab.dirty ? ' · Unsaved changes' : ''}</span><span>{formatSize(activeTab.meta.size)}</span></footer>
       </div> : <div className="workspace-body" onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleDrop(event, selectedFolder)}>
-        {workspaceTabs.length > 0 && <div className="background-tab-strip"><span>OPEN TABS</span>{workspaceTabs.map((tab) => <button key={tab.id} className={`background-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>{<FileKindIcon kind={tab.meta.kind} size={14} />}<span>{tab.meta.name}</span>{tab.dirty && <i className="dirty-dot" />}<span className="background-tab-close" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }}><X size={12} /></span></button>)}</div>}
+        <BackgroundTabStrip tabs={workspaceTabs} activeTabId={activeTabId} onOpen={(tab) => void openFile(tab.meta)} onClose={closeTab} />
         {view === 'workspace' && !activeProject && !selectedFolder && !workspaceHasContent ? <>
           <WelcomePage onCreateProject={() => void createProject()} onImportFiles={() => startImportInto({ folderId: null, projectId: null, workspaceId: currentWorkspaceId })} onCreateNote={() => void createWorkspaceFile('markdown')} onCreateCodeFile={() => void createWorkspaceFile('code')} />
           <div className="privacy-note"><HardDrive size={15} /> Your files stay in this browser on this device.</div>
