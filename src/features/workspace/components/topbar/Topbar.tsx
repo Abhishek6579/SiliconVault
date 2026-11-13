@@ -21,14 +21,14 @@ interface SwitcherActions {
 interface ActionsData {
   view: View; selectedFolder: string | null; activeProjectRecord: Project | null; activeProject: string | null;
   currentWorkspaceId: string; importMenuOpen: boolean; importMenuRef: RefObject<HTMLDivElement | null>;
-  darkTheme: boolean; status: string;
+  darkTheme: boolean; status: string; searchOpen: boolean; query: string; searchInputRef: RefObject<HTMLInputElement | null>;
 }
 interface Actions {
   setImportMenuOpen: Dispatch<SetStateAction<boolean>>;
   startImportInto: (target: { folderId: string | null; projectId: string | null; workspaceId: string }) => void;
   startImportFolderInto: (target: { folderId: string | null; projectId: string | null; workspaceId: string }) => void;
   createFolderInCurrent: () => void; createWorkspaceFile: (kind: 'markdown' | 'code') => Promise<void>;
-  setSearchPopupOpen: Dispatch<SetStateAction<boolean>>;
+  setSearchPopupOpen: Dispatch<SetStateAction<boolean>>; setQuery: Dispatch<SetStateAction<string>>;
   setRightPanel: Dispatch<SetStateAction<'details' | 'search' | null>>;
   toggleTheme: () => Promise<void>; setDetailsOpen: () => void;
 }
