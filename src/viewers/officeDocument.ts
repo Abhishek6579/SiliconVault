@@ -216,7 +216,7 @@ function parseOfficeRun(run: Element): OfficeRun {
 
 function parseOfficeParagraph(paragraph: Element): OfficeBlock {
   const properties = Array.from(paragraph.children).find((child) => child.localName === 'pPr') ?? null;
-  const styleName = properties && Array.from(properties.children).find((child) => child.localName === 'pStyle')?.getAttribute('val') ?? undefined;
+  const styleName = properties ? Array.from(properties.children).find((child) => child.localName === 'pStyle')?.getAttribute('val') ?? undefined : undefined;
   const alignmentValue = properties && Array.from(properties.children).find((child) => child.localName === 'jc')?.getAttribute('val');
   const indentation = properties && Array.from(properties.children).find((child) => child.localName === 'ind');
   const spacing = properties && Array.from(properties.children).find((child) => child.localName === 'spacing');
