@@ -11,7 +11,7 @@ interface Options {
   workspaceTabs: Tab[];
   activeTabId: string | null;
   switchWorkspace: (id: string) => Promise<void>;
-  restoreWorkspaceTabs: (id: string) => Promise<void>;
+  restoreWorkspaceTabs: (id: string) => Promise<unknown>;
   setActiveProject: Dispatch<SetStateAction<string | null>>;
   setSelectedFolder: Dispatch<SetStateAction<string | null>>;
   setActiveTabId: Dispatch<SetStateAction<string | null>>;
