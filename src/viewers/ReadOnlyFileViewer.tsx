@@ -125,12 +125,15 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
       onStateChange(tabId, latestState.current);
     }, 160);
   };
-  useEffect(() => {
+  const restoreScrollPosition = () => {
     const scrollHost = rootRef.current?.querySelector<HTMLElement>('[data-viewer-scroll]');
     if (scrollHost) {
       scrollHost.scrollTop = initialState?.scrollTop ?? 0;
       scrollHost.scrollLeft = initialState?.scrollLeft ?? 0;
     }
+  };
+  useEffect(() => {
+    restoreScrollPosition();
     return () => {
       if (stateTimer.current !== null) {
         window.clearTimeout(stateTimer.current);
@@ -139,6 +142,9 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
       }
     };
   }, [tabId]);
+  useEffect(() => {
+    if (text) restoreScrollPosition();
+  }, [text, tabId]);
   const applyZoom = (next: number) => {
     const bounded = Math.max(.4, Math.min(4, Math.round(next * 100) / 100));
     setZoom(bounded);
@@ -171,7 +177,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
   if (isImage) return <div ref={rootRef} className="file-viewer image-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}
     <div className="image-viewer-viewport" data-viewer-scroll onScroll={handleScroll}><div className="image-viewer-content" style={{ width: `${zoom * 100}%` }}>
-      {url ? <img src={url} alt={fileName} /> : <div className="loading-state">Loading image…</div>}
+      {url ? <img src={url} alt={fileName} onLoad={restoreScrollPosition} /> : <div className="loading-state">Loading image…</div>}
     </div></div>
   </div>;
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
@@ -184,7 +190,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
               <div><span>Read-only {ext.startsWith('ppt') ? 'presentation' : ext.startsWith('xls') ? 'workbook' : 'document'} preview</span><span>Rendered locally · No document upload</span></div>
             </div>
             {data instanceof Blob
-              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
+              ? <OfficeOoxmlViewer key={`${tabId}-${ext}`} data={data} extension={ext} zoom={zoom} initialScrollTop={initialState?.scrollTop ?? 0} initialScrollLeft={initialState?.scrollLeft ?? 0} onStateChange={(next) => { setZoom(next); emitViewState({ zoom: next }); }} onScrollStateChange={(scrollTop, scrollLeft) => emitViewState({ scrollTop, scrollLeft })} onError={handleOfficeRenderError} />
               : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>The Office document data is unavailable.</p></div>}
           </>
         : officeLoading
@@ -195,7 +201,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
     <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
   </div>;
-  if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" data-viewer-scroll tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
     {controls}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
