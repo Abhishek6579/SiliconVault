@@ -51,9 +51,10 @@ fn emit_pending_release_notes(app: &AppHandle) {
     let Ok(contents) = fs::read(&path) else { return; };
     let Ok(info) = serde_json::from_slice::<UpdateInfo>(&contents) else { return; };
 
-    // Consume the file so release notes are shown once, not on every update check.
-    if fs::remove_file(&path).is_ok() {
-        let _ = app.emit(RELEASE_NOTES_EVENT, info);
+    // Keep the file if event delivery fails so the notes can be retried on
+    // the next update check instead of being silently discarded.
+    if app.emit(RELEASE_NOTES_EVENT, info).is_ok() {
+        let _ = fs::remove_file(&path);
     }
 }
 
