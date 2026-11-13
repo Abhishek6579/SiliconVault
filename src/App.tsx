@@ -286,6 +286,10 @@ export default function App() {
           window.dispatchEvent(new Event('siliconvault:open-file-search'));
         } else if (event.key.toLowerCase() === 'f' && editorFocused && editorViewRef.current) {
           openSearchPanel(editorViewRef.current);
+          window.setTimeout(() => {
+            const searchField = document.querySelector<HTMLInputElement>('.cm-search input');
+            if (searchField) searchField.placeholder = 'Find in current file…';
+          }, 0);
         } else {
           setSearchPopupOpen(true);
           setRightPanel('search');
@@ -931,8 +935,8 @@ export default function App() {
 
       {searchPopupOpen && <div className="search-popup-backdrop" onPointerDown={(event) => { if (event.target === event.currentTarget) setSearchPopupOpen(false); }}>
         <section className="search-popup" role="dialog" aria-modal="true" aria-label="Search files and folders">
-          <div className="search-popup-input"><Search size={17} /><input ref={searchInputRef} value={query} placeholder="Search file names and folders…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchPopupOpen(false); if (event.key === 'Enter') setSearchPopupOpen(false); }} /><kbd>ESC</kbd><button className="icon-button" aria-label="Close search" onClick={() => setSearchPopupOpen(false)}><X size={15} /></button></div>
-          <div className="search-popup-scope">Searching file names and folders in this workspace</div>
+          <div className="search-popup-input"><Search size={17} /><input ref={searchInputRef} value={query} placeholder="Search files, folders and note/code content…" onChange={(event) => { setQuery(event.target.value); setRightPanel('search'); }} onKeyDown={(event) => { if (event.key === 'Escape') setSearchPopupOpen(false); if (event.key === 'Enter') setSearchPopupOpen(false); }} /><kbd>ESC</kbd><button className="icon-button" aria-label="Close search" onClick={() => setSearchPopupOpen(false)}><X size={15} /></button></div>
+          <div className="search-popup-scope">Searching file and folder names, plus note/code text</div>
         </section>
       </div>}
 

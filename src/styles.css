@@ -4138,7 +4138,7 @@ body,
 .global-search-trigger span { flex: 1; text-align: left; }
 .global-search-trigger kbd, .search-popup kbd {
   padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px;
-  color: var(--muted); font: 9px/1.4 inherit;
+  color: var(--muted); font-size: 9px; line-height: 1.4;
 }
 .search-popup-backdrop {
   position: fixed; inset: 0; z-index: 12000; display: flex; justify-content: center;

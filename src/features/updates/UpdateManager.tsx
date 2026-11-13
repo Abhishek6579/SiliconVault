@@ -88,7 +88,6 @@ export default function UpdateManager() {
       {update ? <>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <strong>SiliconVault {update.version} is available</strong>
-          <button className="icon-button" aria-label="Dismiss update" disabled={installing} onClick={() => setUpdate(null)}>×</button>
         </div>
         {update.notes && <p style={{ margin: '9px 0', whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto', color: 'var(--muted, #b5b5b5)' }}>{update.notes}</p>}
         {installing ? <>
