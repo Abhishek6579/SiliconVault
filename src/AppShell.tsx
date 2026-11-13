@@ -45,7 +45,6 @@ import { useWorkspaceNavigationActions } from './features/workspace/hooks/useWor
 import FileList from './features/workspace/components/file-list/FileList';
 import Topbar from './features/workspace/components/topbar/Topbar';
 import RightPanel from './features/workspace/components/RightPanel';
-import SearchPopup from './features/search/components/SearchPopup';
 import WorkspaceOverview from './features/workspace/components/overview/WorkspaceOverview';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
@@ -104,7 +103,7 @@ export default function AppShell() {
 
   const { persistEditorViewState, updateViewerView, updatePdfView } = useTabViewState({ setTabs, setError });
 
-  useGlobalSearchShortcut({ editorViewRef, lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel });
+  useGlobalSearchShortcut({ lastFocusedSurfaceRef, setSearchPopupOpen, setRightPanel });
   useEffect(() => {
     if (searchPopupOpen) searchInputRef.current?.focus();
   }, [searchPopupOpen]);
@@ -248,20 +247,15 @@ export default function AppShell() {
           switchProject, setView, setActiveTabId, createProject: () => void createProject(), doEmptyTrash,
           restoreProject, deleteProject, deleteFolder,
         }}
-        actionsData={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status }}
+        actionsData={{ view, selectedFolder, activeProjectRecord, activeProject, currentWorkspaceId, importMenuOpen, importMenuRef, darkTheme, status, searchOpen: searchPopupOpen, query, searchInputRef }}
         actions={{
           setImportMenuOpen, startImportInto, startImportFolderInto, createFolderInCurrent: () => void createFolderInCurrent(),
-          createWorkspaceFile, setSearchPopupOpen, setRightPanel, toggleTheme,
+          createWorkspaceFile, setSearchPopupOpen, setQuery, setRightPanel, toggleTheme,
           setDetailsOpen: () => setRightPanel((current) => current === 'details' ? null : 'details'),
         }}
       />
 
-      {searchPopupOpen && <SearchPopup
-        query={query}
-        inputRef={searchInputRef}
-        onQueryChange={(value) => { setQuery(value); setRightPanel('search'); }}
-        onClose={() => setSearchPopupOpen(false)}
-      />}
+
 
       <input ref={fileInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleImport(event.target.files, target.folderId, target.projectId, target.workspaceId); setImportTarget(null); }} />
       <input ref={folderInput} className="hidden" type="file" multiple onChange={(event) => { const target = importTarget ?? { folderId: selectedFolder, projectId: activeProject, workspaceId: currentWorkspaceId }; void handleFolderImport(event.target.files, target); }} />
