@@ -46,6 +46,18 @@
         "version": "0.1.1.2"
       }
     },
-    "license": "../LICENSE"
+    "license": "../LICENSE",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5MDgzQkREMTM1QzkzOUYKUldTZmsxd1QzVHNJZVhXRjZTS3EwVG52eDUwUmp0aUtlWEZ1S2VOU1ZuYnROTWl3cTBQYTh1UTQK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/Abhishek6579/SiliconVault/slave/updates/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

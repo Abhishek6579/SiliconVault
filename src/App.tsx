@@ -34,6 +34,7 @@ import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
 import { collectFrontendDiagnostics } from './diagnostics.js';
+import UpdateManager from './features/updates/UpdateManager';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceActions } from './features/workspace/hooks/useWorkspaceActions';
@@ -97,6 +98,7 @@ export default function App() {
   const [dialog, setDialog] = useState<WorkspaceDialogState | null>(null);
   const [status, setStatus] = useState('All changes saved');
   const [importing, setImporting] = useState(false);
+  const editorWorkspaceRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const backupInput = useRef<HTMLInputElement>(null);
@@ -110,6 +112,24 @@ export default function App() {
     restoreTabs: restoreWorkspaceTabs,
   });
   useGlobalShortcuts(setAppZoom);
+  useEffect(() => {
+    const root = editorWorkspaceRef.current;
+    if (!root) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target instanceof Element
+        ? event.target
+        : event.target instanceof Node
+          ? event.target.parentElement
+          : null;
+      if (!target?.closest('.code-editor, .markdown-preview')) return;
+      event.preventDefault();
+      setEditorFontSize((current) => Math.max(8, Math.min(32, current + (event.deltaY < 0 ? 1 : -1))));
+    };
+    root.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => root.removeEventListener('wheel', handleWheel, true);
+  }, [activeTabId, setEditorFontSize]);
+
 
   // Fixed near-black editor theme inspired by the supplied reference.
   const editorTheme = useMemo(() => EditorView.theme({
@@ -859,7 +879,7 @@ export default function App() {
 
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError('')}><X size={15} /></button></div>}
 
-      {activeTab ? <div className="editor-workspace">
+      {activeTab ? <div ref={editorWorkspaceRef} className="editor-workspace">
         <div className="tab-strip">
           <div className="tab-list">
             {workspaceTabs.map((tab) => <button key={tab.id} className={`file-tab ${tab.id === activeTabId ? 'active' : ''}`} onClick={() => void openFile(tab.meta)}>
@@ -1019,6 +1039,7 @@ export default function App() {
       </section>
     </div>}
 
+    <UpdateManager />
     {loading && <div className="startup-screen"><div className="brand-mark"><Command size={19} /></div><span>Opening your workspace…</span></div>}
     {importing && <div className="busy-pill"><span className="spinner" /> Importing files…</div>}
   </div></div>;
