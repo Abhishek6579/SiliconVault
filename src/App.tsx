@@ -118,8 +118,6 @@ export default function App() {
   });
   useGlobalShortcuts(setAppZoom, setEditorFontSize);
   useEffect(() => {
-    const root = editorWorkspaceRef.current;
-    if (!root) return;
     const handleWheel = (event: WheelEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
       const target = event.target instanceof Element
@@ -136,9 +134,9 @@ export default function App() {
       event.preventDefault();
       setAppZoom((current) => Math.max(.8, Math.min(1.4, Math.round((current + (event.deltaY < 0 ? .05 : -.05)) * 100) / 100)));
     };
-    root.addEventListener('wheel', handleWheel, { capture: true, passive: false });
-    return () => root.removeEventListener('wheel', handleWheel, true);
-  }, [activeTabId, setEditorFontSize]);
+    window.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => window.removeEventListener('wheel', handleWheel, true);
+  }, [activeTabId, setEditorFontSize, setAppZoom]);
 
 
   // Fixed near-black editor theme inspired by the supplied reference.

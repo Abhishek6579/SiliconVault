@@ -83,7 +83,7 @@ export default function UpdateManager() {
     }
   };
 
-  if (!isDesktopApp() || (!visible && !update && !installing)) return null;
+  if (!isDesktopApp() || (!visible && !installing)) return null;
   const percent = progress?.contentLength
     ? Math.min(100, Math.round((progress.downloaded / progress.contentLength) * 100))
     : null;
