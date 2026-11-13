@@ -367,7 +367,7 @@ export default function App() {
     if (!(await persistOpenTabSession())) return;
     setTabs((current) => [
       ...current.map((tab) => {
-        if (!(tab.data instanceof Blob)) return tab;
+        if (!(tab.data instanceof Blob) || tab.meta.kind === 'viewer') return tab;
         const { data: _released, ...withoutPdfData } = tab;
         return { ...withoutPdfData, hydrated: false };
       }),
