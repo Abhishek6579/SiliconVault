@@ -55,10 +55,45 @@ export default function WorkspaceEditor({
   const [findQuery, setFindQuery] = useState('');
   const findInputRef = useRef<HTMLInputElement>(null);
   const findPositionRef = useRef(0);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewOffsetRef = useRef({ query: '', offset: -1 });
+  const findInPreview = useCallback((query: string, direction: 1 | -1 = 1) => {
+    const root = previewRef.current;
+    const needle = query.trim().toLocaleLowerCase();
+    const css = window.CSS as typeof CSS & { highlights?: { set: (name: string, value: unknown) => void; delete: (name: string) => void } };
+    const HighlightConstructor = (window as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+    if (!root || !needle) { css.highlights?.delete('siliconvault-find'); previewOffsetRef.current = { query: '', offset: -1 }; return; }
+    const segments: Array<{ node: Text; start: number; end: number }> = [];
+    let combined = '';
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    while (current) {
+      const node = current as Text;
+      const value = node.textContent ?? '';
+      if (value) { segments.push({ node, start: combined.length, end: combined.length + value.length }); combined += value; }
+      current = walker.nextNode();
+    }
+    const searchable = combined.toLocaleLowerCase();
+    if (previewOffsetRef.current.query !== needle) previewOffsetRef.current = { query: needle, offset: -1 };
+    const from = direction > 0 ? previewOffsetRef.current.offset + 1 : Math.max(0, previewOffsetRef.current.offset - 1);
+    let offset = direction > 0 ? searchable.indexOf(needle, from) : searchable.lastIndexOf(needle, from);
+    if (offset < 0) offset = direction > 0 ? searchable.indexOf(needle) : searchable.lastIndexOf(needle);
+    if (offset < 0) return;
+    const locate = (position: number) => segments.find(segment => position >= segment.start && position < segment.end);
+    const start = locate(offset), end = locate(offset + needle.length - 1);
+    if (!start || !end) return;
+    const range = document.createRange();
+    range.setStart(start.node, offset - start.start);
+    range.setEnd(end.node, offset + needle.length - end.start);
+    if (css.highlights && HighlightConstructor) css.highlights.set('siliconvault-find', new HighlightConstructor(range));
+    end.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    previewOffsetRef.current = { query: needle, offset };
+  }, []);
 
   const findInEditor = useCallback((query: string, direction: 1 | -1 = 1, restart = false) => {
     const view = editorViewRef?.current;
     const needle = query.trim();
+    if (preview && kind === 'markdown') { findInPreview(query, direction); return; }
     if (!view || !view.dom.isConnected || !needle) return;
     if (restart) findPositionRef.current = 0;
     let result: ReturnType<SearchCursor['next']> | undefined;
@@ -90,7 +125,7 @@ export default function WorkspaceEditor({
       effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
     });
     // Deliberately do not focus the editor: typing must remain in the find field.
-  }, [editorViewRef]);
+  }, [editorViewRef, findInPreview, kind, preview]);
 
   useEffect(() => {
     const openFind = (event: Event) => {
@@ -163,7 +198,7 @@ export default function WorkspaceEditor({
         onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) onViewStateChange(update.view, preview); }}
         basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }}
       /></div>}
-      <div className="markdown-preview"><div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${fontSize}px` }}><ReactMarkdown
+      <div className="markdown-preview" ref={preview ? previewRef : undefined}>{preview && findBar}<div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${fontSize}px` }}><ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}
         components={{ code({ className, children, ...props }) {
           const code = String(children).replace(/\n$/, '');
