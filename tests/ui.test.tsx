@@ -6,7 +6,7 @@ import ReadOnlyFileViewer, { rowsFrom } from '../src/viewers/ReadOnlyFileViewer'
 describe('read-only viewer UI', () => {
   it('renders accessible zoom controls for image previews', () => {
     const markup = renderToStaticMarkup(createElement(ReadOnlyFileViewer, {
-      fileName: 'diagram.png', mimeType: 'image/png', data: undefined,
+      fileName: 'diagram.png', mimeType: 'image/png', data: undefined, maximized: false, onToggleMaximize: () => {},
     }));
     expect(markup).toContain('aria-label="Viewer zoom controls"');
     expect(markup).toContain('aria-label="Zoom in"');
@@ -16,7 +16,7 @@ describe('read-only viewer UI', () => {
 
   it('renders tabular previews with the read-only row and column limit', () => {
     const markup = renderToStaticMarkup(createElement(ReadOnlyFileViewer, {
-      fileName: 'measurements.csv', mimeType: 'text/csv', data: 'time,value\n0,1\n1,2',
+      fileName: 'measurements.csv', mimeType: 'text/csv', data: 'time,value\n0,1\n1,2', maximized: false, onToggleMaximize: () => {},
     }));
     expect(markup).toContain('Read-only table · first 200 rows / 30 columns');
     expect(markup).toContain('<table>');
@@ -25,7 +25,7 @@ describe('read-only viewer UI', () => {
 
   it('renders the unsupported-format explanation instead of pretending to preview a binary format', () => {
     const markup = renderToStaticMarkup(createElement(ReadOnlyFileViewer, {
-      fileName: 'layout.gds', mimeType: 'application/octet-stream', data: new Blob([new Uint8Array([1])]),
+      fileName: 'layout.gds', mimeType: 'application/octet-stream', data: new Blob([new Uint8Array([1])]), maximized: false, onToggleMaximize: () => {},
     }));
     expect(markup).toContain('GDS renderer not installed');
   });
