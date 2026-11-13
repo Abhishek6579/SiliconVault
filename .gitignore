@@ -97,3 +97,5 @@ test-results/
 .parcel-cache/
 .eslintcache
 .stylelintcache
+.codex/
+implementation-status.txt
