@@ -184,7 +184,11 @@ test('imports a text file, edits it, saves it, and recovers the saved content', 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Your work, in one place.' })).toBeVisible();
 
-  await page.locator('input[type="file"]:not([accept])').first().setInputFiles({
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await page.getByRole('button', { name: 'Import files', exact: true }).click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
     name: 'import-edit.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('original import content'),
