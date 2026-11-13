@@ -1,0 +1,11 @@
+{
+  "version": "0.1.1-alpha.3",
+  "notes": "SiliconVault 0.1.1-alpha.3 update. See the GitHub release notes for details.",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZmsxd1QzVHNJZVp1SDJESmRhMnBTN2wycTlVZlNCaVprSWpDZ1VlQlAvb2VuSVg0b3VrOTFXSjluQ1k1dWU3cG0zQVpEKzFWeFlUV2lQQjhIajZTM21HZFJhL1BrR0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0NTY4OTQ1CWZpbGU6U2lsaWNvblZhdWx0XzAuMS4xLWFscGhhLjNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMS4xLWFscGhhLjMKbFRxV3A0M1plWXFFRU85a09CYjFvZTFLQjkvdW9xMEY1dWE2Si9LWnNqa2tiUHBhT2VVTlozaHFjK0hzVmE3K1ZuUldwWUkzZUZURlBPKy9aMFVaRHc9PQo=",
+      "url": "https://github.com/Abhishek6579/SiliconVault/releases/download/v0.1.1-alpha.3/SiliconVault_0.1.1-alpha.3_x64-setup.exe"
+    }
+  },
+  "pub_date": "2026-11-13T11:22:26.3084490Z"
+}
