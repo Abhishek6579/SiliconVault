@@ -144,6 +144,22 @@ jobs:
             "$hash  $($installer.Name)"
           }
           $lines | Set-Content -Encoding ascii SHA256SUMS.txt
+
+          $tagVersion = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.version }}" } else { "${{ github.ref_name }}".Substring(1) }
+          $signature = (Get-Content $signaturePath -Raw).Trim()
+          $assetUrl = "https://github.com/Abhishek6579/SiliconVault/releases/download/v$tagVersion/$($updaterInstaller.Name)"
+          $manifest = @{
+            version = $tagVersion
+            notes = "SiliconVault $tagVersion update. See the GitHub release notes for details."
+            pub_date = (Get-Date).ToUniversalTime().ToString("o")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $signature
+                url = $assetUrl
+              }
+            }
+          } | ConvertTo-Json -Depth 6
+          $manifest | Set-Content -Encoding utf8 latest.json
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
