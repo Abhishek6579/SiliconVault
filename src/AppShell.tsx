@@ -1,18 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { EditorView } from '@codemirror/view';
-import {
-  Archive, ArrowDownUp, Check, ChevronDown, ChevronRight, Code2, Command, Download,
-  Ellipsis, File, FileCode2, FilePlus2, FileText, Folder, FolderPlus, FolderTree, HardDrive,
-  Import, LayoutGrid, Menu, MoreHorizontal, Plus, Search, Settings2,
-  Trash2, X, Clock3, Bookmark, Pencil, Save, ExternalLink, Moon, Sun, Layers, MoveRight, Maximize2, Minimize2, ZoomIn, ZoomOut,
-} from 'lucide-react';
-import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
+import { File, HardDrive, Search, X } from 'lucide-react';import { DEFAULT_WORKSPACE_ID, db } from './storage/database';
 import FileKindIcon from './components/FileKindIcon';
 import { formatSize } from './utils/format';
 import { saveWorkspaceSession } from './storage/tabSession';
-import { createFolder } from './storage/hierarchy';
-import { countFolderItems, createTextFile, deleteFolderContents, emptyTrash, getFolderSubtreeIds, kindForFile, renameFile, restoreFile, softDeleteFile } from './storage/files';
 import { isDesktopApp } from './platform/desktop';
 import { useWorkspaceSearch } from './features/search/hooks/useWorkspaceSearch';
 import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
@@ -62,12 +53,9 @@ import RightPanel from './features/workspace/components/RightPanel';
 import WorkspaceOverview from './features/workspace/components/overview/WorkspaceOverview';
 import { useDragAndDrop } from './features/workspace/hooks/useDragAndDrop';
 import { selectWorkspaceViewState } from './features/workspace/selectors';
-import type { Tab } from './features/tabs/types';
-import type { FileMeta, Folder as FolderRecord, Project, Workspace } from './storage/types';
 const PdfReader = lazy(() => import('./PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('./viewers/ReadOnlyFileViewer'));
 
-type View = 'workspace' | 'recent' | 'trash';
 
 export default function AppShell() {
   useEffect(() => collectFrontendDiagnostics(), []);
