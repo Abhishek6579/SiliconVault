@@ -255,7 +255,7 @@ function parseOfficeBlocks(parent: Element): OfficeBlock[] {
   for (const child of Array.from(parent.children)) {
     if (child.localName === 'p') {
       const paragraph = parseOfficeParagraph(child);
-      if (paragraph.text || paragraph.styleName) blocks.push(paragraph);
+      blocks.push(paragraph);
     } else if (child.localName === 'tbl') {
       const rows: OfficeBlock[][][] = [];
       for (const row of Array.from(child.children).filter((element) => element.localName === 'tr')) {
