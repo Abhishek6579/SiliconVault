@@ -1,6 +1,6 @@
 [package]
 name = "silicon-vault"
-version = "0.2.0-beta.1"
+version = "0.2.0-beta.2"
 description = "Local-first engineering workspace"
 license = "Apache-2.0"
 authors = ["SiliconVault"]
