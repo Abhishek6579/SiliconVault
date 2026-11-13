@@ -188,7 +188,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     </div></div>
   </div>;
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
-  if (isOffice) return <div ref={rootRef} className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  if (isOffice) return <div ref={rootRef} className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {officePdf
       ? <PdfReader data={officePdf} title={fileName} tabId={tabId} initialState={initialPdfState} onStateChange={onPdfStateChange} />
       : isBrowserOoxml && !hasOfficeRenderFailure
@@ -204,11 +204,11 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
           ? <div className="loading-state">Converting Office document to PDF…</div>
           : <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError || 'The Office document could not be rendered.'}</p></div>}
   </div>;
-  if (ext === 'csv' || ext === 'tsv') return <div ref={rootRef} className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  if (ext === 'csv' || ext === 'tsv') return <div ref={rootRef} className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
     <div className="viewer-table-scroll" data-viewer-scroll onScroll={handleScroll}><div className="viewer-zoom-content" style={{ zoom }}><table><tbody>{table.map((r, i) => <tr key={i}>{r.map((v, j) => i === 0 ? <th key={j}>{v}</th> : <td key={j}>{v}</td>)}</tr>)}</tbody></table></div></div>
   </div>;
-  if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" data-viewer-scroll tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  if (ext === 'vcd') return <div ref={rootRef} className="file-viewer engineering-viewer" data-viewer-scroll tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {controls}<div className="viewer-zoom-content" style={{ zoom }}>
       <h2>VCD waveform inspection</h2>
       <div className="viewer-stat-grid"><span><b>{signals.length}</b> signal declarations</span><span><b>{(text.match(/(?:^|\n)\s*(?:[01xz][^\s]+|b[01xz]+\s+\S+)/gm) ?? []).length.toLocaleString()}</b> detected value changes</span><span><b>{text.match(/\$timescale\s+(.+?)\s+\$end/)?.[1] ?? 'Unknown'}</b> timescale</span></div>
@@ -217,7 +217,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType, tabId, in
     </div>
   </div>;
   if (['fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
-  return <div ref={rootRef} className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onWheel={handleWheelZoom} onScroll={handleScroll}>
+  return <div ref={rootRef} className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys} onScroll={handleScroll}>
     {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
     <pre data-viewer-scroll onScroll={handleScroll} style={{ zoom }}>{text || 'No text content.'}</pre>
   </div>;
