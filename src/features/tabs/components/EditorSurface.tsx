@@ -65,6 +65,7 @@ export default function EditorSurface({ data, actions }: { data: Data; actions: 
       <WorkspaceEditor
         kind={activeTab.meta.kind}
         name={activeTab.meta.name}
+        tabId={activeTab.id}
         value={activeTab.draft}
         fontSize={editorFontSize}
         preview={activeTab.preview}
