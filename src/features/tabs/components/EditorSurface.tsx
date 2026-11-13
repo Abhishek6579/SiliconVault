@@ -1,4 +1,4 @@
-import { lazy, Suspense, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { lazy, Suspense, type Dispatch, type Ref, type RefObject, type SetStateAction } from 'react';
 import { File } from 'lucide-react';
 import type { EditorView } from '@codemirror/view';
 import FileKindIcon from '../../../components/FileKindIcon';
@@ -8,6 +8,7 @@ import WorkspaceEditor from '../../editor/components/WorkspaceEditor';
 import TabStrip from './TabStrip';
 import EditorTitlebar from './EditorTitlebar';
 import type { Tab, PdfViewState, ViewerViewState } from '../types';
+import type { Folder } from '../../../storage/types';
 
 const PdfReader = lazy(() => import('../../../PdfReader'));
 const ReadOnlyFileViewer = lazy(() => import('../../../viewers/ReadOnlyFileViewer'));
@@ -17,9 +18,9 @@ interface Data {
   workspaceTabs: Tab[];
   activeTabId: string | null;
   editorFontSize: number;
-  editorWorkspaceRef: RefObject<HTMLDivElement | null>;
+  editorWorkspaceRef: Ref<HTMLDivElement>;
   editorViewRef: RefObject<EditorView | null>;
-  folders: Array<{ id: string; name: string }>;
+  folders: Folder[];
   getProjectName: (id: string | null) => string | undefined;
   focusMode: boolean;
 }
