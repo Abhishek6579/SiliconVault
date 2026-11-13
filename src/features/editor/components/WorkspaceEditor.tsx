@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -7,12 +7,10 @@ import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import { SearchCursor } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
 import type { EditorViewState } from '../../tabs/types';
-import MermaidDiagram from '../../../components/MermaidDiagram';
+export { normalizeMarkdownMath } from './markdownUtils';
+
+const MarkdownPreview = lazy(() => import('./MarkdownPreview'));
 
 interface WorkspaceEditorProps {
   kind: 'code' | 'text' | 'markdown';
@@ -25,19 +23,6 @@ interface WorkspaceEditorProps {
   editorViewRef?: { current: EditorView | null };
   onChange: (value: string) => void;
   onViewStateChange: (view: EditorView, preview: boolean) => void;
-}
-
-// Accept Markdown's $...$ syntax and common LaTeX \(...\) / \[...\] delimiters.
-// The conversion affects preview rendering only; the original Markdown remains unchanged.
-export function normalizeMarkdownMath(source: string): string {
-  const normalized = source
-    .replace(/\\{1,2}\(/g, () => '$')
-    .replace(/\\{1,2}\)/g, () => '$')
-    .replace(/\\{1,2}\[/g, () => '$$')
-    .replace(/\\{1,2}\]/g, () => '$$');
-  return normalized.replace(/(\${1,2})([\s\S]*?)\1/g, (_match, delimiter: string, expression: string) =>
-    delimiter + expression.replace(/\\_/g, '_') + delimiter,
-  );
 }
 
 function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
@@ -197,7 +182,7 @@ export default function WorkspaceEditor({
   ])), []);
 
   if (kind === 'markdown') {
-    return <div className={`note-layout ${preview ? 'preview-only' : ''}`}>
+    return <div className={"note-layout " + (preview ? "preview-only" : "")}>
       {!preview && <div className="code-editor markdown-editor">{findBar}<CodeMirror
         value={value} height="100%" theme={editorTheme} extensions={[markdown(), editorSyntax]}
         onChange={onChange}
@@ -205,14 +190,9 @@ export default function WorkspaceEditor({
         onUpdate={(update) => { if (update.selectionSet || update.viewportChanged) onViewStateChange(update.view, preview); }}
         basicSetup={{ lineNumbers: true, foldGutter: true, bracketMatching: true }}
       /></div>}
-      <div className="markdown-preview" ref={preview ? previewRef : undefined}>{preview && findBar}<div className="preview-label">PREVIEW</div><article className="prose" style={{ fontSize: `${fontSize}px` }}><ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}
-        components={{ code({ className, children, ...props }) {
-          const code = String(children).replace(/\n$/, '');
-          if (className === 'language-mermaid') return <MermaidDiagram source={code} />;
-          return <code className={className} {...props}>{children}</code>;
-        } }}
-      >{normalizeMarkdownMath(value)}</ReactMarkdown></article></div>
+      <Suspense fallback={<div className="loading-state">Loading Markdown preview…</div>}>
+        <MarkdownPreview value={value} fontSize={fontSize} preview={preview} findBar={findBar as ReactNode} previewRef={previewRef} />
+      </Suspense>
     </div>;
   }
 
