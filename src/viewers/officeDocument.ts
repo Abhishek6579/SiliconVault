@@ -272,7 +272,7 @@ function parseOfficeBlocks(parent: Element): OfficeBlock[] {
 export function officeBlocksToText(blocks: OfficeBlock[]): string {
   return blocks.map((block) => block.type === 'paragraph'
     ? block.text ?? ''
-    : (block.rows ?? []).map((row) => row.map((cell) => officeBlocksToText(cell)).join('\\t')).join('\\n')
+    : (block.rows ?? []).map((row) => row.map((cell) => officeBlocksToText(cell)).join('\t')).join('\n')
   ).join('\\n');
 }
 
@@ -293,7 +293,7 @@ export async function extractOfficeDocument(file: Blob, extension: string): Prom
   }
 
   if (extension === 'pptx' || extension === 'pptm') {
-    const slides = entries.filter((entry) => /^ppt\\/slides\\/slide\\d+\\.xml$/i.test(entry.name))
+    const slides = entries.filter((entry) => /^ppt\/slides\/slide\d+\.xml$/i.test(entry.name))
       .sort((left, right) => slideNumber(left.name) - slideNumber(right.name));
     if (!slides.length) throw new Error('The PowerPoint file does not contain readable slides.');
     const blocks: OfficeBlock[] = [];
@@ -301,7 +301,7 @@ export async function extractOfficeDocument(file: Blob, extension: string): Prom
       const slideXml = await readZipEntry(view, bytes, slides[index]);
       const slideText = paragraphsFromXml(slideXml, 'p');
       blocks.push({ type: 'paragraph', styleName: 'Title', text: `Slide ${index + 1}`, runs: [{ text: `Slide ${index + 1}`, bold: true, fontSize: 20 }] });
-      blocks.push(...slideText.split('\\n').filter(Boolean).map((line) => ({ type: 'paragraph' as const, text: line, runs: [{ text: line }] })));
+      blocks.push(...slideText.split('\n').filter(Boolean).map((line) => ({ type: 'paragraph' as const, text: line, runs: [{ text: line }] })));
     }
     return blocks;
   }
