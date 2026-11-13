@@ -51,6 +51,10 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           progressiveLayout: true,
           enableTextSelection: true,
           useGoogleFonts: false,
+          onError: (reason: Error) => { if (active) onError(reason); },
+          onLayoutComplete: (reason?: unknown) => {
+            if (active && reason) onError(asError(reason));
+          },
         });
       } else if (extension === 'xlsx' || extension === 'xlsm') {
         const { XlsxViewer } = await import('@silurus/ooxml/xlsx');
@@ -59,6 +63,7 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           mode,
           showZoomSlider: true,
           useGoogleFonts: false,
+          onError: (reason: Error) => { if (active) onError(reason); },
         });
       } else if (extension === 'pptx' || extension === 'pptm') {
         const { PptxScrollViewer } = await import('@silurus/ooxml/pptx');
@@ -69,6 +74,10 @@ export default function OfficeOoxmlViewer({ data, extension, onError }: Props) {
           enableTextSelection: true,
           enableHyperlinks: false,
           useGoogleFonts: false,
+          onError: (reason: Error) => { if (active) onError(reason); },
+          onLayoutComplete: (reason?: unknown) => {
+            if (active && reason) onError(asError(reason));
+          },
         });
       } else {
         throw new Error(`Unsupported browser Office format: .${extension}`);
