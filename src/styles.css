@@ -4006,3 +4006,8 @@ body,
   flex: 1;
   padding: 24px;
 }
+
+.office-copy-feedback {
+  color: #b66b36;
+  font-size: 10px;
+}
