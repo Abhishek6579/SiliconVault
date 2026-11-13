@@ -42,6 +42,9 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     let progress_bytes = Arc::clone(&downloaded);
     update.download_and_install(
         move |chunk_length, content_length| {
+            // `chunk_length` is platform-sized (`usize`), while progress is tracked as `u64`.
+            // Rust targets supported by Tauri have pointer widths no larger than 64 bits.
+            let chunk_length = chunk_length as u64;
             let total = progress_bytes.fetch_add(chunk_length, Ordering::Relaxed).saturating_add(chunk_length);
             let _ = progress_app.emit(PROGRESS_EVENT, UpdateProgress {
                 downloaded: total,
@@ -59,5 +62,4 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     ).await.map_err(|error| format!("Update installation failed: {error}"))?;
 
     app.restart();
-    Ok(())
 }
