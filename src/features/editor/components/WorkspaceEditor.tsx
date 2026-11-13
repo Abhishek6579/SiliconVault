@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
@@ -56,7 +56,7 @@ export default function WorkspaceEditor({
   const findInputRef = useRef<HTMLInputElement>(null);
   const findPositionRef = useRef(0);
 
-  const findInEditor = (query: string, direction: 1 | -1 = 1, restart = false) => {
+  const findInEditor = useCallback((query: string, direction: 1 | -1 = 1, restart = false) => {
     const view = editorViewRef?.current;
     const needle = query.trim();
     if (!view || !view.dom.isConnected || !needle) return;
@@ -90,7 +90,7 @@ export default function WorkspaceEditor({
       effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
     });
     // Deliberately do not focus the editor: typing must remain in the find field.
-  };
+  }, [editorViewRef]);
 
   useEffect(() => {
     const openFind = (event: Event) => {
@@ -105,7 +105,7 @@ export default function WorkspaceEditor({
 
   useEffect(() => {
     if (findOpen && findQuery.trim()) findInEditor(findQuery, 1, true);
-  }, [findQuery, findOpen]);
+  }, [findQuery, findOpen, findInEditor]);
 
   const findBar = findOpen && <div className="editor-find-bar">
     <span className="editor-find-label">Find</span>
