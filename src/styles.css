@@ -2557,6 +2557,9 @@ button:disabled {
 
 .pdf-page-wrap canvas {
   display: block;
+  flex: none;
+  background: #fff;
+  box-shadow: 0 3px 12px #1e2e4919
 }
 
 .pdf-page-wrap .textLayer {
@@ -2566,10 +2569,7 @@ button:disabled {
   left: 50%;
   z-index: 1;
   transform: translateX(-50%);
-  user-select: text;
-  flex: none;
-  background: #fff;
-  box-shadow: 0 3px 12px #1e2e4919
+  user-select: text
 }
 
 .app-shell[data-theme="dark"] .pdf-page-wrap canvas {
