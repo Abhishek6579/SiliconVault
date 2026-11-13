@@ -103,7 +103,7 @@ export default function AppShell() {
 
   const { persistEditorViewState, updateViewerView, updatePdfView } = useTabViewState({ setTabs, setError });
 
-  useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, setSearchPopupOpen, setRightPanel });
+  useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, activeTabId, setSearchPopupOpen, setRightPanel });
   useEffect(() => {
     if (searchPopupOpen) searchInputRef.current?.focus();
   }, [searchPopupOpen]);
