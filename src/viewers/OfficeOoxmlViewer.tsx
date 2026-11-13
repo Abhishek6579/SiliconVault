@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 
 interface Props {
   data: Blob;
@@ -30,6 +30,10 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
   const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(zoom);
   const viewerRef = useRef<ViewerHandle | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const findInputRef = useRef<HTMLInputElement>(null);
+  const findCursorRef = useRef({ query: '', index: -1 });
 
   const changeScale = (next: number) => {
     const viewer = viewerRef.current;
@@ -44,6 +48,45 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
     onStateChange(viewer.getScale());
   };
 
+  const findInDocument = (query: string, direction: 1 | -1 = 1) => {
+    const host = hostRef.current;
+    const needle = query.trim().toLocaleLowerCase();
+    if (!host || !needle) return;
+    const matches: Array<{ node: Text; start: number }> = [];
+    const walker = window.document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    while (current) {
+      const node = current as Text;
+      const lower = (node.textContent ?? '').toLocaleLowerCase();
+      let offset = lower.indexOf(needle);
+      while (offset >= 0) {
+        matches.push({ node, start: offset });
+        offset = lower.indexOf(needle, offset + Math.max(1, needle.length));
+      }
+      current = walker.nextNode();
+    }
+    if (!matches.length) return;
+    if (findCursorRef.current.query !== needle) findCursorRef.current = { query: needle, index: -1 };
+    const nextIndex = (findCursorRef.current.index + direction + matches.length) % matches.length;
+    findCursorRef.current.index = nextIndex;
+    const match = matches[nextIndex];
+    const range = window.document.createRange();
+    range.setStart(match.node, match.start);
+    range.setEnd(match.node, match.start + needle.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    match.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const openFind = () => {
+      setFindOpen(true);
+      window.setTimeout(() => findInputRef.current?.focus(), 0);
+    };
+    window.addEventListener('siliconvault:open-document-search', openFind);
+    return () => window.removeEventListener('siliconvault:open-document-search', openFind);
+  }, []);
   // OOXML renders into its own scrolling host. Handle zoom here in capture
   // phase so embedded document elements cannot swallow Ctrl/Cmd zoom input.
   useEffect(() => {
@@ -188,7 +231,8 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
 
   return (
     <div className="office-ooxml-viewer">
-      <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document zoom controls">
+      <div className="office-ooxml-toolbar" role="toolbar" aria-label="Document controls">
+        {findOpen && <div className="office-document-find"><Search size={14} /><input ref={findInputRef} aria-label="Find in document" placeholder="Find in document" value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findCursorRef.current = { query: '', index: -1 }; }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInDocument(findQuery, event.shiftKey ? -1 : 1); } if (event.key === 'Escape') setFindOpen(false); }} /><button type="button" className="icon-button" aria-label="Close find" onClick={() => setFindOpen(false)}><X size={13} /></button></div>}
         <button type="button" className="icon-button" aria-label="Zoom out" title="Zoom out" onClick={() => changeScale(scale - 0.1)} disabled={scale <= 0.1}><ZoomOut size={15} /></button>
         <span aria-live="polite">{Math.round(scale * 100)}%</span>
         <button type="button" className="icon-button" aria-label="Zoom in" title="Zoom in" onClick={() => changeScale(scale + 0.1)} disabled={scale >= 4}><ZoomIn size={15} /></button>
