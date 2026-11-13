@@ -63,11 +63,17 @@ export default function OfficeOoxmlViewer({ data, extension, onError, zoom, init
       if (event.key === '0') changeScale(1);
       else changeScale(scale + (event.key === '-' || event.key === '_' ? -0.1 : 0.1));
     };
+    const handleGlobalZoom = (event: Event) => {
+      const direction = (event as CustomEvent<{ direction: number }>).detail?.direction ?? 0;
+      changeScale(direction === 0 ? 1 : scale + direction * 0.1);
+    };
     host.addEventListener('wheel', handleWheel, { capture: true, passive: false });
     host.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('siliconvault:office-zoom', handleGlobalZoom);
     return () => {
       host.removeEventListener('wheel', handleWheel, true);
       host.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('siliconvault:office-zoom', handleGlobalZoom);
     };
   }, [scale, onStateChange]);
 
