@@ -19,6 +19,12 @@ All notable user-facing changes to SiliconVault are documented here.
 ### Beta status
 - SiliconVault is now published as a beta. Expect further changes and report reproducible issues through the repository issue tracker.
 
+## [0.2.0-beta.2] - 2026-11-13
+
+### Fixed
+- Corrected Windows release validation for npm lockfiles and made release-note selection version-aware.
+- Restored the automated Windows installer and updater publication pipeline.
+
 ## [Unreleased]
 
 No unreleased changes have been recorded.
