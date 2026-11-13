@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -37,19 +38,22 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     let update = updater.check().await.map_err(|error| format!("Update check failed: {error}"))?
         .ok_or_else(|| "No update is currently available.".to_string())?;
 
-    let mut downloaded = 0_u64;
+    let downloaded = Arc::new(AtomicU64::new(0));
+    let progress_app = app.clone();
+    let finished_app = app.clone();
+    let progress_bytes = Arc::clone(&downloaded);
     update.download_and_install(
-        |chunk_length, content_length| {
-            downloaded = downloaded.saturating_add(chunk_length);
-            let _ = app.emit(PROGRESS_EVENT, UpdateProgress {
-                downloaded,
+        move |chunk_length, content_length| {
+            let total = progress_bytes.fetch_add(chunk_length, Ordering::Relaxed).saturating_add(chunk_length);
+            let _ = progress_app.emit(PROGRESS_EVENT, UpdateProgress {
+                downloaded: total,
                 content_length,
                 finished: false,
             });
         },
-        || {
-            let _ = app.emit(PROGRESS_EVENT, UpdateProgress {
-                downloaded,
+        move || {
+            let _ = finished_app.emit(PROGRESS_EVENT, UpdateProgress {
+                downloaded: downloaded.load(Ordering::Relaxed),
                 content_length: None,
                 finished: true,
             });
