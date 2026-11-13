@@ -1,6 +1,26 @@
 # Office document preview engines
 
-SiliconVault converts supported Office files to PDF in the Rust/Tauri backend and renders the result with the existing PDF.js viewer. The conversion integration does not add a Python, Java, or Node.js runtime to SiliconVault.
+SiliconVault uses a browser-side Rust/WebAssembly renderer for modern OOXML documents and retains native Office-to-PDF conversion as a compatibility fallback. Converted PDFs use the existing PDF.js viewer. The browser renderer does not require a Python, Java, or Node.js application runtime.
+
+## Browser-side OOXML rendering
+
+Modern Office Open XML files use the pinned `@silurus/ooxml` package (MIT) and render locally in the Tauri/WebView frontend:
+
+| Extensions | Primary renderer |
+| --- | --- |
+| `.docx`, `.docm` | `DocxScrollViewer` |
+| `.xlsx`, `.xlsm` | `XlsxViewer` |
+| `.pptx`, `.pptm` | `PptxScrollViewer` |
+
+The viewer modules are dynamically imported only when a matching file is opened. The package uses Rust-compiled WebAssembly parsers and Canvas rendering; it does not upload document contents. Worker rendering is selected when the WebView exposes both `Worker` and `OffscreenCanvas`; otherwise parsing remains worker-based and painting uses the main thread. Optional Google Fonts are disabled, and PowerPoint hyperlinks are disabled in the preview.
+
+The application keeps a 100 MiB input limit. The renderer also applies its own ZIP-entry, inflated-size, entry-count, decoded-image, and worksheet resource limits. Macro-enabled files are only viewed: SiliconVault does not execute VBA macros.
+
+The package is pinned to an exact version rather than a floating range. Its upstream README discloses that the codebase was implemented primarily by AI coding agents and is a rapidly evolving project. Treat this as a renderer dependency that needs ongoing review: run `npm audit`, verify npm registry signatures/provenance where available, and maintain representative visual regression fixtures before production releases. The package is MIT-licensed, but its supported feature matrix is not a guarantee of pixel-identical Microsoft Office output.
+
+## Legacy and non-OOXML formats
+
+Legacy binary formats (`.doc`, `.xls`, `.ppt`) and OpenDocument/RTF formats (`.odt`, `.ods`, `.odp`, `.rtf`, and related variants) continue through the native PDF conversion pipeline below. The same conversion path is used when browser-side OOXML rendering fails in the desktop application. If no conversion engine is installed, the preview reports that dependency instead of showing a misleading partial rendering.
 
 ## Engine selection
 
@@ -55,4 +75,4 @@ The Rust backend launches the native Document Builder CLI for each conversion an
 
 ## Supported preview flow
 
-The output PDF is opened by the existing PDF.js viewer. This preserves a single rendering path for Word documents and PowerPoint presentations, including selectable PDF text where the source document exposes text. Conversion fidelity remains dependent on the source file, installed engine version, and available fonts.
+Office-to-PDF fallback output is opened by the existing PDF.js viewer. Modern OOXML documents normally render directly through the browser-side package above. Conversion fidelity remains dependent on the source file, installed engine version, and available fonts.
