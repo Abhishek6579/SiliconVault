@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut, Copy, Check } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import PdfReader from '../PdfReader';
+import { isDesktopApp } from '../platform/desktop';
 import { extractOfficeDocument, officeBlocksToText, type OfficeBlock } from './officeDocument';
 
 interface Props { fileName: string; data?: Blob | string; mimeType: string; }
@@ -55,13 +58,17 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext) || mimeType.startsWith('image/');
   const isTextPreview = ['v', 'sv', 'vh', 'svh', 'sp', 'cir', 'lib', 'kicad_sch', 'vcd', 'csv', 'tsv'].includes(ext);
-  const isOffice = ['docx', 'docm', 'pptx', 'pptm'].includes(ext);
+  const officePdfExtensions = ['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'rtf', 'odt', 'fodt', 'xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'fodp'];
+  const structuredOfficeExtensions = ['docx', 'docm', 'pptx', 'pptm'];
+  const isOffice = officePdfExtensions.includes(ext);
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [zoom, setZoom] = useState(1);
   const [officeText, setOfficeText] = useState('');
   const [officeBlocks, setOfficeBlocks] = useState<OfficeBlock[]>([]);
+  const [officePdf, setOfficePdf] = useState<Blob | null>(null);
+  const [officeFallbackMessage, setOfficeFallbackMessage] = useState('');
   const [officeLoading, setOfficeLoading] = useState(false);
   const [officeError, setOfficeError] = useState('');
   const [copied, setCopied] = useState<'all' | 'selection' | null>(null);
@@ -88,6 +95,8 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
     let active = true;
     setOfficeText('');
     setOfficeBlocks([]);
+    setOfficePdf(null);
+    setOfficeFallbackMessage('');
     setOfficeError('');
     setCopyError('');
     setOfficeLoading(true);
@@ -97,10 +106,48 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       setOfficeLoading(false);
       return;
     }
-    extractOfficeDocument(data, ext)
-      .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
-      .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
-      .finally(() => { if (active) setOfficeLoading(false); });
+    const desktop = isDesktopApp();
+    if (desktop) {
+      data.arrayBuffer()
+        .then((buffer) => invoke<number[]>('convert_office_to_pdf', {
+          bytes: Array.from(new Uint8Array(buffer)),
+          extension: ext,
+        }))
+        .then((bytes) => {
+          if (active) setOfficePdf(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }));
+        })
+        .catch(async (reason: unknown) => {
+          const conversionError = reason instanceof Error ? reason.message : 'Could not convert this Office document to PDF.';
+          if (!active) return;
+          if (!structuredOfficeExtensions.includes(ext)) {
+            setOfficeError(`PDF conversion failed: ${conversionError} Install LibreOffice to preview this file in SiliconVault.`);
+            return;
+          }
+          try {
+            const blocks = await extractOfficeDocument(data, ext);
+            if (active) {
+              setOfficeBlocks(blocks);
+              setOfficeText(officeBlocksToText(blocks));
+              const formatName = ext.startsWith('ppt') ? 'PowerPoint' : 'Word';
+              setOfficeFallbackMessage(`PDF conversion unavailable (${conversionError}). Showing the basic ${formatName} preview instead; embedded images and complex layout or equations may not be preserved.`);
+            }
+          } catch (fallbackReason) {
+            if (active) {
+              const fallbackError = fallbackReason instanceof Error ? fallbackReason.message : 'Unknown preview error.';
+              setOfficeError(`PDF conversion failed: ${conversionError} The basic Office preview also failed: ${fallbackError}`);
+            }
+          }
+        })
+        .finally(() => { if (active) setOfficeLoading(false); });
+    } else if (structuredOfficeExtensions.includes(ext)) {
+      extractOfficeDocument(data, ext)
+        .then((blocks) => { if (active) { setOfficeBlocks(blocks); setOfficeText(officeBlocksToText(blocks)); } })
+        .catch((reason: unknown) => { if (active) setOfficeError(reason instanceof Error ? reason.message : 'Could not read this Office document.'); })
+        .finally(() => { if (active) setOfficeLoading(false); });
+    } else {
+      setOfficeError('This Office format requires the desktop app with LibreOffice installed. Open the file in the desktop version to preview it.');
+      setOfficeLoading(false);
+    }
     return () => { active = false; };
   }, [data, ext, isOffice]);
 
@@ -147,15 +194,18 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
   if (error) return <div className="unsupported-file"><h2>Preview unavailable</h2><p>{error}</p></div>;
   if (isOffice) return <div className="file-viewer office-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}
+    {officePdf ? <PdfReader data={officePdf} title={fileName} tabId={`office-preview-${fileName}`} /> : <>
     <div className="office-viewer-toolbar">
-      <span>Read-only {ext.startsWith('ppt') ? 'slide' : 'Word-style document'} preview · Text is selectable</span>
+      <span>Read-only {ext.startsWith('ppt') ? 'presentation' : 'document'} preview · Text is selectable</span>
       <div>
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(true)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'selection' ? <><Check size={13} /> Copied selection</> : 'Copy selection'}</button>
         <button type="button" className="office-copy-button" onClick={() => void copyOfficeText(false)} disabled={officeLoading || !officeText}><Copy size={13} /> {copied === 'all' ? <><Check size={13} /> Copied all</> : 'Copy all text'}</button>
       </div>
       {copyError && <span role="status" className="office-copy-feedback">{copyError}</span>}
     </div>
-    {officeLoading ? <div className="loading-state">Preparing document preview…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
+    {officeFallbackMessage && <div className="viewer-meta" role="status">{officeFallbackMessage}</div>}
+    {officeLoading ? <div className="loading-state">Preparing Office document preview…</div> : officeError ? <div className="unsupported-file"><h2>Office preview unavailable</h2><p>{officeError}</p></div> : <div className="office-document-viewport" ref={officeContentRef}><article className="office-document-page" style={{ zoom }} aria-label={`${fileName} read-only document preview`}>{renderOfficeBlocks(officeBlocks)}</article></div>}
+    </>}
   </div>;
   if (ext === 'csv' || ext === 'tsv') return <div className="file-viewer table-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only table · first 200 rows / 30 columns</div>
@@ -169,7 +219,7 @@ export default function ReadOnlyFileViewer({ fileName, data, mimeType }: Props) 
       <p className="viewer-note">Signal metadata is shown here. Interactive timing traces are not part of this initial viewer.</p>
     </div>
   </div>;
-  if (['doc', 'ppt', 'xlsx', 'fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
+  if (['fst', 'gds', 'gdsii', 'kicad_pcb'].includes(ext)) return <div className="unsupported-file"><h2>{ext.toUpperCase()} renderer not installed</h2><p>{['doc', 'ppt'].includes(ext) ? 'Legacy binary Office files are not supported. Convert this file to DOCX or PPTX to preview and copy its text.' : 'This format is recognized, but its dedicated renderer is not bundled yet. The original file remains stored unchanged.'}</p><span>Read-only · {mimeType}</span></div>;
   return <div className="file-viewer source-viewer" tabIndex={0} onKeyDown={handleZoomKeys}>
     {controls}<div className="viewer-meta">Read-only source preview · {mimeType}</div>
     <pre style={{ zoom }}>{text || 'No text content.'}</pre>
