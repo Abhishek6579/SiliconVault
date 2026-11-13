@@ -27,8 +27,11 @@ export async function assertUniqueFileName(
   ignoreId?: string,
 ): Promise<void> {
   const key = duplicateKey(name);
-  // Null is not a valid IndexedDB index key; scope to the workspace and filter root entries.
-  const siblings = database.files.where('workspaceId').equals(location.workspaceId);
+  // Null is not a valid IndexedDB index key. Use the parent index for nested files
+  // and the workspace index only for root-level files.
+  const siblings = location.parentFolderId !== null
+    ? database.files.where('parentFolderId').equals(location.parentFolderId)
+    : database.files.where('workspaceId').equals(location.workspaceId);
   const duplicate = await siblings
     .filter((file) => file.parentFolderId === location.parentFolderId && file.workspaceId === location.workspaceId && file.projectId === location.projectId &&
       file.deletedAt === null && file.id !== ignoreId && duplicateKey(file.name) === key)

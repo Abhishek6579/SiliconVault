@@ -14,8 +14,11 @@ async function assertUniqueFolderName(
   location: { workspaceId: string; parentFolderId: string | null; projectId: string | null },
   ignoreId?: string,
 ): Promise<void> {
-  // Null is not a valid IndexedDB index key; scope to the workspace and filter root entries.
-  const siblings = database.folders.where('workspaceId').equals(location.workspaceId);
+  // Null is not a valid IndexedDB index key. Use the parent index for nested folders
+  // and the workspace index only for root-level folders.
+  const siblings = location.parentFolderId !== null
+    ? database.folders.where('parentFolderId').equals(location.parentFolderId)
+    : database.folders.where('workspaceId').equals(location.workspaceId);
   const duplicate = await siblings
     .filter((folder) => folder.parentFolderId === location.parentFolderId && folder.workspaceId === location.workspaceId && folder.projectId === location.projectId &&
       folder.id !== ignoreId && duplicateKey(folder.name) === duplicateKey(name))
@@ -61,7 +64,9 @@ export async function getOrCreateImportedFolder(database: WorkspaceDatabase, nam
   validateFileName(name);
   return database.transaction('rw', database.folders, database.projects, database.workspaces, async () => {
     const destination = await destinationFor(database, parentFolderId, projectId, workspaceId);
-    const siblings = database.folders.where('workspaceId').equals(destination.workspaceId);
+    const siblings = parentFolderId !== null
+      ? database.folders.where('parentFolderId').equals(parentFolderId)
+      : database.folders.where('workspaceId').equals(destination.workspaceId);
     const existing = await siblings
       .filter((folder) => folder.parentFolderId === parentFolderId && folder.workspaceId === destination.workspaceId && folder.projectId === destination.projectId && duplicateKey(folder.name) === duplicateKey(name))
       .first();
