@@ -151,7 +151,9 @@ export default function PdfReader({ tabId, data, title, initialState, onStateCha
   }, [source]);
 
   useEffect(() => {
-    const openSearch = () => {
+    const openSearch = (event: Event) => {
+      const requestedTabId = (event as CustomEvent<{ tabId?: string }>).detail?.tabId;
+      if (requestedTabId && requestedTabId !== tabId) return;
       setPdfSearchOpen(true);
       window.setTimeout(() => searchInputRef.current?.focus(), 0);
     };
