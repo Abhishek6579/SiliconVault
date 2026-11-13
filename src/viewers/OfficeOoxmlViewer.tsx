@@ -71,7 +71,7 @@ export default function OfficeOoxmlViewer({ data, extension, tabId, onError, zoo
         const node = current as Text;
         const parent = node.parentElement;
         const block = parent?.closest('p, li, td, th, tr, section, article, h1, h2, h3, h4, div') ?? parent;
-        if (block && previousBlock && block !== previousBlock) combined += '\\n';
+        if (block && previousBlock && block !== previousBlock) combined += '\n';
         const value = node.textContent ?? '';
         if (value) {
           segments.push({ node, start: combined.length, end: combined.length + value.length });
