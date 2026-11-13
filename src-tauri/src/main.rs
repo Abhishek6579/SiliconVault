@@ -42,7 +42,7 @@ fn convert_with_document_builder(
     let output_path = serde_json::to_string(&output.to_string_lossy().to_string())
         .map_err(|error| format!("Could not encode Document Builder output path: {error}"))?;
     let script = format!(
-        "builderJS.OpenFile({input_path});\\nbuilderJS.SaveFile(\\"pdf\\", {output_path});\\nbuilderJS.CloseFile();\\n"
+        "builderJS.OpenFile({input_path});\nbuilderJS.SaveFile(\\"pdf\\", {output_path});\nbuilderJS.CloseFile();\n"
     );
     fs::write(&script_path, script)
         .map_err(|error| format!("Could not create the Document Builder script: {error}"))?;
