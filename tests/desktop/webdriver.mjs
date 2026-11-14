@@ -48,6 +48,25 @@ export class DesktopWebDriver {
     return new Set((result.stdout || '').trim().split(/\s+/).filter((value) => /^\d+$/.test(value)).map(Number));
   }
 
+  webView2Processes() {
+    if (process.platform !== 'win32') return [];
+    const script = "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress";
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error('Could not inspect WebView2 processes: ' + result.stderr);
+    const output = (result.stdout || '').trim();
+    if (!output) return [];
+    const parsed = JSON.parse(output);
+    return (Array.isArray(parsed) ? parsed : [parsed]).map((process) => ({
+      pid: Number(process.ProcessId),
+      parentPid: Number(process.ParentProcessId),
+      commandLine: process.CommandLine || '',
+    }));
+  }
+
   async start() {
     await access(this.app);
     await access(this.driverPath);
@@ -136,8 +155,13 @@ export class DesktopWebDriver {
       if (diagnostics?.error || diagnostics?.desktopTestMode !== true || !actual || actual.toLowerCase() !== expected.toLowerCase()) {
         throw new Error('Desktop WebView2 profile configuration mismatch: ' + JSON.stringify({ expected, diagnostics }));
       }
-      if (!diagnostics.webviewDataDirectoryExists || !Array.isArray(diagnostics.webviewDataDirectoryEntries) || diagnostics.webviewDataDirectoryEntries.length === 0) {
-        throw new Error('WebView2 did not initialize the isolated profile directory: ' + JSON.stringify(diagnostics));
+      const webView2Processes = this.webView2Processes();
+      const usingExpectedProfile = webView2Processes.some((process) =>
+        process.commandLine.toLowerCase().includes(expected.toLowerCase())
+      );
+      if (!usingExpectedProfile) {
+        throw new Error('The running WebView2 browser process is not using the requested isolated profile. ' +
+          JSON.stringify({ expected, diagnostics, webView2Processes }));
       }
     }
   }
