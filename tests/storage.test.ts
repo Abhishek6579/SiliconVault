@@ -736,12 +736,10 @@ describe('workspace storage', () => {
     const upgrading = new WorkspaceDatabase(name);
     databases.push(upgrading);
     const originalUpdate = IDBCursor.prototype.update;
+    const originalPut = IDBObjectStore.prototype.put;
     let fileMigrationReached = false;
     let folderMigrationReached = false;
-    const updateSpy = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
-      // fake-indexeddb and browser engines can expose a cursor source differently
-      // (IDBObjectStore or IDBIndex). Identify the migration record itself so the
-      // fault injection remains deterministic across both implementations.
+    const maybeFailMigrationWrite = (value: unknown) => {
       const record = value as { id?: string; workspaceId?: string };
       if (record?.id === 'migration-file' && record.workspaceId === DEFAULT_WORKSPACE_ID) {
         fileMigrationReached = true;
@@ -750,12 +748,20 @@ describe('workspace storage', () => {
         folderMigrationReached = true;
         throw new DOMException('Injected workspace migration failure', 'QuotaExceededError');
       }
+    };
+    const updateSpy = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
+      maybeFailMigrationWrite(value);
       return originalUpdate.call(this, value);
+    });
+    const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, value, key) {
+      maybeFailMigrationWrite(value);
+      return originalPut.call(this, value, key);
     });
     try {
       await expect(upgrading.open()).rejects.toThrow();
     } finally {
       updateSpy.mockRestore();
+      putSpy.mockRestore();
       upgrading.close();
     }
     expect(fileMigrationReached).toBe(true);
