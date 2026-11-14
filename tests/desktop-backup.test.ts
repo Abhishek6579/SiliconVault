@@ -38,6 +38,9 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Tauri's invoke API always returns a Promise. Keep the mock faithful to
+  // that contract because activityLog flushes queued events asynchronously.
+  tauri.invoke.mockResolvedValue(undefined);
 });
 
 describe('native desktop backup dialogs', () => {
