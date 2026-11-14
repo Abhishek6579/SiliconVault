@@ -48,3 +48,12 @@ SiliconVault uses Dexie/IndexedDB. Back up important workspace data before clear
 - **Linux x86_64 — secondary:** AppImage and DEB package builds run in CI; native installation, runtime, and upgrade validation follow the Windows gate.
 
 Standalone browser/web applications and macOS packages or releases are not supported targets. Linux is not allowed to block Windows validation.
+
+## Linux secondary-target installation
+
+Linux releases provide an AppImage and a Debian package when those assets are attached to the GitHub Release.
+
+- **Debian/Ubuntu:** download the `.deb` asset, verify it against `SHA256SUMS-linux.txt`, then install it using the distribution package manager.
+- **Other supported Linux distributions:** download the AppImage asset, verify its checksum, mark it executable, and launch it.
+
+Linux package availability is published as a secondary job after Windows release publication. Linux runtime validation remains a separate track and does not delay the Windows release gate.

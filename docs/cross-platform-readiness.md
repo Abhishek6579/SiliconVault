@@ -43,13 +43,13 @@ The published updater manifest currently contains only the `windows-x86_64` targ
 
 CI builds AppImage and DEB packages on Ubuntu with the native Tauri prerequisites. Linux work remains secondary to Windows and must not become a dependency of the Windows validation sequence.
 
-Before advertising a Linux production release, validate on a real supported Linux desktop:
+Linux AppImage and DEB assets are attached to the release by a downstream job after Windows publication. Before claiming Linux runtime validation complete, test on a real supported Linux desktop:
 - AppImage launch and DEB install/uninstall behavior.
 - Native file and folder dialogs, recursive import, and file-manager drag-and-drop.
 - Backup export and restore, restart persistence, diagnostics, and Office conversion fallback.
 - Required runtime libraries, file permissions, desktop integration, and upgrade behavior.
 
-Linux automatic updating is not enabled until an AppImage updater artifact and matching signed manifest entry are deliberately added and verified. A Linux CI package build alone is not evidence of installed runtime correctness.
+Linux automatic updating is not enabled until an AppImage updater artifact and matching signed manifest entry are deliberately added and verified. Published package artifacts alone are not evidence of installed runtime correctness.
 
 ## Continuous integration
 

@@ -2,7 +2,7 @@
 
 ## Backup JSON parsing baseline
 
-The browser restore path currently calls `file.text()` and then `JSON.parse()`. During parsing, the decoded JSON string and the complete object graph coexist. This can amplify peak memory relative to the on-disk backup size.
+The desktop WebView restore path currently calls `file.text()` and then `JSON.parse()`. During parsing, the decoded JSON string and the complete object graph coexist. This can amplify peak memory relative to the on-disk backup size.
 
 Run a reproducible Node baseline:
 

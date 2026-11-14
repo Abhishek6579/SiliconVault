@@ -2,7 +2,7 @@
 
 ## Current implementation
 
-Browser backup JSON is parsed in a dedicated module Worker. This removes synchronous JSON tokenization from the UI thread, but the v1 format still materializes the parsed object in worker memory and structured-clones it back to the UI. It is not yet an incremental-memory solution.
+Backup JSON is parsed in a dedicated module Worker inside the Tauri WebView. This removes synchronous JSON tokenization from the UI thread, but the v1 format still materializes the parsed object in worker memory and structured-clones it back to the UI. It is not yet an incremental-memory solution.
 
 ## Target design: staged, record-at-a-time restore
 

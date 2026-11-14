@@ -11,7 +11,8 @@
 - [ ] `npm test`
 - [ ] `npm run typecheck`
 - [ ] `npm run build`
-- [ ] Windows `npm run tauri:build` when native behavior is affected
+- [ ] Windows `npm run tauri:build` when native behavior is affected (primary release gate)
+- [ ] Review the Linux AppImage/DEB CI result when Linux-specific behavior is affected (secondary track)
 - [ ] Relevant manual regression checks
 
 **Actual commands and results:**

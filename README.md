@@ -54,14 +54,14 @@ cargo --version
 
 ## Installation (End Users)
 
-Official installers are published through [GitHub Releases](https://github.com/Abhishek6579/SiliconVault/releases). The current release workflow builds Windows **NSIS (.exe)** and **MSI (.msi)** installers. It does not publish macOS DMG or Linux AppImage packages.
+Official installers are published through [GitHub Releases](https://github.com/Abhishek6579/SiliconVault/releases). The release workflow publishes Windows **NSIS (.exe)** and **MSI (.msi)** installers first, then attaches Linux **AppImage** and **DEB** packages in a separate secondary job.
 
 1. Open the [SiliconVault Releases](https://github.com/Abhishek6579/SiliconVault/releases) page.
 2. Select the release you want. Prereleases may contain incomplete or changing functionality.
-3. Download the Windows NSIS **.exe** or **.msi** installer asset.
-4. Download **SHA256SUMS.txt** from the same release and verify the installer checksum.
-5. Run the installer and follow the Windows prompts. NSIS is configured for per-user installation.
-6. Launch **SiliconVault** from the installed shortcut.
+3. On Windows, download the NSIS **.exe** or **.msi** installer. On Linux, download the **AppImage** or **.deb** package.
+4. Download the matching checksum file: **SHA256SUMS.txt** for Windows or **SHA256SUMS-linux.txt** for Linux.
+5. Verify the package checksum before opening or installing it.
+6. Run the installer or launch the AppImage, then start **SiliconVault** from the installed shortcut or desktop entry.
 
 If a release has no installer assets, there is no published installer for that release. Do not treat source archives or CI artifacts as official installers.
 
@@ -224,7 +224,7 @@ The frontend is React/TypeScript inside a Tauri 2 desktop shell. Rust provides n
 SiliconVault/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/       # Bug report and feature request templates
-│   └── workflows/            # CI validation and Windows release automation
+│   └── workflows/            # Windows-primary and Linux-secondary desktop CI/release automation
 ├── docs/                     # Architecture, development, storage, installation,
 │                             # release, performance, and validation documentation
 ├── scripts/

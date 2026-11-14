@@ -40,7 +40,7 @@ After the Windows candidate is validated:
 4. Keep Linux updater capability disabled until the AppImage updater artifact and signed manifest entry have been tested.
 5. Record Linux-only gaps separately; do not use them to delay the Windows installed-upgrade gate.
 
-The current release workflow publishes Windows NSIS/MSI installers and the Windows x64 updater manifest. Linux AppImage/DEB packaging is validated by CI; attaching Linux packages to public releases is a separate secondary rollout task.
+The release workflow publishes Windows NSIS/MSI installers and the Windows x64 updater manifest first. A separate downstream Linux job then builds and attaches AppImage/DEB packages with a Linux checksum file. Linux job failure cannot undo or prevent the already-completed Windows release job. Linux automatic updating remains disabled until its AppImage updater artifact and signed manifest entry are verified.
 
 ## Tag and publish
 
