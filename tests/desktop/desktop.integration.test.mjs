@@ -8,6 +8,17 @@ const K = { ENTER: '\uE007' };
 
 async function openWorkspaceMenu() {
   await app.click('.workspace-switch-button');
+  const opened = await app.waitFor(
+    () => app.attribute('.workspace-switch-button', 'aria-expanded').then((value) => value === 'true').catch(() => false),
+    1_500,
+    'workspace switcher to report its expanded state',
+  ).catch(() => false);
+  if (!opened) {
+    // WebKitWebDriver can occasionally report a successful coordinate click
+    // without delivering the React click handler in headless Linux. Retry the
+    // same button through the DOM, then assert the real menu is rendered.
+    await app.execute('const button=document.querySelector(".workspace-switch-button"); if(!button) throw new Error("Workspace switch button is missing"); button.click(); return true;');
+  }
   await app.waitForCss('.workspace-switch-menu');
 }
 
