@@ -32,7 +32,7 @@ Optional environment overrides:
 - Backup restore confirmation, cancellation, valid restore and invalid-backup error.
 - Diagnostics view and refresh; export contents and native save-dialog failure cases are covered by the acceptance checklist.
 
-The synthetic file-drop test exercises the app's WebView drop handler. A physical drag from Explorer or a Linux file manager is listed separately below. Existing Vitest and Rust tests remain responsible for lower-level hierarchy, backup checksum/rollback, database and logging behavior.
+The internal-move test dispatches HTML5 drag lifecycle events with a real `DataTransfer` payload through the embedded WebView; the external file-drop test exercises the WebView's file drop handler. A physical drag from Explorer or a Linux file manager is listed separately below. Existing Vitest and Rust tests remain responsible for lower-level hierarchy, backup checksum/rollback, database and logging behavior.
 
 ## Native acceptance tests
 
