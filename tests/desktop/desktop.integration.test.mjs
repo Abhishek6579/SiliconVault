@@ -91,6 +91,11 @@ before(async () => {
   await app.start();
   await app.waitForCss('body', 30_000);
   await app.waitForText('h1', 'Your work, in one place.', 30_000);
+  await app.waitFor(
+    () => app.execute('return !document.querySelector(".startup-screen");'),
+    30_000,
+    'startup overlay to close',
+  );
 });
 
 after(async () => { await app.stop(); });
@@ -121,7 +126,7 @@ test('native desktop integration', async (t) => {
     await app.sendKeys('.dialog-input', 'Desktop Archive Test');
     await app.click('.app-dialog button[type="submit"]');
     await app.waitForCss('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"]');
-    await app.click('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"] .tree-main');
+    // Creating a project selects it automatically; do not toggle it back to General files.
     await openWorkspaceMenu();
     await app.clickText('.workspace-switch-menu button', 'Delete project');
     await app.waitForText('.app-dialog h2', 'Delete project?');

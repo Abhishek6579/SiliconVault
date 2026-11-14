@@ -154,12 +154,31 @@ export class DesktopWebDriver {
 
   async click(selector) {
     const id = await this.findCss(selector);
-    await this.request(this.endpoint('/element/' + id + '/click'), 'POST', {});
+    try {
+      await this.request(this.endpoint('/element/' + id + '/click'), 'POST', {});
+    } catch (error) {
+      if (!/element click intercepted|element not interactable|element is not clickable/i.test(error.message)) throw error;
+      // WebKitWebDriver can report a hit-test interception for controls that are
+      // visible in the app's embedded WebView. Scroll first, then use the
+      // element's native DOM click as a narrowly-scoped fallback.
+      await this.execute(
+        'const el=document.querySelector(arguments[0]); if(!el) throw new Error("Click target disappeared"); el.scrollIntoView({block:"center",inline:"center"}); el.click(); return true;',
+        selector,
+      );
+    }
   }
 
   async clickText(selector, text, exact = false) {
     const id = await this.findText(selector, text, exact);
-    await this.request(this.endpoint('/element/' + id + '/click'), 'POST', {});
+    try {
+      await this.request(this.endpoint('/element/' + id + '/click'), 'POST', {});
+    } catch (error) {
+      if (!/element click intercepted|element not interactable|element is not clickable/i.test(error.message)) throw error;
+      await this.execute(
+        'const el=[...document.querySelectorAll(arguments[0])].find((node)=>{const value=(node.innerText||node.textContent||"").replace(/\\s+/g," ").trim();return arguments[2]?value===arguments[1]:value.includes(arguments[1]);}); if(!el) throw new Error("Text click target disappeared"); el.scrollIntoView({block:"center",inline:"center"}); el.click(); return true;',
+        selector, text, exact,
+      );
+    }
   }
 
   async sendKeys(selector, value) {
