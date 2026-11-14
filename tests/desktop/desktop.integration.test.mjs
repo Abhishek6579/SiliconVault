@@ -15,6 +15,7 @@ async function createFolder(name) {
   await app.click('.import-button');
   await app.clickText('.import-menu button', 'New folder');
   await app.waitForCss('.app-dialog .dialog-input');
+  await app.clear('.dialog-input');
   await app.sendKeys('.dialog-input', name);
   await app.click('.app-dialog button[type="submit"]');
   await app.waitForText('.workspace-body', name);
@@ -260,6 +261,7 @@ test('native desktop integration', async (t) => {
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nPending close recovery marker');
+    await app.waitForText('.cm-content', 'Pending close recovery marker', 3_000);
     await waitForCrashRecoverySnapshot('desktop-second-tab.md', 'Pending close recovery marker');
     await app.crashAndRestart();
     await app.waitForText('.file-tab', 'desktop-second-tab.md', 20_000);
@@ -344,7 +346,14 @@ test('native desktop integration', async (t) => {
     await app.click('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"] .file-name-button');
     await app.waitForCss('.editor-workspace');
     await app.restart();
-    await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
+    try {
+      await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
+    } catch (error) {
+      const state = await app.execute(
+        'return JSON.stringify({workspace:document.querySelector(".workspace-switch-button")?.innerText || "",body:document.querySelector(".workspace-body")?.innerText || "",tree:document.querySelector(".project-tree")?.innerText || "",startup:document.querySelector(".startup-screen")?.innerText || "",error:document.querySelector(".error-banner")?.innerText || ""});',
+      );
+      throw new Error('Workspace state after restart: ' + state + '; ' + error.message);
+    }
     await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
     await ensureMarkdownEditing();
     await app.waitForText('.cm-content', 'Backup round-trip marker', 15_000);
