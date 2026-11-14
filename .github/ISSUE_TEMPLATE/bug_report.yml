@@ -18,11 +18,9 @@ body:
     attributes:
       label: Environment
       options:
-        - Windows 11 desktop
-        - Windows 10 desktop
-        - Browser development mode
-        - Linux development environment
-        - macOS development environment
+        - Windows 11 desktop (primary)
+        - Windows 10 desktop (primary)
+        - Linux desktop (secondary)
         - Other
     validations:
       required: true
