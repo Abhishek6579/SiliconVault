@@ -249,20 +249,26 @@ export class DesktopWebDriver {
   }
 
   async dragItem(sourceSelector, targetSelector) {
-    const points = await this.execute(
-      'const a=document.querySelector(arguments[0]),b=document.querySelector(arguments[1]); if(!a||!b) throw new Error("Drag source or target missing"); const c=e=>{const r=e.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}}; return {a:c(a),b:c(b)};',
+    const result = await this.execute(
+      'const source=document.querySelector(arguments[0]),target=document.querySelector(arguments[1]);' +
+      'if(!source||!target) throw new Error("Drag source or target missing");' +
+      'if(typeof DataTransfer!=="function"||typeof DragEvent!=="function") throw new Error("This WebView does not support HTML5 DataTransfer drag events");' +
+      'const dataTransfer=new DataTransfer();' +
+      'const options={bubbles:true,cancelable:true,dataTransfer};' +
+      'source.dispatchEvent(new DragEvent("dragstart",options));' +
+      'const payload=dataTransfer.getData("application/x-workbench-item");' +
+      'if(!payload) throw new Error("The source row did not publish a workbench drag payload");' +
+      'target.dispatchEvent(new DragEvent("dragenter",options));' +
+      'target.dispatchEvent(new DragEvent("dragover",options));' +
+      'const dropEvent=new DragEvent("drop",options); target.dispatchEvent(dropEvent);' +
+      'source.dispatchEvent(new DragEvent("dragend",options));' +
+      'return {payload,dropPrevented:dropEvent.defaultPrevented};',
       sourceSelector, targetSelector,
     );
-    await this.request(this.endpoint('/actions'), 'POST', { actions: [{
-      type: 'pointer', id: 'desktop-test-pointer', parameters: { pointerType: 'mouse' },
-      actions: [
-        { type: 'pointerMove', duration: 0, x: points.a.x, y: points.a.y, origin: 'viewport' },
-        { type: 'pointerDown', button: 0 },
-        { type: 'pointerMove', duration: 450, x: points.b.x, y: points.b.y, origin: 'viewport' },
-        { type: 'pointerUp', button: 0 },
-      ],
-    }] });
-    await this.request(this.endpoint('/actions'), 'DELETE');
+    if (!result?.payload || !result.dropPrevented) {
+      throw new Error('The destination did not accept the internal drag payload.');
+    }
+    return JSON.parse(result.payload);
   }
 
   async setFileInput(selector, name, content, mimeType = 'application/json') {
