@@ -4,7 +4,7 @@ This is a required installed-product release gate. A successful frontend test or
 
 ## Automated checks in pull-request CI
 
-The Windows desktop job compares the candidate Tauri application identifier and NSIS install scope against master, builds both NSIS and MSI installers from the PR commit, and uploads them as a 14-day artifact. CI also runs the browser persistence suite, which exercises IndexedDB reload behavior in Chromium. These checks validate packaging and browser persistence separately; they do not simulate an in-place installed MSI upgrade.
+The Windows desktop job compares the candidate Tauri application identifier and NSIS install scope against master, runs frontend and Rust checks, builds both NSIS and MSI installers from the PR commit, and uploads them as a 14-day artifact. These checks validate the candidate package; they do not simulate an in-place installed MSI upgrade. IndexedDB persistence must be verified inside the installed Tauri application.
 
 ## Installed upgrade test matrix
 
@@ -40,7 +40,7 @@ Attach:
 - Application data must remain outside the installation directory.
 - An installer upgrade must not clear, recreate, or migrate the IndexedDB profile destructively.
 
-**Status:** CI validates the Windows package build and browser IndexedDB reload behavior. Actual installed MSI upgrade persistence remains a manual VM gate and must not be marked complete until the evidence above is attached.
+**Status:** CI validates the Windows package build and automated frontend/storage behavior. Actual installed MSI upgrade persistence remains a manual VM gate and must not be marked complete until the evidence above is attached.
 
 ## Repeatable VM harness
 

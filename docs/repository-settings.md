@@ -11,7 +11,6 @@ Create a branch ruleset targeting `master` and `release/**` (if release branches
 - Require branches to be up to date before merging.
 - Require these status checks:
   - `Frontend checks`
-  - `Browser end-to-end tests`
   - `Dependency security audit`
   - `Windows desktop build`
 - Block force pushes.
@@ -19,6 +18,8 @@ Create a branch ruleset targeting `master` and `release/**` (if release branches
 - Do not grant bypass to routine write access; reserve bypass for a documented emergency role.
 
 Keep `slave` writable for development. It is not a release branch and should not be the default release source.
+
+The `Linux desktop packages` job is the secondary platform track. It may be monitored as an additional check, but it must not become a prerequisite for completing the immediate Windows validation sequence.
 
 ## Release tag ruleset
 

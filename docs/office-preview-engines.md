@@ -1,8 +1,8 @@
 # Office document preview engines
 
-SiliconVault uses a browser-side Rust/WebAssembly renderer for modern OOXML documents and retains native Office-to-PDF conversion as a compatibility fallback. Converted PDFs use the existing PDF.js viewer. The browser renderer does not require a Python, Java, or Node.js application runtime.
+SiliconVault uses an embedded-WebView Rust/WebAssembly renderer for modern OOXML documents and retains native Office-to-PDF conversion as a compatibility fallback. Converted PDFs use the existing PDF.js viewer. The browser renderer does not require a Python, Java, or Node.js application runtime.
 
-## Browser-side OOXML rendering
+## Embedded-WebView OOXML rendering
 
 Modern Office Open XML files use the pinned `@silurus/ooxml` package (MIT) and render locally in the Tauri/WebView frontend:
 
@@ -20,7 +20,7 @@ The package is pinned to an exact version rather than a floating range. Its upst
 
 ## Legacy and non-OOXML formats
 
-Legacy binary formats (`.doc`, `.xls`, `.ppt`) and OpenDocument/RTF formats (`.odt`, `.ods`, `.odp`, `.rtf`, and related variants) continue through the native PDF conversion pipeline below. The same conversion path is used when browser-side OOXML rendering fails in the desktop application. If no conversion engine is installed, the preview reports that dependency instead of showing a misleading partial rendering.
+Legacy binary formats (`.doc`, `.xls`, `.ppt`) and OpenDocument/RTF formats (`.odt`, `.ods`, `.odp`, `.rtf`, and related variants) continue through the native PDF conversion pipeline below. The same conversion path is used when embedded-WebView OOXML rendering fails in the desktop application. If no conversion engine is installed, the preview reports that dependency instead of showing a misleading partial rendering.
 
 ## Engine selection
 
@@ -28,7 +28,7 @@ Legacy binary formats (`.doc`, `.xls`, `.ppt`) and OpenDocument/RTF formats (`.o
 2. If Document Builder fails and LibreOffice is available, SiliconVault falls back to LibreOffice.
 3. If Document Builder is not configured, SiliconVault uses LibreOffice when available.
 
-The official CLI executable names are `docbuilder.exe` on Windows and `documentbuilder` on Linux/macOS. Document Builder runs UTF-8 JavaScript files directly; the integration uses the documented `builderJS.OpenFile`, `builderJS.SaveFile`, and `builderJS.CloseFile` API.
+The official CLI executable names are `docbuilder.exe` on Windows and `documentbuilder` on Linux. Document Builder runs UTF-8 JavaScript files directly; the integration uses the documented `builderJS.OpenFile`, `builderJS.SaveFile`, and `builderJS.CloseFile` API.
 
 Example PowerShell configuration for the current process:
 
@@ -75,4 +75,4 @@ The Rust backend launches the native Document Builder CLI for each conversion an
 
 ## Supported preview flow
 
-Office-to-PDF fallback output is opened by the existing PDF.js viewer. Modern OOXML documents normally render directly through the browser-side package above. Conversion fidelity remains dependent on the source file, installed engine version, and available fonts.
+Office-to-PDF fallback output is opened by the existing PDF.js viewer. Modern OOXML documents normally render directly through the embedded-WebView package above. Conversion fidelity remains dependent on the source file, installed engine version, and available fonts.

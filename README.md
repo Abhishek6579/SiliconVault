@@ -28,19 +28,18 @@ File-format recognition does not guarantee a dedicated renderer. See [the implem
 
 | Platform | Status |
 | --- | --- |
-| Windows 10/11 | Configured desktop packaging and release workflow. This is the supported packaged target. |
-| macOS | Tauri is cross-platform, but this repository does not configure or publish macOS release artifacts. |
-| Linux | Tauri is cross-platform, but this repository does not configure or publish Linux release artifacts. |
+| Windows 10/11 | **Primary release target.** NSIS and MSI desktop installers; immediate validation priority. |
+| Linux | **Secondary release target.** AppImage and DEB package builds run in CI; native runtime and release validation follow Windows. |
 
-Do not treat macOS/Linux builds as release-supported until native dependencies, packaging, and installed-app behavior have been validated.
+SiliconVault is a desktop-only product. Standalone browser/web deployments and macOS packages or releases are out of scope.
 
 ### Developer prerequisites
 
 - Git.
 - Node.js 22 LTS and npm (Node 22 is used by CI and release workflows).
 - Rust stable via rustup for native Tauri builds.
-- Windows: the MSVC Rust toolchain, Visual Studio Build Tools with **Desktop development with C++**, and the Windows SDK.
-- Microsoft Edge WebView2 Runtime on Windows.
+- Windows: the MSVC Rust toolchain, Visual Studio Build Tools with **Desktop development with C++**, the Windows SDK, and Microsoft Edge WebView2 Runtime.
+- Linux: a supported Tauri toolchain plus GTK, WebKitGTK 4.1, OpenSSL, AppIndicator, librsvg, and patchelf development packages. See the Tauri Linux prerequisites for the distribution-specific package names.
 
 Office document-to-PDF conversion optionally requires LibreOffice or a licensed ONLYOFFICE Document Builder runtime. These are external conversion engines, not npm dependencies.
 
@@ -80,19 +79,13 @@ Use **npm ci** to install the dependency versions recorded in the committed lock
 
 ### Run
 
-Run the frontend in a browser:
-
-~~~bash
-npm run dev
-~~~
-
 Run the native desktop application:
 
 ~~~bash
 npm run tauri:dev
 ~~~
 
-The Tauri development command starts Vite at **http://127.0.0.1:1420**.
+The Tauri development command starts Vite at **http://127.0.0.1:1420** inside the application's embedded WebView. This local development server is not a standalone browser product.
 
 ### Validate and build
 
@@ -141,12 +134,10 @@ Set only the variable for an installed conversion engine. Document Builder requi
 
 | Command | Purpose |
 | --- | --- |
-| **npm run dev** | Browser-based Vite development |
-| **npm run dev:desktop** | Vite on the fixed Tauri development port |
+| **npm run dev:desktop** | Vite server used by the Tauri desktop development window |
 | **npm run build** | Production frontend build |
 | **npm test** | Vitest suite |
 | **npm run typecheck** | TypeScript checks |
-| **npm run test:e2e** | Playwright end-to-end tests |
 | **npm run tauri:dev** | Native desktop development |
 | **npm run tauri:build** | Desktop bundle build |
 | **npm run benchmark:backup-memory** | Backup memory benchmark |
@@ -166,7 +157,7 @@ Set only the variable for an installed conversion engine. Document Builder requi
 
 ### Keyboard shortcuts
 
-These shortcuts are implemented by the frontend keyboard handlers. **Ctrl** corresponds to **Command** on macOS when the runtime reports the Meta key.
+These shortcuts use **Ctrl** on the supported Windows and Linux desktop targets.
 
 | Shortcut | Context | Action |
 | --- | --- | --- |
@@ -202,7 +193,7 @@ SiliconVault is local-first and does not require an account or remote applicatio
 - File metadata and file bodies are stored separately.
 - UI preferences, tab/session state, and recoverable drafts are persisted through the local storage layer.
 
-IndexedDB is scoped to the browser/WebView profile. Browser development and the packaged desktop app can use different databases. The workspace database is not stored beside the installer.
+IndexedDB is scoped to the persistent profile of SiliconVault's embedded Tauri WebView. The workspace database is not stored beside the installer; the standalone browser is not a supported runtime.
 
 ### Per-OS storage locations
 
@@ -211,8 +202,7 @@ Workspace data lives in the persistent WebView IndexedDB profile. Diagnostics us
 | OS | Workspace data | Diagnostics/logs |
 | --- | --- | --- |
 | Windows | Persistent IndexedDB in the SiliconVault WebView2 profile. The exact installed-app path is not yet documented as validated. | Tauri app_log_dir/diagnostics location. |
-| macOS | Persistent WebView IndexedDB profile if packaged; packaged behavior is not release-validated. | Tauri platform-managed application log directory. |
-| Linux | Persistent WebView IndexedDB profile if packaged; packaged behavior is not release-validated. | Tauri platform-managed application log directory. |
+| Linux | Persistent IndexedDB in the SiliconVault WebView profile. Linux installed-app persistence and runtime behavior remain part of the secondary validation track. | Tauri platform-managed application log directory. |
 
 Diagnostic files include **app.log**, **crash.log**, and **startup.json**. Log rotation is implemented. Diagnostics export excludes Dexie workspace data and user documents.
 
@@ -222,7 +212,7 @@ Diagnostic files include **app.log**, **crash.log**, and **startup.json**. Log r
 - Protect the OS account and device; use full-disk encryption where appropriate.
 - Treat exported backups as plaintext copies of workspace data.
 - Back up before migrations, reinstallations, profile cleanup, or upgrade testing.
-- Do not assume browser-development data is the same as packaged desktop data.
+- A Tauri development profile and an installed application profile may differ; validate persistence using the packaged desktop application.
 
 See [Storage audit](docs/storage-audit.md) for schema history, migration details, data limits, and outstanding validation work.
 
@@ -237,7 +227,6 @@ SiliconVault/
 │   └── workflows/            # CI validation and Windows release automation
 ├── docs/                     # Architecture, development, storage, installation,
 │                             # release, performance, and validation documentation
-├── e2e/                      # Playwright end-to-end tests
 ├── scripts/
 │   ├── benchmarks/           # Storage and backup-memory benchmarks
 │   └── windows/              # Installed-upgrade validation scripts
@@ -255,7 +244,7 @@ SiliconVault/
 │   │   └── workspace/         # Navigation, import, projects, folders, file list,
 │   │                          # dialogs, and workspace actions
 │   ├── pdf/                   # PDF lifecycle/resource cleanup
-│   ├── platform/              # Desktop/browser detection and adapters
+│   ├── platform/              # Tauri desktop adapter and shared contract
 │   ├── shared/                # Shared constants, hooks, UI, and utilities
 │   ├── storage/               # Dexie schema, migrations, persistence, backups,
 │   │                          # file classification, and hierarchy operations
@@ -283,7 +272,6 @@ SiliconVault/
 ├── package-lock.json          # Locked npm dependency graph
 ├── vite.config.ts             # Vite configuration
 ├── vitest.config.ts            # Vitest configuration
-└── playwright.config.ts       # Playwright configuration
 ~~~
 
 For deeper subsystem contracts, see [docs/architecture.md](docs/architecture.md).

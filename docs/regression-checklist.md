@@ -1,6 +1,6 @@
 # SiliconVault Regression Checklist
 
-Run these checks on each supported desktop OS before a release. Record the OS version, app build, runtime, tester, date, and observed result. Items marked manual require a real desktop session.
+Run the full checklist on Windows first; this is the immediate release gate. Run the corresponding native smoke checks on Linux as the secondary track after Windows validation. Record the OS version, app build, runtime, tester, date, and observed result. Items marked manual require a real desktop session.
 
 | Workflow | Steps | Expected result | Result |
 | --- | --- | --- | --- |
@@ -12,8 +12,9 @@ Run these checks on each supported desktop OS before a release. Record the OS ve
 | Edit and save | Edit a Markdown/code file, wait for autosave, close and reopen | Saved content is present and status reports success | Not run in this repository-only session |
 | Unsaved-change handling | Edit a file and close the app before debounce completes | Draft is persisted or close is cancelled on save failure | Not run in this repository-only session |
 | Backup and restore | Save a backup, then restore it into a test workspace | Export validates; restore preserves records and attachments | Existing automated storage round-trip tests pass; native dialogs not run |
-| Keyboard shortcuts | Test search, close-tab, and zoom shortcuts | Ctrl works on Windows/Linux; Cmd works on macOS | Not run on native sessions |
+| Keyboard shortcuts | Test search, close-tab, and zoom shortcuts | Ctrl shortcuts work consistently on Windows and Linux | Not run on native sessions |
 | Zoom | Zoom in, out, then reset | UI returns to default zoom and remains usable | Not run in a desktop session |
 | Restart persistence | Create workspace data, close app, restart | Workspaces, files, theme, and session state persist | Not run in a desktop session |
 | Theme persistence | Change theme, close app, restart | Selected theme remains active | Not run in a desktop session |
-| Update check | Request an update check on a packaged build | Update state and release notes are reported correctly | Not run in a signed packaged build |
+| Update check | Request an update check on a packaged build | Windows x64 reports the published signed update; Linux does not advertise updater support until its manifest target is verified | Not run in a signed packaged build |
+| Linux package smoke test | Install the DEB or launch the AppImage on a supported Linux desktop | The app launches, imports files, persists data, and exports/restores a backup | Secondary validation; not run in this repository-only session |

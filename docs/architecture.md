@@ -15,7 +15,7 @@ This describes the implementation visible in the repository, not the full roadma
 | PDF | pdfjs-dist | PDF rendering and text search |
 | Markdown | React Markdown, KaTeX, Mermaid | Markdown, math, diagrams |
 
-The frontend is not a client for a remote application server. The Tauri entry point registers a system-monitor command plus dialog and filesystem plugins.
+The frontend is packaged and launched only inside the Tauri desktop shell; it is not a standalone browser application or a client for a remote application server. The Tauri entry point registers native commands plus dialog and filesystem plugins.
 
 ## Important source paths
 
@@ -56,7 +56,7 @@ Schema versions 1–3 and named migrations are recorded in [storage-audit.md](st
 - Unmounting the reader or replacing its source cancels outstanding render tasks and releases the active PDF.js loading task (or, if loading has completed, the loaded document). This cleanup is centralized in `src/pdf/lifecycle.ts` and covered by `tests/storage-reliability.test.ts`.
 - Keep PDF rendering, pagination, zoom, and lifecycle changes isolated from workspace/storage refactors. Revalidate the Windows desktop build and reader behavior before changing this contract.
 
-IndexedDB is scoped to a browser/WebView profile. Browser development data must not be assumed to be the same as packaged desktop data. The exact packaged Windows data path and update persistence require validation on an installed build.
+IndexedDB is scoped to the Tauri application's persistent embedded-WebView profile. The development profile may differ from the installed profile. The exact packaged Windows data path and update persistence require validation on an installed build.
 
 ## File format support
 
@@ -87,5 +87,5 @@ Tauri capabilities currently grant core defaults, dialog open/save, and selected
 - Legacy binary DOC/PPT, XLSX, FST, GDS/GDSII, and KiCad PCB formats do not have dedicated renderers.
 - No interactive VCD waveform viewer.
 - No verified packaged Windows data-path or memory baseline documented.
-- Windows NSIS packaging is configured, but install/upgrade/uninstall persistence needs Windows validation.
+- Windows NSIS/MSI packaging is configured and remains the immediate validation gate. Linux AppImage/DEB packaging is the secondary target and requires native runtime validation.
 - Application source is licensed under Apache-2.0; third-party dependencies retain their own licenses.

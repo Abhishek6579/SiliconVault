@@ -38,19 +38,13 @@ npm run tauri:build
 
 The configured NSIS installer is expected under `src-tauri/target/release/bundle/nsis/`. Read the actual filename from the build output; do not assume an architecture-specific name.
 
-## Browser development
-
-```bash
-npm ci
-npm run dev
-```
-
-This runs the frontend in a browser, not the standalone desktop app.
-
 ## Data persistence
 
-SiliconVault uses Dexie/IndexedDB. Back up important workspace data before clearing browser/WebView data or testing upgrades. The database is not stored alongside the installer. Browser development and packaged Tauri may use different profiles. The exact packaged Windows data path and upgrade persistence must be confirmed on an installed build.
+SiliconVault uses Dexie/IndexedDB. Back up important workspace data before clearing browser/WebView data or testing upgrades. The database is not stored alongside the installer. A Tauri development profile and an installed application profile may differ. The exact packaged Windows data path and upgrade persistence must be confirmed on an installed build.
 
 ## Platform support
 
-Windows is the configured desktop packaging target. Linux/macOS frontend development may be possible, but release workflows for those platforms are not configured.
+- **Windows 10/11 x64 — primary:** NSIS and MSI installers. Windows validation and installed-upgrade safety take priority.
+- **Linux x86_64 — secondary:** AppImage and DEB package builds run in CI; native installation, runtime, and upgrade validation follow the Windows gate.
+
+Standalone browser/web applications and macOS packages or releases are not supported targets. Linux is not allowed to block Windows validation.

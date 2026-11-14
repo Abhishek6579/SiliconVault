@@ -15,7 +15,7 @@ The application is designed primarily for desktop computers.
 
 It must work without an internet connection after installation. User data must remain on the local machine.
 
-The primary development and distribution target is **Windows 10/11**. Linux and macOS compatibility may be maintained where practical, but Windows takes priority.
+The supported desktop targets are **Windows 10/11 (primary)** and **Linux (secondary)**. Windows validation takes priority. macOS and standalone browser/web applications are out of scope.
 
 The application must not depend on a browser being installed or manually opened by the user. It must launch as a normal desktop application.
 
@@ -96,13 +96,13 @@ Requirements:
 - Support normal minimize, maximize and close operations.
 - Provide native file-open and save dialogs.
 - Support importing files through the native file picker.
-- Support drag-and-drop from Windows Explorer.
-- Provide a distributable Windows installer.
+- Support drag-and-drop from Windows Explorer and supported Linux file managers.
+- Provide distributable Windows installers; Linux AppImage and DEB packages are the secondary packaging target.
 - Preserve user data across application updates.
 - Never delete user data when uninstalling the application.
 - Work offline without requiring an account or remote service.
 
-A browser-based development mode may remain available for debugging, but it is not the primary product.
+Do not implement or maintain a standalone browser/web application. Run Vite only through the Tauri desktop development command; the embedded WebView is an implementation detail, not a browser release target.
 
 ## 4.2 Tauri security
 
@@ -208,7 +208,7 @@ Do not expand beyond this list without explicit authorization.
 - Expandable and collapsible folder tree.
 - File-type icons for PDF, Markdown and code.
 - Context menu: rename, move, delete and open.
-- Multi-select with Ctrl/Cmd and Shift.
+- Multi-select with Ctrl and Shift.
 - Drag-and-drop file and folder movement.
 - Sort by name, type, size and modification date.
 - Recent files.
@@ -679,7 +679,7 @@ When integrating Tauri:
 - Preserve existing database behavior.
 - Preserve existing document formats and storage.
 - Preserve all existing keyboard interactions and workflows.
-- Add native desktop functionality without breaking browser-independent application logic.
+- Add native desktop functionality without breaking shared application logic.
 - Do not migrate the database or rewrite the frontend unless a proven technical requirement demands it.
 
 ## 6. Changes Must Be Incremental

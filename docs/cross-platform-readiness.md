@@ -1,63 +1,81 @@
-# Cross-platform readiness
+# Desktop platform support and release readiness
 
 **Status date:** 14 November 2026  
 **Development branch:** `slave`  
 **Release baseline:** `v0.2.0-beta.2`
 
-## Architecture
+## Product direction
+
+SiliconVault is a **desktop-only, local-first engineering workspace**. The release targets are:
+
+| Priority | Platform | Target packages | Current focus |
+| --- | --- | --- | --- |
+| Primary | Windows 10/11 x64 | NSIS (.exe), MSI (.msi) | Immediate release and installed-upgrade validation |
+| Secondary | Linux x86_64 | AppImage, DEB | Package CI exists; native runtime and release validation follow Windows |
+
+Standalone browser/web deployments and macOS packages or releases are not product targets. Do not add browser compatibility checks or macOS jobs to release criteria.
+
+## Desktop architecture
 
 - Desktop shell: Tauri 2, React, TypeScript, Vite, and Rust.
-- Data persistence: Dexie/IndexedDB in the application WebView.
-- Platform integration: shared `src/platform/` contract with a Tauri desktop adapter and browser adapter.
+- Data persistence: Dexie/IndexedDB in the Tauri application's embedded WebView profile.
+- Platform integration: one Tauri desktop adapter in `src/platform/desktop.ts`, exposed through the shared `src/platform/types.ts` contract.
 - Portable data path: version-1 JSON backup and restore.
 - Reference desktop identity: `com.siliconvault.desktop`; Windows installer scope: per-user (`currentUser`).
 
-The platform adapter centralizes native dialogs, file and folder selection, backup save/open, diagnostics, system statistics, Office conversion, update events, and safe shutdown. Feature code should depend on the adapter rather than calling Tauri APIs or inspecting the host OS directly.
+Feature code must use the shared platform contract rather than calling Tauri APIs directly. The embedded WebView uses web-platform primitives internally; this does not create a standalone browser deployment requirement.
 
-The published updater manifest currently contains only the `windows-x86_64` target. The desktop adapter therefore advertises update support only for Windows x64; Linux, macOS, and Windows ARM must not show a working updater until matching signed artifacts and manifest entries are published.
+## Windows primary release gate
 
-## Automated validation evidence
+Windows remains the immediate priority. Do not delay Windows validation to expand Linux support.
 
-The following results were observed on the remote `slave` head `d1a778a9a916bb35866c7ca3707e385bb810487f` (GitHub Actions run [#795](https://github.com/Abhishek6579/SiliconVault/actions/runs/43507779310)):
+1. Preserve the Tauri application identifier and per-user NSIS install scope.
+2. Run frontend tests, TypeScript checks, architecture checks, and production build.
+3. Run Rust tests and build both NSIS and MSI installers on the Windows runner.
+4. Install and launch the candidate; verify native file/folder dialogs, imports, drag-and-drop, backups, restore, diagnostics, updates, and restart persistence.
+5. Complete the previous-MSI-to-candidate-MSI installed upgrade test on a clean Windows 10/11 VM. Verify the existing WebView2/IndexedDB profile, workspaces, files, preferences, tabs, drafts, and PDF position.
 
-- Frontend unit tests, TypeScript, architecture-boundary check, and production build passed.
-- Browser Playwright workflows passed.
-- Dependency audit passed at `npm audit --audit-level=high`.
-- Storage and backup-memory benchmark jobs passed.
-- Rust tests passed in the Windows, Linux, and macOS jobs.
-- Windows NSIS/MSI, Linux AppImage/DEB, and macOS DMG CI package builds and artifact uploads passed.
+A successful frontend build or installer build does not replace the installed-upgrade gate. See [Windows upgrade validation](windows-upgrade-validation.md).
 
-The same validation was run locally on Windows using `validate.ps1`: 89 unit tests, 8 Playwright tests, TypeScript, Vite build, storage benchmark, and backup-memory benchmark passed. The local output included three non-fatal Rust dead-code warnings.
+The published updater manifest currently contains only the `windows-x86_64` target. Windows x64 is the only platform advertising in-app updater capability.
 
-**Scope of this evidence:** it establishes successful automated checks and package builds for the specified commits. It does not establish end-user runtime behavior on every OS or validate upgrades of an already-installed application. The newer backup-export and updater-capability changes must receive their own CI run before being treated as verified.
+## Linux secondary track
+
+CI builds AppImage and DEB packages on Ubuntu with the native Tauri prerequisites. Linux work remains secondary to Windows and must not become a dependency of the Windows validation sequence.
+
+Before advertising a Linux production release, validate on a real supported Linux desktop:
+- AppImage launch and DEB install/uninstall behavior.
+- Native file and folder dialogs, recursive import, and file-manager drag-and-drop.
+- Backup export and restore, restart persistence, diagnostics, and Office conversion fallback.
+- Required runtime libraries, file permissions, desktop integration, and upgrade behavior.
+
+Linux automatic updating is not enabled until an AppImage updater artifact and matching signed manifest entry are deliberately added and verified. A Linux CI package build alone is not evidence of installed runtime correctness.
+
+## Continuous integration
+
+- Shared frontend tests, type checks, architecture checks, build, dependency audit, and performance benchmarks.
+- Required Windows desktop job: Rust tests, NSIS/MSI build, signing checks, and installer artifacts.
+- Secondary Linux desktop job: Rust tests, AppImage/DEB build, and package artifacts.
+- No browser-app end-to-end release job.
+- No macOS runner, signing, notarization, or package job.
+
+Chromium may still be used as an isolated benchmark harness for IndexedDB measurements. That is not a browser product compatibility target.
 
 ## Data portability and backup safeguards
 
 - Backup schema version 1 remains the compatibility format.
-- Export and restore share the same maximum record, per-file, aggregate-content, and serialized-file-size limits.
-- Export preflights limits and stored-content size consistency before opening the native save dialog or starting the browser download.
-- Restore validates record shape, references, duplicate IDs, sizes, and SHA-256 content checksums before the live-store replacement transaction.
+- Export and restore share maximum record, per-file, aggregate-content, and serialized-file-size limits.
+- Export preflights limits and stored-content size consistency before opening the native save dialog.
+- Restore validates record shape, references, duplicate IDs, sizes, and SHA-256 content checksums before live-store replacement.
 - The restore transaction replaces application stores together; a failed transaction must leave the previous database intact.
-- The current restore parser still uses `File.text()` followed by `JSON.parse()` inside a dedicated worker. This keeps JSON parsing off the UI thread but materializes the full v1 JSON value. It is not streaming or record-at-a-time parsing.
-- A staged v2 streaming restore remains design work. Do not change the default backup format until cross-version compatibility, interruption recovery, fault injection, and atomic promotion are verified.
+- Restore parsing runs in a dedicated worker to keep JSON parsing off the UI thread, but still materializes the full v1 JSON value. It is not streaming or record-at-a-time parsing.
+- A staged v2 streaming restore remains design work. Do not change the default backup format until compatibility, interruption recovery, fault injection, and atomic promotion are verified.
 
 Backups are plaintext JSON and are not encrypted by SiliconVault. Users should protect exported backup files as sensitive data.
 
-## Remaining native and distribution gates
+## Shared portability constraints
 
-1. **Windows installed upgrade:** run the documented previous-MSI-to-candidate-MSI test on a clean Windows 10/11 VM. Verify the same WebView2 profile, workspaces, files, settings, tabs, drafts, and PDF position survive an in-place upgrade. A successful installer build is not a substitute.
-2. **Native runtime smoke tests:** launch the packaged app on supported Windows, Linux, and macOS systems. Exercise file/folder dialogs, folder import, save/restore, drag-and-drop, PDF viewing, Office viewing/fallback, close handling, and diagnostics.
-3. **Cross-OS backup matrix:** exercise Windows→Linux, Windows→macOS, Linux→Windows, Linux→macOS, macOS→Windows, and macOS→Linux with real representative backups; compare record counts, hierarchy, hashes, and PDF content.
-4. **Office fidelity:** maintain representative DOCX, XLSX, and PPTX fixtures. Validate charts, images, tables, formulas, fonts, large files, and worker behavior in real WebViews. Do not claim pixel parity with Microsoft Office.
-5. **Linux/macOS updating:** implement and validate platform-specific signed update packages and updater manifest entries before enabling those capabilities.
-6. **macOS distribution:** determine signing and notarization requirements for the intended distribution channel and validate the downloaded DMG on a clean Mac.
-7. **Repository protection:** configure and verify GitHub rulesets for `master` and `v*` tags. The documentation alone does not enforce them.
-8. **Golden backup:** export a representative backup from a real installed application, inspect it for private data, and only then preserve a redacted or synthetic fixture for repeatable compatibility tests.
-
-## Decisions and portability constraints
-
-- File and folder sibling names use NFC-normalized, case-insensitive comparison to prevent cross-platform collisions.
+- File and folder sibling names use NFC-normalized, case-insensitive comparison to avoid Windows/Linux name collisions.
 - Imported folder paths use normalized forward-slash separators; parent traversal segments are rejected.
-- macOS pinch-to-zoom is mapped to the shared Ctrl/Cmd-wheel gesture but still requires hardware verification.
-- Tauri filesystem operations should remain constrained to picker-selected files and folders.
-- Existing application data remains in the WebView profile, outside the installation directory. Preserve the Tauri application identifier and installer scope unless a deliberate data migration is designed.
+- Tauri filesystem operations remain constrained to picker-selected files and folders.
+- Existing application data remains in the embedded WebView profile, outside the installation directory. Preserve the Tauri application identifier and installer scope unless a deliberate data migration is designed.

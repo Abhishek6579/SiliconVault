@@ -2,11 +2,13 @@
 
 ## Prerequisites
 
-Frontend: Git, Node.js 22 LTS recommended, npm.
+Shared tooling: Git, Node.js 22 LTS, and npm.
 
-Windows desktop: Rust stable via rustup using the MSVC toolchain, Visual Studio Build Tools with **Desktop development with C++**, Windows SDK, and Microsoft Edge WebView2 Runtime.
+Windows primary target: Rust stable via rustup using the MSVC toolchain, Visual Studio Build Tools with **Desktop development with C++**, Windows SDK, and Microsoft Edge WebView2 Runtime.
 
-See [Installation](installation.md) for the Windows sequence.
+Linux secondary target: Rust stable plus the GTK, WebKitGTK 4.1, OpenSSL, AppIndicator, librsvg, and patchelf development packages required by Tauri. Package names vary by distribution.
+
+See [Installation](installation.md) for end-user and platform-specific setup.
 
 ## Clone and install
 
@@ -18,18 +20,20 @@ npm ci
 
 Use `npm ci` against the committed lockfile. Do not commit node_modules, build output, local databases, backups, or signing credentials.
 
-## Run modes
+## Desktop development
 
 ```bash
-npm run dev          # browser-based frontend
-npm run tauri:dev    # native desktop app; starts Vite on 127.0.0.1:1420
+npm run tauri:dev    # native Tauri desktop app; Vite runs inside its embedded WebView
 ```
+
+There is no standalone browser development or release target.
 
 ## Required verification
 
 ```bash
 npm test
 npm run typecheck
+npm run check:architecture
 npm run build
 ```
 
@@ -42,7 +46,7 @@ cd ..
 npm run tauri:build
 ```
 
-A frontend build does not prove the Windows installer works. Validate native dialogs, persistence, upgrade, and uninstall behavior on Windows.
+A frontend build does not prove the desktop installer works. Windows is the immediate gate: validate native dialogs, persistence, installed upgrade, and uninstall behavior. Linux package and runtime validation is secondary and must not delay the Windows gate.
 
 ## Data safety
 
