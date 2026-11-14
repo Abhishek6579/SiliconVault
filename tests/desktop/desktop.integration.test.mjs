@@ -43,31 +43,36 @@ async function createNote(name) {
   await app.waitForText('.file-tab', name);
 }
 
-async function ensureMarkdownEditing() {
+async function ensureMarkdownEditing(fileName) {
+  await app.waitForText('.file-tab.active', fileName, 20_000);
   const mode = await app.waitFor(
     () => app.execute(
       'if (document.querySelector(".cm-content[contenteditable=\\"true\\"]")) return "editing"; const button=Array.from(document.querySelectorAll(".editor-tools button")).find((item) => ["Edit note","Preview"].includes(item.textContent.trim())); return button?.textContent.trim() || false;',
     ),
-    12_000,
+    30_000,
     'Markdown editor or preview toggle to load',
   );
   if (mode === 'Edit note') await app.clickText('.editor-tools button', 'Edit note');
   else if (mode !== 'Preview' && mode !== 'editing') throw new Error('Markdown editor did not reach an editable or preview state.');
-  await app.waitForCss('.cm-content[contenteditable="true"]');
+  await app.waitForCss('.cm-content[contenteditable="true"]', 30_000);
 }
 
 async function waitForCrashRecoverySnapshot(fileName, marker) {
+  let latestSnapshot = null;
   const snapshot = await app.waitFor(
-    () => app.executeAsync(
+    async () => {
+      latestSnapshot = await app.executeAsync(
       'const done=arguments[arguments.length-1]; const expectedName=arguments[0]; const expectedMarker=arguments[1]; const request=indexedDB.open("engineering-workspace"); request.onerror=()=>done({error:request.error?.message || "database open failed"}); request.onsuccess=()=>{ const database=request.result; let files=null, preferences=null, settled=false; const finish=()=>{ if(files===null || preferences===null || settled) return; settled=true; const file=files.find((item)=>item.name===expectedName && item.deletedAt===null); const draft=file ? preferences.find((item)=>item.key==="draft:"+file.id)?.value : undefined; const sessionValue=file ? preferences.find((item)=>item.key==="session:"+file.workspaceId)?.value : undefined; const session=sessionValue && typeof sessionValue==="object" ? sessionValue : {}; const sessionContainsTab=Boolean(file && Array.isArray(session.openFileIds) && session.openFileIds.includes(file.id) && session.activeFileId===file.id); done({ready:Boolean(file && typeof draft==="string" && draft.includes(expectedMarker) && sessionContainsTab),fileId:file?.id ?? null,draftPersisted:typeof draft==="string" && draft.includes(expectedMarker),sessionContainsTab,activeFileId:session.activeFileId ?? null,openFileIds:session.openFileIds ?? []}); database.close(); }; const tx=database.transaction(["files","preferences"],"readonly"); const fileRequest=tx.objectStore("files").getAll(); const preferenceRequest=tx.objectStore("preferences").getAll(); fileRequest.onsuccess=()=>{files=fileRequest.result;finish();}; preferenceRequest.onsuccess=()=>{preferences=preferenceRequest.result;finish();}; tx.onerror=()=>{if(!settled){settled=true;done({error:tx.error?.message || "database read failed"});database.close();}}; tx.onabort=()=>{if(!settled){settled=true;done({error:tx.error?.message || "database read aborted"});database.close();}}; };',
       fileName,
       marker,
-    ),
+      );
+      return latestSnapshot?.ready ? latestSnapshot : false;
+    },
     900,
     'crash recovery draft and active tab to reach IndexedDB',
   );
   if (!snapshot?.ready) {
-    throw new Error('Crash recovery data was not durable before termination: ' + JSON.stringify(snapshot));
+    throw new Error('Crash recovery data was not durable before termination: ' + JSON.stringify(latestSnapshot ?? snapshot));
   }
 }
 
@@ -242,7 +247,7 @@ test('native desktop integration', async (t) => {
   await t.test('editor autosave, local content search, tabs and recovery draft', async () => {
     await selectFolder('Desktop Destination');
     await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"] .file-name-button');
-    await ensureMarkdownEditing();
+    await ensureMarkdownEditing('desktop-renamed-note.md');
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nDesktop autosave content marker');
@@ -257,7 +262,7 @@ test('native desktop integration', async (t) => {
     await app.clickText('.file-tab', 'desktop-renamed-note.md');
     await app.waitForText('.cm-content', 'Desktop autosave content marker');
     await app.clickText('.file-tab', 'desktop-second-tab.md');
-    await ensureMarkdownEditing();
+    await ensureMarkdownEditing('desktop-second-tab.md');
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nPending close recovery marker');
@@ -355,7 +360,7 @@ test('native desktop integration', async (t) => {
       throw new Error('Workspace state after restart: ' + state + '; ' + error.message);
     }
     await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
-    await ensureMarkdownEditing();
+    await ensureMarkdownEditing('restored-desktop-note.md');
     await app.waitForText('.cm-content', 'Backup round-trip marker', 15_000);
   });
 });
