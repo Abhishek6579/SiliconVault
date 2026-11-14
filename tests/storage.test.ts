@@ -765,7 +765,6 @@ describe('workspace storage', () => {
       expect(await recovered.preferences.get('theme')).toMatchObject({ value: 'dark' });
     } finally {
       recovered.close();
-      await recovered.delete();
     }
   });
 
