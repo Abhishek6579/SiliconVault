@@ -284,7 +284,7 @@ describe('workspace storage', () => {
     expect(await database.preferences.toArray()).toEqual([
       ...expected.preferences,
       { key: 'activeWorkspace', value: DEFAULT_WORKSPACE_ID, updatedAt: backup.exportedAt },
-    ]);
+    ].sort((left, right) => left.key.localeCompare(right.key)));
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
   });
 
