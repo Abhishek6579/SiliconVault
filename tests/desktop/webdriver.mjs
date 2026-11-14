@@ -56,8 +56,8 @@ export class DesktopWebDriver {
     if (process.platform === 'win32') {
       env.APPDATA = path.join(this.profile, 'Roaming');
       env.LOCALAPPDATA = path.join(this.profile, 'Local');
-      // Pass the WebView2 user-data directory to the native Tauri window builder.
-      // Reuse it across process restarts within this test run.
+      // Keep one isolated WebView2 user-data directory for this test run.
+      // The path is also passed explicitly in tauri:options.args below.
       env.SILICON_VAULT_WEBVIEW_DATA_DIR = path.join(this.profile, 'webview2');
       await Promise.all([
         mkdir(env.APPDATA, { recursive: true }),
