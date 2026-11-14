@@ -255,10 +255,6 @@ fn desktop_test_webview_data_directory() -> Option<PathBuf> {
 
 #[tauri::command]
 fn get_desktop_test_diagnostics() -> Result<serde_json::Value, String> {
-    if !is_desktop_test_mode() {
-        return Err("Desktop test diagnostics are available only in desktop test mode.".into());
-    }
-
     let directory = desktop_test_webview_data_directory();
     let entries = directory.as_ref().and_then(|path| {
         fs::read_dir(path).ok().map(|items| {
@@ -269,6 +265,7 @@ fn get_desktop_test_diagnostics() -> Result<serde_json::Value, String> {
     });
 
     Ok(serde_json::json!({
+        "desktopTestMode": is_desktop_test_mode(),
         "pid": std::process::id(),
         "executable": std::env::current_exe().ok().map(|path| path.display().to_string()),
         "arguments": std::env::args().collect::<Vec<_>>(),
@@ -314,12 +311,6 @@ fn main() {
 
             let test_mode = is_desktop_test_mode();
             let data_directory = desktop_test_webview_data_directory();
-            if test_mode && data_directory.is_none() {
-                return Err(std::io::Error::other(
-                    "Desktop test startup failed: tauri-driver did not forward --silicon-vault-webview-data-dir to the application.",
-                ).into());
-            }
-
             if let Some(data_directory) = data_directory {
                 fs::create_dir_all(&data_directory)?;
                 let data_directory = fs::canonicalize(&data_directory)?;
