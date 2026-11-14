@@ -55,7 +55,7 @@ Linux automatic updating is not enabled until an AppImage updater artifact and m
 
 - Shared frontend tests, type checks, architecture checks, build, dependency audit, and performance benchmarks.
 - Required Windows desktop job: Rust tests, NSIS/MSI build, signing checks, and installer artifacts.
-- Secondary Linux desktop job: Rust tests, AppImage/DEB build, and package artifacts.
+- Secondary, non-blocking Linux desktop job: Rust tests, AppImage/DEB build, and package artifacts. Linux packaging failures are reported but do not fail the Windows validation/release gate.
 - No browser-app end-to-end release job.
 - No macOS runner, signing, notarization, or package job.
 

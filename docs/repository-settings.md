@@ -19,7 +19,7 @@ Create a branch ruleset targeting `master` and `release/**` (if release branches
 
 Keep `slave` writable for development. It is not a release branch and should not be the default release source.
 
-The `Linux desktop packages` job is the secondary platform track. It may be monitored as an additional check, but it must not become a prerequisite for completing the immediate Windows validation sequence.
+The `Linux desktop packages` job is a non-blocking secondary platform track. It may be monitored independently, but it must not become a prerequisite for completing the immediate Windows validation sequence.
 
 ## Release tag ruleset
 

@@ -224,7 +224,9 @@ jobs:
             });
 
   linux-release:
-    name: Build and attach Linux packages (secondary)
+    name: Build and attach Linux packages (non-blocking secondary)
+    # A Linux packaging or publication failure must not turn a successful Windows release into a failed release.
+    continue-on-error: true
     permissions:
       contents: write
     # Windows publishes first; Linux cannot prevent the Windows job from completing.
