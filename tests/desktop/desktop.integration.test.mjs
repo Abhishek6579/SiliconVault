@@ -288,7 +288,14 @@ test('native desktop integration', async (t) => {
     await app.setFileInput(input, 'desktop-restore-fixture.json', backup);
     await app.waitForText('.app-dialog h2', 'Restore workspace backup?');
     await app.clickText('.app-dialog button', 'Restore backup', true);
-    await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
+    const restoreResult = await app.waitFor(
+      () => app.execute(
+        'const active=document.querySelector(".workspace-switch-button")?.innerText || ""; if(active.includes("Restored Desktop Workspace")) return "restored"; const error=document.querySelector(".error-banner")?.innerText || ""; if(error.includes("Workspace restore failed")) return "error: " + error; const activity=Array.from(document.querySelectorAll(".activity-card")).find((item) => item.innerText.includes("Restoring workspace")); if(activity?.classList.contains("activity-error")) return "error: " + (activity.querySelector(".activity-detail")?.innerText || "unknown restore error"); return false;',
+      ),
+      20_000,
+      'workspace restore to complete or report an error',
+    );
+    if (restoreResult !== 'restored') throw new Error('Backup restore failed: ' + restoreResult);
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
 
     await app.setFileInput(input, 'invalid-backup.json', '{"format":');
