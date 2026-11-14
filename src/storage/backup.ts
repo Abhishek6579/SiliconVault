@@ -519,7 +519,16 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown, 
       await database.contents.bulkAdd(batch);
       onProgress?.({ stage: 'Restoring file content', current: Math.min(offset + batch.length, backup.files.length), total: backup.files.length });
     }
-    await database.preferences.bulkAdd(backup.preferences ?? []);
+    // The active workspace is application state, not merely an optional UI
+    // preference. Always persist a valid selection in the same transaction as
+    // the restored catalog so a restart cannot fall back to the default workspace.
+    const importedActiveWorkspace = backup.preferences?.find((preference) => preference.key === 'activeWorkspace')?.value;
+    const activeWorkspaceId = workspaces.some((workspace) => workspace.id === importedActiveWorkspace)
+      ? importedActiveWorkspace as string
+      : workspaces[0].id;
+    const restoredPreferences = (backup.preferences ?? []).filter((preference) => preference.key !== 'activeWorkspace');
+    restoredPreferences.push({ key: 'activeWorkspace', value: activeWorkspaceId, updatedAt: Date.now() });
+    await database.preferences.bulkAdd(restoredPreferences);
   });
   onProgress?.({ stage: 'Workspace restored', current: backup.files.length, total: backup.files.length });
 }
