@@ -118,18 +118,16 @@ export class DesktopWebDriver {
                 `--silicon-vault-webview-data-dir=${webViewDataDirectory}`,
               ]
             : [],
-        },
-        // EdgeDriver's WebView2 automation profile is configured separately
-        // from application arguments. Without this capability EdgeDriver
-        // silently creates a scoped_dir profile and ignores --user-data-dir
-        // passed to the host application.
-        ...(webViewDataDirectory ? {
-          'ms:edgeOptions': {
+          // tauri-driver extracts this field from tauri:options and maps it
+          // into ms:edgeOptions.webviewOptions for EdgeDriver. Supplying
+          // ms:edgeOptions beside tauri:options is ineffective because
+          // tauri-driver replaces the native Edge capabilities.
+          ...(webViewDataDirectory ? {
             webviewOptions: {
               userDataFolder: webViewDataDirectory,
             },
-          },
-        } : {}),
+          } : {}),
+        },
       } },
     });
     this.session = value.sessionId;
