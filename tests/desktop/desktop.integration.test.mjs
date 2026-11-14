@@ -148,6 +148,9 @@ test('native desktop integration', async (t) => {
   });
 
   await t.test('nested folders, internal drag, rename, trash and restore', async () => {
+    // Start from the general workspace root; the previous project-restore
+    // scenario leaves a project selected, and folder creation uses that target.
+    await app.click('[data-testid="nav-workspace"]');
     await createFolder('Desktop Root');
     await createFolder('Desktop Destination');
     await selectFolder('Desktop Root');
