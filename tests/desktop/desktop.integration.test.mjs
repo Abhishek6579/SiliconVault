@@ -39,6 +39,15 @@ async function createNote(name) {
   await app.waitForText('.file-tab', name);
 }
 
+async function ensureMarkdownEditing() {
+  const mode = await app.execute(
+    'const button=Array.from(document.querySelectorAll(".editor-tools button")).find((item) => ["Edit note","Preview"].includes(item.textContent.trim())); return button?.textContent.trim() ?? null;',
+  );
+  if (mode === 'Edit note') await app.clickText('.editor-tools button', 'Edit note');
+  else if (mode !== 'Preview') throw new Error('Markdown preview/edit toggle is missing from the editor toolbar.');
+  await app.waitForCss('.cm-content[contenteditable="true"]');
+}
+
 async function selectFolder(name) {
   await app.click('[data-testid="project-tree-item"][data-item-kind="folder"][data-item-name="' + name + '"] .tree-main');
   await app.waitForText('.workspace-switch-button', name);
@@ -210,7 +219,7 @@ test('native desktop integration', async (t) => {
   await t.test('editor autosave, local content search, tabs and recovery draft', async () => {
     await selectFolder('Desktop Destination');
     await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"] .file-name-button');
-    await app.clickText('.editor-tools button', 'Edit note');
+    await ensureMarkdownEditing();
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nDesktop autosave content marker');
@@ -225,7 +234,7 @@ test('native desktop integration', async (t) => {
     await app.clickText('.file-tab', 'desktop-renamed-note.md');
     await app.waitForText('.cm-content', 'Desktop autosave content marker');
     await app.clickText('.file-tab', 'desktop-second-tab.md');
-    await app.clickText('.editor-tools button', 'Edit note');
+    await ensureMarkdownEditing();
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nPending close recovery marker');
@@ -300,7 +309,7 @@ test('native desktop integration', async (t) => {
     await app.restart();
     await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
     await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
-    await app.clickText('.editor-tools button', 'Edit note');
+    await ensureMarkdownEditing();
     await app.waitForText('.cm-content', 'Backup round-trip marker', 15_000);
   });
 });
