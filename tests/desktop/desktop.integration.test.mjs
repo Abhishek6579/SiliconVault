@@ -373,10 +373,10 @@ test('native desktop integration', async (t) => {
     try {
       await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
     } catch (error) {
-      const state = await app.execute(
-        'return JSON.stringify({workspace:document.querySelector(".workspace-switch-button")?.innerText || "",body:document.querySelector(".workspace-body")?.innerText || "",tree:document.querySelector(".project-tree")?.innerText || "",startup:document.querySelector(".startup-screen")?.innerText || "",error:document.querySelector(".error-banner")?.innerText || ""});',
+      const state = await app.executeAsync(
+        'const done=arguments[arguments.length-1]; const ui={workspace:document.querySelector(".workspace-switch-button")?.innerText||"",body:document.querySelector(".workspace-body")?.innerText||"",tree:document.querySelector(".project-tree")?.innerText||"",startup:document.querySelector(".startup-screen")?.innerText||"",error:document.querySelector(".error-banner")?.innerText||""}; const request=indexedDB.open("engineering-workspace"); request.onerror=()=>done({ui,databaseError:request.error?.message||"open failed"}); request.onsuccess=()=>{const database=request.result; const names=["files","preferences","workspaces"].filter((name)=>database.objectStoreNames.contains(name)); const tx=database.transaction(names,"readonly"); const values={}; let pending=names.length; if(!pending){done({ui,databaseVersion:database.version,stores:values});database.close();return;} for(const name of names){const get=tx.objectStore(name).getAll();get.onsuccess=()=>{values[name]=get.result;pending-=1;if(!pending){const prefs=values.preferences||[];const active=prefs.find((item)=>item.key==="activeWorkspace")?.value;const sessions=prefs.filter((item)=>String(item.key).startsWith("session:"));done({ui,databaseVersion:database.version,activeWorkspacePreference:active,workspaces:values.workspaces||[],files:(values.files||[]).map((file)=>({id:file.id,name:file.name,workspaceId:file.workspaceId,deletedAt:file.deletedAt})),sessions:sessions.map((item)=>({key:item.key,value:item.value}))});database.close();}};get.onerror=()=>{done({ui,databaseError:get.error?.message||"read failed"});database.close();};}};',
       );
-      throw new Error('Workspace state after restart: ' + state + '; ' + error.message);
+      throw new Error('Workspace state after restart: ' + JSON.stringify(state) + '; ' + error.message);
     }
     await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
     await ensureMarkdownEditing('restored-desktop-note.md');
