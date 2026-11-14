@@ -681,6 +681,21 @@ describe('workspace storage', () => {
     expect(await database.contents.get(file.id)).toBeUndefined();
   });
 
+  it('restores a valid active workspace preference atomically with the workspace catalog', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    const selected = { id: 'restored-selected', name: 'Restored selected', createdAt: now, updatedAt: now };
+    const other = { id: 'restored-other', name: 'Other restored workspace', createdAt: now, updatedAt: now };
+    await importBackup(database, {
+      format: 'engineering-workspace-backup', version: 1, exportedAt: now,
+      files: [], folders: [], projects: [], preferences: [],
+      workspaces: [selected, other],
+    });
+    expect(await database.workspaces.toArray()).toEqual([selected, other]);
+    expect(await database.preferences.get('activeWorkspace')).toMatchObject({ value: selected.id });
+  });
+
   it('upgrades a version 1 fixture without changing existing records', async () => {
     const name = `fixture-${crypto.randomUUID()}`;
     const legacy = new WorkspaceDatabaseV1(name);
