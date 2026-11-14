@@ -104,16 +104,33 @@ export class DesktopWebDriver {
 
   async createSession() {
     const before = this.appPids();
+    const webViewDataDirectory = process.platform === 'win32' && this.profile
+      ? path.join(this.profile, 'webview2')
+      : null;
     const value = await this.request('/session', 'POST', {
-      capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': {
+      capabilities: { alwaysMatch: {
+        browserName: 'wry',
+        'tauri:options': {
           application: this.app,
-          args: process.platform === 'win32' && this.profile
+          args: webViewDataDirectory
             ? [
                 '--silicon-vault-desktop-test',
-                `--silicon-vault-webview-data-dir=${path.join(this.profile, 'webview2')}`,
+                `--silicon-vault-webview-data-dir=${webViewDataDirectory}`,
               ]
             : [],
-        } } },
+        },
+        // EdgeDriver's WebView2 automation profile is configured separately
+        // from application arguments. Without this capability EdgeDriver
+        // silently creates a scoped_dir profile and ignores --user-data-dir
+        // passed to the host application.
+        ...(webViewDataDirectory ? {
+          'ms:edgeOptions': {
+            webviewOptions: {
+              userDataFolder: webViewDataDirectory,
+            },
+          },
+        } : {}),
+      } },
     });
     this.session = value.sessionId;
     if (!this.session) throw new Error('tauri-driver returned no session ID.');
