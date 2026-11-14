@@ -58,7 +58,7 @@ export function useGlobalSearchShortcut({ lastFocusedSurfaceRef, editorViewRef, 
       setSearchPopupOpen(true);
       setRightPanel(null);
       // The input is mounted by the state update; explicitly focus it after React commits.
-      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+      window.setTimeout(() => searchInputRef?.current?.focus(), 0);
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('keydown', handleShortcut, true);
