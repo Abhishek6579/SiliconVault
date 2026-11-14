@@ -181,6 +181,11 @@ export class DesktopWebDriver {
     }
   }
 
+  async clear(selector) {
+    const id = await this.findCss(selector);
+    await this.request(this.endpoint('/element/' + id + '/clear'), 'POST', {});
+  }
+
   async sendKeys(selector, value) {
     const id = await this.findCss(selector);
     await this.request(this.endpoint('/element/' + id + '/value'), 'POST', { text: value, value: Array.from(value) });
