@@ -85,7 +85,15 @@ export class DesktopWebDriver {
   async createSession() {
     const before = this.appPids();
     const value = await this.request('/session', 'POST', {
-      capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': { application: this.app } } },
+      capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': {
+          application: this.app,
+          args: process.platform === 'win32' && this.profile
+            ? [
+                '--silicon-vault-desktop-test',
+                `--silicon-vault-webview-data-dir=${path.join(this.profile, 'webview2')}`,
+              ]
+            : [],
+        } } },
     });
     this.session = value.sessionId;
     if (!this.session) throw new Error('tauri-driver returned no session ID.');
@@ -117,6 +125,20 @@ export class DesktopWebDriver {
       timeout,
       'SiliconVault startup to finish',
     );
+
+    if (process.platform === 'win32' && this.profile) {
+      const diagnostics = await this.executeAsync(
+        'const done=arguments[arguments.length-1]; const invoke=window.__TAURI_INTERNALS__?.invoke; if(!invoke){done({error:"Tauri invoke bridge is unavailable"});return;} invoke("get_desktop_test_diagnostics").then(done).catch((error)=>done({error:String(error)}));',
+      );
+      const expected = path.resolve(this.profile, 'webview2');
+      const actual = diagnostics?.webviewDataDirectory ? path.resolve(diagnostics.webviewDataDirectory) : null;
+      if (diagnostics?.error || !actual || actual.toLowerCase() !== expected.toLowerCase()) {
+        throw new Error('Desktop WebView2 profile configuration mismatch: ' + JSON.stringify({ expected, diagnostics }));
+      }
+      if (!diagnostics.webviewDataDirectoryExists || !Array.isArray(diagnostics.webviewDataDirectoryEntries) || diagnostics.webviewDataDirectoryEntries.length === 0) {
+        throw new Error('WebView2 did not initialize the isolated profile directory: ' + JSON.stringify(diagnostics));
+      }
+    }
   }
 
   async waitForAppExit(pid, timeout = 15_000) {
