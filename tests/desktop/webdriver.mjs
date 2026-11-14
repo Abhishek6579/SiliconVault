@@ -45,7 +45,7 @@ export class DesktopWebDriver {
       ? spawnSync('powershell.exe', ['-NoProfile', '-Command', "Get-CimInstance Win32_Process -Filter \"Name='silicon-vault.exe'\" | ForEach-Object { $_.ProcessId }"], { encoding: 'utf8', windowsHide: true })
       : spawnSync('pgrep', ['-x', 'silicon-vault'], { encoding: 'utf8' });
     if (result.error) throw result.error;
-    return new Set((result.stdout || '').split(/\s+/).map(Number).filter(Number.isInteger));
+    return new Set((result.stdout || '').trim().split(/\s+/).filter((value) => /^\d+$/.test(value)).map(Number));
   }
 
   async start() {
@@ -112,21 +112,31 @@ export class DesktopWebDriver {
     );
   }
 
+  async waitForAppExit(pid, timeout = 15_000) {
+    await this.waitFor(
+      () => !this.appPids().has(pid),
+      timeout,
+      'previous SiliconVault process ' + pid + ' to exit',
+    );
+  }
+
   async restart() {
+    const previousPid = this.appPid;
     await this.closeSession();
-    await delay(700);
+    if (previousPid) await this.waitForAppExit(previousPid);
     await this.createSession();
     await this.waitForAppReady();
   }
 
   async crashAndRestart() {
     if (!this.appPid) throw new Error('Could not identify the test application process.');
+    const previousPid = this.appPid;
     const result = process.platform === 'win32'
-      ? spawnSync('taskkill', ['/PID', String(this.appPid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
-      : (() => { try { process.kill(this.appPid, 'SIGKILL'); return { status: 0 }; } catch (error) { return { status: 1, error }; } })();
+      ? spawnSync('taskkill', ['/PID', String(previousPid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
+      : (() => { try { process.kill(previousPid, 'SIGKILL'); return { status: 0 }; } catch (error) { return { status: 1, error }; } })();
     if (result.error || result.status !== 0) throw new Error('Could not stop test process: ' + (result.error?.message || result.stderr || result.status));
     this.appPid = null;
-    await delay(500);
+    await this.waitForAppExit(previousPid);
     await this.closeSession();
     await this.createSession();
     await this.waitForAppReady();
@@ -215,6 +225,10 @@ export class DesktopWebDriver {
 
   async execute(script, ...args) {
     return this.request(this.endpoint('/execute/sync'), 'POST', { script, args });
+  }
+
+  async executeAsync(script, ...args) {
+    return this.request(this.endpoint('/execute/async'), 'POST', { script, args });
   }
 
   async waitForCss(selector, timeout = 10_000) {
