@@ -40,11 +40,15 @@ async function createNote(name) {
 }
 
 async function ensureMarkdownEditing() {
-  const mode = await app.execute(
-    'const button=Array.from(document.querySelectorAll(".editor-tools button")).find((item) => ["Edit note","Preview"].includes(item.textContent.trim())); return button?.textContent.trim() ?? null;',
+  const mode = await app.waitFor(
+    () => app.execute(
+      'if (document.querySelector(".cm-content[contenteditable=\\"true\\"]")) return "editing"; const button=Array.from(document.querySelectorAll(".editor-tools button")).find((item) => ["Edit note","Preview"].includes(item.textContent.trim())); return button?.textContent.trim() || false;',
+    ),
+    12_000,
+    'Markdown editor or preview toggle to load',
   );
   if (mode === 'Edit note') await app.clickText('.editor-tools button', 'Edit note');
-  else if (mode !== 'Preview') throw new Error('Markdown preview/edit toggle is missing from the editor toolbar.');
+  else if (mode !== 'Preview' && mode !== 'editing') throw new Error('Markdown editor did not reach an editable or preview state.');
   await app.waitForCss('.cm-content[contenteditable="true"]');
 }
 
