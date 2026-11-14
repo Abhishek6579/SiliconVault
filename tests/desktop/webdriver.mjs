@@ -56,7 +56,16 @@ export class DesktopWebDriver {
     if (process.platform === 'win32') {
       env.APPDATA = path.join(this.profile, 'Roaming');
       env.LOCALAPPDATA = path.join(this.profile, 'Local');
-      await Promise.all([mkdir(env.APPDATA, { recursive: true }), mkdir(env.LOCALAPPDATA, { recursive: true })]);
+      // Tauri's WebView2 IndexedDB/local storage is scoped to the WebView2
+      // user-data directory. APPDATA/LOCALAPPDATA alone do not reliably
+      // isolate it because Windows Known Folder APIs may ignore env overrides.
+      // Keep one explicit profile across all sessions, including restart tests.
+      env.WEBVIEW2_USER_DATA_FOLDER = path.join(this.profile, 'webview2');
+      await Promise.all([
+        mkdir(env.APPDATA, { recursive: true }),
+        mkdir(env.LOCALAPPDATA, { recursive: true }),
+        mkdir(env.WEBVIEW2_USER_DATA_FOLDER, { recursive: true }),
+      ]);
     } else {
       env.XDG_DATA_HOME = path.join(this.profile, 'data');
       env.XDG_CONFIG_HOME = path.join(this.profile, 'config');
