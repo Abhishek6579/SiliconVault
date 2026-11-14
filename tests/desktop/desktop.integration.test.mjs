@@ -28,14 +28,17 @@ async function createNote(name) {
   await app.sendKeys('.dialog-input', name);
   await app.click('.app-dialog button[type="submit"]');
   const outcome = await app.waitFor(
-    () => app.execute('return document.querySelector(".editor-workspace") ? "editor" : document.querySelector(".error-banner") ? "error" : false;'),
+    () => app.execute(
+      'const expected = ' + JSON.stringify(name) + '; const tab = Array.from(document.querySelectorAll(".file-tab")).find((item) => item.innerText.includes(expected)); if (tab) return "opened"; return document.querySelector(".error-banner") ? "error" : false;',
+    ),
     10_000,
-    'editor to open or note creation error for ' + name,
+    'new file tab to open or note creation error for ' + name,
   );
   if (outcome === 'error') {
     const message = await app.execute('return document.querySelector(".error-banner")?.innerText || "Unknown note creation error";');
     throw new Error('Could not create ' + name + ': ' + message);
   }
+  await app.waitForCss('.editor-workspace');
   await app.waitForText('.file-tab', name);
 }
 
