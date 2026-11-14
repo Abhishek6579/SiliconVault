@@ -59,7 +59,7 @@ describe('native desktop backup dialogs', () => {
     expect(selected).toBeInstanceOf(File);
     expect(selected?.name).toBe('workspace.json');
     expect(selected?.type).toBe('application/json');
-    await expect(selected?.text()).resolves.toBe('{}\\n');
+    expect(await selected!.text()).toBe('{}\n');
   });
 
   it('rejects an oversized native backup before allocating or reading its contents', async () => {
