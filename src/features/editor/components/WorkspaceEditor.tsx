@@ -27,10 +27,18 @@ interface WorkspaceEditorProps {
 
 function restoreEditorViewState(view: EditorView, state?: EditorViewState) {
   if (!state) return;
-  const length = view.state.doc.length;
-  view.dispatch({ selection: { anchor: Math.min(state.anchor, length), head: Math.min(state.head, length) } });
-  view.scrollDOM.scrollTop = state.scrollTop;
-  view.scrollDOM.scrollLeft = state.scrollLeft;
+  // onCreateEditor can run while CodeMirror is still applying its initial update.
+  // Dispatching from that callback is re-entrant and throws
+  // "Calls to EditorView.update are not allowed while an update is in progress".
+  // Restore after the current update has completed, and ignore an editor that
+  // was unmounted before the frame ran.
+  window.requestAnimationFrame(() => {
+    if (!view.dom.isConnected) return;
+    const length = view.state.doc.length;
+    view.dispatch({ selection: { anchor: Math.min(state.anchor, length), head: Math.min(state.head, length) } });
+    view.scrollDOM.scrollTop = state.scrollTop;
+    view.scrollDOM.scrollLeft = state.scrollLeft;
+  });
 }
 
 export default function WorkspaceEditor({
