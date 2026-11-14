@@ -281,7 +281,10 @@ describe('workspace storage', () => {
     expect(await database.contents.toArray()).toEqual(expected.contents);
     expect(await database.folders.toArray()).toEqual(expected.folders);
     expect(await database.projects.toArray()).toEqual(expected.projects);
-    expect(await database.preferences.toArray()).toEqual(expected.preferences);
+    expect(await database.preferences.toArray()).toEqual([
+      ...expected.preferences,
+      { key: 'activeWorkspace', value: DEFAULT_WORKSPACE_ID, updatedAt: backup.exportedAt },
+    ]);
     expect(await database.workspaces.toArray()).toEqual(expected.workspaces);
   });
 
