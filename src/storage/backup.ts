@@ -523,12 +523,16 @@ export async function importBackup(database: WorkspaceDatabase, value: unknown, 
       // The active workspace is application state, not merely an optional UI
       // preference. Persist a valid selection in the same transaction as the
       // restored catalog so a restart cannot fall back to a stale workspace.
-      const importedActiveWorkspace = backup.preferences?.find((preference) => preference.key === 'activeWorkspace')?.value;
-      const activeWorkspaceId = workspaces.some((workspace) => workspace.id === importedActiveWorkspace)
-        ? importedActiveWorkspace as string
+      const importedActivePreference = backup.preferences?.find((preference) => preference.key === 'activeWorkspace');
+      const activeWorkspaceId = workspaces.some((workspace) => workspace.id === importedActivePreference?.value)
+        ? importedActivePreference!.value as string
         : workspaces[0].id;
       const restoredPreferences = (backup.preferences ?? []).filter((preference) => preference.key !== 'activeWorkspace');
-      restoredPreferences.push({ key: 'activeWorkspace', value: activeWorkspaceId, updatedAt: Date.now() });
+      // Use the backup's stable export timestamp when a legacy backup has no
+      // active-workspace preference. Re-importing the same backup is idempotent.
+      restoredPreferences.push(importedActivePreference && importedActivePreference.value === activeWorkspaceId
+        ? importedActivePreference
+        : { key: 'activeWorkspace', value: activeWorkspaceId, updatedAt: backup.exportedAt });
       await database.preferences.bulkAdd(restoredPreferences);
     } else {
       // Legacy backups without a workspace catalog retain their old preference
