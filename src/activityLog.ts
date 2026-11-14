@@ -1,4 +1,4 @@
-import { sendActivityLogEvents } from './platform/activityLog';
+import { invokePlatformCommand, sendActivityLogEvents } from './platform/activityLog';
 
 type ActivityKind = 'USER_ACTION' | 'APP_RESPONSE' | 'BACKEND_CALL' | 'BACKEND_RESULT' | 'STATE';
 let sequence = 0;
@@ -63,7 +63,7 @@ export function trackedInvoke<T>(command: string, args?: Record<string, unknown>
   const id = currentActionId;
   const started = performance.now();
   emit('BACKEND_CALL', command, 'Tauri', args ?? {}, id);
-  return invoke<T>(command, args).then((result) => {
+  return invokePlatformCommand<T>(command, args).then((result) => {
     emit('BACKEND_RESULT', command, 'Tauri', {}, id, 'success', Math.round(performance.now() - started));
     emit('APP_RESPONSE', command, null, {}, id, 'success', Math.round(performance.now() - started));
     return result;
