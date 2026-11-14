@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { sendActivityLogEvents } from './platform/activityLog';
 
 type ActivityKind = 'USER_ACTION' | 'APP_RESPONSE' | 'BACKEND_CALL' | 'BACKEND_RESULT' | 'STATE';
 let sequence = 0;
@@ -31,7 +31,7 @@ function emit(kind: ActivityKind, name: string, component: string | null, params
       // Keep diagnostics best-effort: a missing/unavailable Tauri bridge must
       // never create a second unhandled exception while recording an event.
       void Promise.resolve()
-        .then(() => invoke('activity_log_events', { events: batch }))
+        .then(() => sendActivityLogEvents(batch))
         .catch(() => {});
     });
   }
