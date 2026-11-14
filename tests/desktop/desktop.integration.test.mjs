@@ -51,7 +51,15 @@ async function createNote(name) {
     throw new Error('Could not create ' + name + ': ' + message);
   }
   await app.waitForCss('.editor-workspace');
-  await app.waitForText('.file-tab', name);
+  try {
+    await app.waitForText('.file-tab', name);
+  } catch (error) {
+    const state = await app.executeAsync(
+      'const done=arguments[arguments.length-1]; const expected=arguments[0]; const ui={workspace:document.querySelector(".workspace-switch-button")?.innerText||"",tabs:[...document.querySelectorAll(".file-tab")].map((tab)=>({text:tab.innerText,active:tab.classList.contains("active")})),error:document.querySelector(".error-banner")?.innerText||"",dialog:document.querySelector(".app-dialog")?.innerText||""}; const request=indexedDB.open("engineering-workspace"); request.onerror=()=>done({ui,databaseError:request.error?.message||"open failed"}); request.onsuccess=()=>{const database=request.result; let files=null,preferences=null,settled=false; const finish=()=>{if(files===null||preferences===null||settled)return; settled=true; const file=files.find((item)=>item.name===expected&&item.deletedAt===null); const session=file?preferences.find((item)=>item.key==="session:"+file.workspaceId)?.value:undefined; done({ui,databaseVersion:database.version,file:file?{id:file.id,name:file.name,workspaceId:file.workspaceId}:null,session:session?{openFileIds:session.openFileIds,activeFileId:session.activeFileId}:null}); database.close();}; const tx=database.transaction(["files","preferences"],"readonly"); const fileRequest=tx.objectStore("files").getAll(); const preferenceRequest=tx.objectStore("preferences").getAll(); fileRequest.onsuccess=()=>{files=fileRequest.result;finish();}; preferenceRequest.onsuccess=()=>{preferences=preferenceRequest.result;finish();}; tx.onerror=()=>{if(!settled){settled=true;done({ui,databaseError:tx.error?.message||"read failed"});database.close();}};};',
+      name,
+    );
+    throw new Error('Created note did not become a tab. State: ' + JSON.stringify(state) + '; ' + error.message);
+  }
 }
 
 async function ensureMarkdownEditing(fileName) {
