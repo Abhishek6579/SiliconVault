@@ -43,7 +43,7 @@ export function useAutosave(
       .then(() => saveFileText(db, id, draft))
       .then(async () => {
         // Only clear the draft if the user has not typed since this save started.
-        if (draftRevisions.current.get(id) === revision) {
+        if ((draftRevisions.current.get(id) ?? 0) === revision) {
           await deletePreference(`draft:${id}`);
           pendingDrafts.current.delete(id);
           setTabs((current) => current.map((tab) => tab.id === id
@@ -60,7 +60,7 @@ export function useAutosave(
         // The draft stays in pendingDrafts, so the next save or close attempt retries it.
         console.error('persistDraft failed for', id, reason);
         void logger.error('editor.autosave.failed', 'An editor draft could not be saved.', errorContext(reason));
-        if (draftRevisions.current.get(id) === revision) {
+        if ((draftRevisions.current.get(id) ?? 0) === revision) {
           setStatus('Could not save');
           setError(reason instanceof Error ? reason.message : 'Unable to save changes.');
         }
@@ -115,6 +115,9 @@ export function useAutosave(
   }, [flushSession, persistDraft]);
 
   const trackRecoveredDraft = useCallback((id: string, draft: string) => {
+    // Recovered drafts have no in-memory revision yet. Initialize revision zero
+    // so a successful flush clears the pending entry instead of looping forever.
+    if (!draftRevisions.current.has(id)) draftRevisions.current.set(id, 0);
     pendingDrafts.current.set(id, draft);
   }, []);
 
