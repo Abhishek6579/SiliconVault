@@ -38,7 +38,7 @@ export default function ProjectTree({ data, actions }: ProjectTreeProps) {
     const isOpen = expandedIds.has(id);
     const selected = selectedFolderId === id;
     return <div key={id}>
-      <div className={`tree-row ${selected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} draggable
+      <div data-testid="project-tree-item" data-item-kind="folder" data-item-name={folder.record.name} className={`tree-row ${selected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} draggable
         onContextMenu={(event) => actions.onContextMenu('folder', id, event)}
         onDragStart={(event) => writeDragPayload(event.dataTransfer, { id, type: 'folder' })}
         onDragOver={(event) => event.preventDefault()}
@@ -55,7 +55,7 @@ export default function ProjectTree({ data, actions }: ProjectTreeProps) {
   }
 
   function renderFile(file: FileMeta, depth = 0) {
-    return <div key={file.id} className={`tree-row file-row ${activeTabId === file.id ? 'selected' : ''}`} style={{ paddingLeft: `${31 + depth * 16}px` }} draggable
+    return <div data-testid="project-tree-item" data-item-kind="file" data-item-name={file.name} key={file.id} className={`tree-row file-row ${activeTabId === file.id ? 'selected' : ''}`} style={{ paddingLeft: `${31 + depth * 16}px` }} draggable
       onContextMenu={(event) => actions.onContextMenu('file', file.id, event)}
       onDragStart={(event) => writeDragPayload(event.dataTransfer, { id: file.id, type: 'file' })}>
       <button className="tree-main" onClick={() => actions.onOpenFile(file)}><FileKindIcon kind={file.kind} size={15} /><span className="truncate" title={file.name}>{file.name}</span></button>
@@ -68,7 +68,7 @@ export default function ProjectTree({ data, actions }: ProjectTreeProps) {
     const projectTree = buildWorkspaceTree(folders, files, null, project.id, project.workspaceId);
     const filesAtRoot = files.filter((file) => file.projectId === project.id && file.parentFolderId === null);
     return <div key={project.id}>
-      <div className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => actions.onContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => actions.onDrop(event, null, project.id, project.workspaceId)}>
+      <div data-testid="project-tree-item" data-item-kind="project" data-item-name={project.name} className={`tree-row project-row ${open ? 'selected' : ''}`} onContextMenu={(event) => actions.onContextMenu('project', project.id, event)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => actions.onDrop(event, null, project.id, project.workspaceId)}>
         <button className="tree-main" aria-expanded={open} onClick={() => actions.onSelectProject(project.id)}><span className="twisty">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><span className="project-dot" /><span className="truncate" title={project.name}>{project.name}</span></button>
         <button className="mini-action" title="Project actions" onClick={(event) => actions.onContextMenu('project', project.id, event)}><Ellipsis size={15} /></button>
       </div>

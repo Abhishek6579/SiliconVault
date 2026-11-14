@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, Download, FileText, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowLeft, Download, FileText, RefreshCw, ShieldCheck } from 'lucide-react';
 import { platform } from '../../../platform';
 import { logger } from '../../../logger.js';
 
@@ -17,7 +17,7 @@ const formatUptime = (seconds: number) => {
   return hours ? hours + 'h ' + minutes + 'm' : minutes + 'm ' + (seconds % 60) + 's';
 };
 
-export default function DiagnosticsDashboard() {
+export default function DiagnosticsDashboard({ onClose }: { onClose?: () => void }) {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -50,6 +50,7 @@ export default function DiagnosticsDashboard() {
     <header className="diagnostics-heading">
       <div><span className="diagnostics-eyebrow">SYSTEM HEALTH</span><h1>Diagnostics</h1><p>Application health, operational logs and recovery metadata.</p></div>
       <div className="diagnostics-actions">
+        {onClose && <button className="outline-button" onClick={onClose}><ArrowLeft size={15} /> Back to workspace</button>}
         <button className="outline-button" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} /> Refresh</button>
         <button className="primary-button" onClick={() => void exportReport()} disabled={exporting || !snapshot}><Download size={15} /> {exporting ? 'Preparing…' : 'Export report'}</button>
       </div>

@@ -1,0 +1,275 @@
+import test, { before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { DesktopWebDriver } from './webdriver.mjs';
+
+const app = new DesktopWebDriver();
+const K = { ENTER: '\uE007', CTRL: '\uE009', BACKSPACE: '\uE003' };
+
+async function openWorkspaceMenu() {
+  await app.click('.workspace-switch-button');
+  await app.waitForCss('.workspace-switch-menu');
+}
+
+async function createFolder(name) {
+  await app.click('.import-button');
+  await app.clickText('.import-menu button', 'New folder');
+  await app.waitForCss('.app-dialog .dialog-input');
+  await app.sendKeys('.dialog-input', name);
+  await app.click('.app-dialog button[type="submit"]');
+  await app.waitForText('.workspace-body', name);
+}
+
+async function createNote(name) {
+  await app.click('.import-button');
+  await app.clickText('.import-menu button', 'New note');
+  await app.waitForCss('.app-dialog .dialog-input');
+  await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + name);
+  await app.click('.app-dialog button[type="submit"]');
+  await app.waitForCss('.editor-workspace');
+  await app.waitForText('.file-tab', name);
+}
+
+async function selectFolder(name) {
+  await app.click('[data-testid="workspace-item-row"][data-item-kind="folder"][data-item-name="' + name + '"] .file-name-button');
+  await app.waitForText('.workspace-switch-button', name);
+}
+
+function makePdf() {
+  const pages = [
+    'SiliconVault desktop integration fixture page one',
+    'Searchable signal NEEDLE phrase is on page two',
+    'Lifecycle and PDF zoom verification page three',
+  ];
+  const objects = [];
+  const fontId = 3 + pages.length * 2;
+  objects[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objects[2] = '<< /Type /Pages /Kids [' + pages.map((_, i) => (3 + i * 2) + ' 0 R').join(' ') + '] /Count ' + pages.length + ' >>';
+  pages.forEach((page, i) => {
+    const pageId = 3 + i * 2;
+    const stream = 'BT /F1 18 Tf 72 720 Td (' + page.replace(/[()\\]/g, '\\$&') + ') Tj ET';
+    objects[pageId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' + fontId + ' 0 R >> >> /Contents ' + (pageId + 1) + ' 0 R >>';
+    objects[pageId + 1] = '<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + '\nendstream';
+  });
+  objects[fontId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  for (let id = 1; id < objects.length; id += 1) {
+    offsets[id] = Buffer.byteLength(pdf);
+    pdf += id + ' 0 obj\n' + objects[id] + '\nendobj\n';
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += 'xref\n0 ' + objects.length + '\n0000000000 65535 f \n';
+  for (let id = 1; id < objects.length; id += 1) pdf += String(offsets[id]).padStart(10, '0') + ' 00000 n \n';
+  return pdf + 'trailer\n<< /Size ' + objects.length + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+}
+
+function makeBackup() {
+  const now = Date.now();
+  const workspaceId = 'desktop-restore-workspace';
+  const content = '# Restored desktop note\n\nBackup round-trip marker.';
+  const bytes = Buffer.from(content);
+  return {
+    format: 'engineering-workspace-backup',
+    version: 1,
+    exportedAt: now,
+    files: [{
+      meta: {
+        id: 'desktop-restored-note', kind: 'markdown', name: 'restored-desktop-note.md',
+        workspaceId, parentFolderId: null, projectId: null, size: bytes.length,
+        mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null,
+      },
+      content: { encoding: 'text', value: content },
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }],
+    folders: [], projects: [], preferences: [],
+    workspaces: [{ id: workspaceId, name: 'Restored Desktop Workspace', createdAt: now, updatedAt: now }],
+  };
+}
+
+before(async () => {
+  await app.start();
+  await app.waitForCss('body', 30_000);
+  await app.waitForText('h1', 'Your work, in one place.', 30_000);
+});
+
+after(async () => { await app.stop(); });
+
+test('native desktop integration', async (t) => {
+  await t.test('workspace create, switch and delete', async () => {
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'New workspace');
+    await app.waitForText('.app-dialog h2', 'Create workspace');
+    await app.sendKeys('.dialog-input', 'Desktop UI Test Workspace');
+    await app.click('.app-dialog button[type="submit"]');
+    await app.waitForText('.workspace-switch-button', 'Desktop UI Test Workspace');
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'My Workspace');
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'Desktop UI Test Workspace');
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'Delete this workspace');
+    await app.waitForText('.app-dialog h2', 'Delete workspace?');
+    await app.clickText('.app-dialog button', 'Delete workspace', true);
+    await app.waitForText('.workspace-switch-button', 'My Workspace');
+  });
+
+  await t.test('project archive and restore', async () => {
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'New project');
+    await app.waitForCss('.app-dialog .dialog-input');
+    await app.sendKeys('.dialog-input', 'Desktop Archive Test');
+    await app.click('.app-dialog button[type="submit"]');
+    await app.waitForCss('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"]');
+    await app.click('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"] .tree-main');
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'Delete project');
+    await app.waitForText('.app-dialog h2', 'Delete project?');
+    await app.clickText('.app-dialog button', 'Delete project', true);
+    await app.waitForCss('.archived-heading');
+    await app.click('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"] .tree-main');
+    await openWorkspaceMenu();
+    await app.clickText('.workspace-switch-menu button', 'Restore project', true);
+    await app.waitForCss('[data-testid="project-tree-item"][data-item-name="Desktop Archive Test"]');
+  });
+
+  await t.test('nested folders, internal drag, rename, trash and restore', async () => {
+    await createFolder('Desktop Root');
+    await createFolder('Desktop Destination');
+    await selectFolder('Desktop Root');
+    await createFolder('Desktop Child');
+    await selectFolder('Desktop Child');
+    await createNote('desktop-move-note.md');
+
+    await app.dragItem(
+      '[data-testid="project-tree-item"][data-item-kind="file"][data-item-name="desktop-move-note.md"]',
+      '[data-testid="project-tree-item"][data-item-kind="folder"][data-item-name="Desktop Destination"]',
+    );
+    await app.click('[data-testid="nav-workspace"]');
+    await selectFolder('Desktop Destination');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="desktop-move-note.md"]');
+    await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-move-note.md"] .row-action');
+    await app.clickText('.item-context-menu button', 'Rename');
+    await app.waitForText('.app-dialog h2', 'Rename file');
+    await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + 'desktop-renamed-note.md');
+    await app.click('.app-dialog button[type="submit"]');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"]');
+
+    await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"] .row-action');
+    await app.clickText('.item-context-menu button', 'Move to Trash');
+    await app.waitForText('.app-dialog h2', 'Move file to Trash?');
+    await app.clickText('.app-dialog button', 'Move to Trash', true);
+    await app.click('[data-testid="nav-trash"]');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"]');
+    await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"] .file-name-button');
+    await app.click('[data-testid="nav-workspace"]');
+    await selectFolder('Desktop Destination');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"]');
+
+    await app.click('[data-testid="nav-workspace"]');
+    await selectFolder('Desktop Root');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-kind="folder"][data-item-name="Desktop Child"]');
+    await app.click('[data-testid="workspace-item-row"][data-item-name="Desktop Child"] .row-action');
+    await app.clickText('.item-context-menu button', 'Rename');
+    await app.waitForText('.app-dialog h2', 'Rename folder');
+    await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + 'Desktop Child Renamed');
+    await app.click('.app-dialog button[type="submit"]');
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="Desktop Child Renamed"]');
+  });
+
+  await t.test('editor autosave, local content search, tabs and recovery draft', async () => {
+    await selectFolder('Desktop Destination');
+    await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"] .file-name-button');
+    await app.clickText('.editor-tools button', 'Edit note');
+    await app.waitForCss('.cm-content[contenteditable="true"]');
+    await app.click('.cm-content[contenteditable="true"]');
+    await app.sendKeys('.cm-content[contenteditable="true"]', '\nDesktop autosave content marker');
+    await app.waitForText('.save-status', 'Saved locally', 8_000);
+    await app.execute('window.dispatchEvent(new CustomEvent("siliconvault:open-editor-search"));');
+    await app.waitForCss('input[aria-label="Find in file"]');
+    await app.sendKeys('input[aria-label="Find in file"]', 'Desktop autosave content marker');
+    await app.sendKeys('input[aria-label="Find in file"]', K.ENTER);
+    await app.waitForCss('.cm-selectionBackground');
+
+    await createNote('desktop-second-tab.md');
+    await app.clickText('.file-tab', 'desktop-renamed-note.md');
+    await app.waitForText('.cm-content', 'Desktop autosave content marker');
+    await app.clickText('.file-tab', 'desktop-second-tab.md');
+    await app.clickText('.editor-tools button', 'Edit note');
+    await app.waitForCss('.cm-content[contenteditable="true"]');
+    await app.click('.cm-content[contenteditable="true"]');
+    await app.sendKeys('.cm-content[contenteditable="true"]', '\nPending close recovery marker');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await app.crashAndRestart();
+    await app.waitForText('.file-tab', 'desktop-second-tab.md', 20_000);
+    await app.waitForText('.cm-content', 'Pending close recovery marker', 15_000);
+  });
+
+  await t.test('external WebView drop, PDF page navigation, full-text search, zoom and tab reopening', async () => {
+    await app.click('[data-testid="nav-workspace"]');
+    await app.dropFiles('.workspace-body', [{
+      name: 'desktop-search-fixture.pdf', type: 'application/pdf', content: makePdf(),
+    }]);
+    await app.waitForText('.file-tab', 'desktop-search-fixture.pdf', 15_000);
+    await app.waitForCss('.pdf-page-wrap[data-page="3"]', 30_000);
+    await app.execute('window.dispatchEvent(new CustomEvent("siliconvault:open-file-search"));');
+    await app.waitForCss('input[aria-label="Search PDF"]');
+    await app.sendKeys('input[aria-label="Search PDF"]', 'NEEDLE phrase');
+    await app.sendKeys('input[aria-label="Search PDF"]', K.ENTER);
+    await app.waitForText('.pdf-search-results', 'Page 2', 20_000);
+    assert.equal(await app.value('input[aria-label="Page number"]'), '2');
+    await app.click('button[title="Zoom in"]');
+    await app.waitForText('.pdf-zoom', '110%');
+    await app.click('button[title="Next page"]');
+    await app.waitFor(() => app.value('input[aria-label="Page number"]').then((v) => v === '3'), 8_000, 'PDF page 3');
+    await app.clickText('.file-tab', 'desktop-renamed-note.md');
+    await app.waitForText('.cm-content', 'Desktop autosave content marker');
+    await app.clickText('.file-tab', 'desktop-search-fixture.pdf');
+    await app.waitForText('.pdf-zoom', '110%');
+
+    await app.click('.global-search-trigger');
+    await app.waitForCss('input[aria-label="Search files and folders"]');
+    await app.sendKeys('input[aria-label="Search files and folders"]', 'desktop-renamed-note.md');
+    await app.waitForText('.search-result', 'desktop-renamed-note.md');
+  });
+
+  await t.test('backup restore confirmation, cancellation, valid restore and invalid-backup failure', async () => {
+    const current = await app.text('.workspace-switch-button');
+    const input = 'input[type="file"][accept="application/json,.json"]';
+    const backup = JSON.stringify(makeBackup());
+    await app.setFileInput(input, 'desktop-restore-fixture.json', backup);
+    await app.waitForText('.app-dialog h2', 'Restore workspace backup?');
+    await app.clickText('.app-dialog button', 'Cancel', true);
+    await app.waitForText('.workspace-switch-button', current);
+
+    await app.setFileInput(input, 'desktop-restore-fixture.json', backup);
+    await app.waitForText('.app-dialog h2', 'Restore workspace backup?');
+    await app.clickText('.app-dialog button', 'Restore backup', true);
+    await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
+
+    await app.setFileInput(input, 'invalid-backup.json', '{"format":"invalid"}');
+    await app.waitForText('.error-banner', 'Backup validation failed', 10_000);
+    await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
+  });
+
+  await t.test('diagnostics view and refresh', async () => {
+    if (await app.execute('return Boolean(document.querySelector(".global-search-close"));')) await app.click('.global-search-close');
+    await app.click('[data-testid="open-diagnostics"]');
+    await app.waitForText('.diagnostics-heading', 'Diagnostics');
+    await app.waitForText('.diagnostics-section', 'Diagnostic files');
+    await app.clickText('.diagnostics-actions button', 'Refresh');
+    await app.waitForText('.diagnostics-card-grid', 'Session uptime');
+    await app.clickText('.diagnostics-actions button', 'Back to workspace');
+    await app.waitForCss('.workspace-body');
+  });
+
+  await t.test('graceful close, reopen and retained workspace/tab state', async () => {
+    await app.click('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"] .file-name-button');
+    await app.waitForCss('.editor-workspace');
+    await app.restart();
+    await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
+    await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
+    await app.waitForText('.cm-content', 'Backup round-trip marker', 15_000);
+  });
+});

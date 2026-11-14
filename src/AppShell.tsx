@@ -10,6 +10,7 @@ import { useGlobalShortcuts } from './app/hooks/useGlobalShortcuts';
 import { useSystemStats } from './features/settings/hooks/useSystemStats';
 import { collectFrontendDiagnostics } from './diagnostics.js';
 import UpdateManager from './features/updates/UpdateManager';
+import DiagnosticsDashboard from './features/diagnostics/components/DiagnosticsDashboard';
 import { useUiSettings } from './features/settings/hooks/useUiSettings';
 import { useWorkspace } from './features/workspace/hooks/useWorkspace';
 import { useWorkspaceActions } from './features/workspace/hooks/useWorkspaceActions';
@@ -55,6 +56,7 @@ export default function AppShell() {
   useEffect(() => collectFrontendDiagnostics(), []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const workspace = useWorkspace(setError, setLoading);
   const { files, folders, projects, workspaces, setWorkspaces, activeWorkspaceId, setActiveWorkspaceId, refresh } = workspace;
   const currentWorkspaceId = activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
@@ -222,6 +224,7 @@ export default function AppShell() {
         onSaveBackup: () => void backup.saveWorkspaceBackup(),
         onRestoreBackup: (input) => void backup.restoreFromPicker(input),
         onBackupFileChange: (event) => void backup.openBackup(event.target.files?.[0], event.currentTarget),
+        onOpenDiagnostics: () => setDiagnosticsOpen(true),
       }}
     >
       <ProjectTree
@@ -260,7 +263,7 @@ export default function AppShell() {
 
       <ErrorBanner message={error} onDismiss={() => setError('')} />
 
-      {activeTab ? <EditorSurface
+      {diagnosticsOpen ? <DiagnosticsDashboard onClose={() => setDiagnosticsOpen(false)} /> : activeTab ? <EditorSurface
         data={{ activeTab, workspaceTabs, activeTabId, editorFontSize, editorWorkspaceRef, editorViewRef, folders, getProjectName, focusMode }}
         actions={{
           onOpenTab: (tab) => void openFile(tab.meta),

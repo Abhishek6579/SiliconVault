@@ -123,6 +123,15 @@ jobs:
           }
       - name: Run Rust tests (allow Cargo to refresh the lockfile for the new updater dependency)
         run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Install native WebDriver prerequisites
+        shell: pwsh
+        run: |
+          cargo install --locked tauri-driver
+          cargo install --git https://github.com/chippers/msedgedriver-tool
+          & "$HOME/.cargo/bin/msedgedriver-tool.exe"
+          $PWD.Path >> $env:GITHUB_PATH
+      - name: Run native desktop UI integration tests
+        run: npm run test:desktop
       - name: Build signed Tauri application
         run: npm run tauri:build
         env:
@@ -151,7 +160,7 @@ jobs:
       - name: Install Tauri Linux prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential curl file libssl-dev libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install --yes build-essential curl file libssl-dev libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf webkit2gtk-driver xvfb
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -177,6 +186,10 @@ jobs:
           test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Install native WebDriver
+        run: cargo install --locked tauri-driver
+      - name: Run native desktop UI integration tests
+        run: xvfb-run -a npm run test:desktop
       - name: Build signed AppImage and Debian packages
         run: npm run tauri:build -- --bundles appimage,deb
         env:

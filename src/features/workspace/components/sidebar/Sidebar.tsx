@@ -23,6 +23,7 @@ interface SidebarActions {
   onSaveBackup: () => void;
   onRestoreBackup: (input: HTMLInputElement | null) => void;
   onBackupFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenDiagnostics: () => void;
 }
 
 interface SidebarProps {
@@ -44,9 +45,9 @@ export default function Sidebar({ data, actions, children }: SidebarProps) {
     </div>
     {!collapsed ? <>
       <div className="sidebar-primary">
-        <button className={`nav-item ${view === 'workspace' && activeProjectId === null ? 'active' : ''}`} onClick={() => navigate('workspace')}><LayoutGrid size={16} /> Workspace</button>
+        <button data-testid="nav-workspace" className={`nav-item ${view === 'workspace' && activeProjectId === null ? 'active' : ''}`} onClick={() => navigate('workspace')}><LayoutGrid size={16} /> Workspace</button>
         <button className={`nav-item ${view === 'recent' ? 'active' : ''}`} onClick={() => navigate('recent')}><Clock3 size={16} /> Recent <span className="nav-count">{liveFileCount}</span></button>
-        <button className={`nav-item ${view === 'trash' ? 'active' : ''}`} onClick={() => navigate('trash')}><Trash2 size={16} /> Trash {trashCount > 0 && <span className="nav-count">{trashCount}</span>}</button>
+        <button data-testid="nav-trash" className={`nav-item ${view === 'trash' ? 'active' : ''}`} onClick={() => navigate('trash')}><Trash2 size={16} /> Trash {trashCount > 0 && <span className="nav-count">{trashCount}</span>}</button>
       </div>
       <div className="sidebar-section-heading"><span>PROJECTS</span><button title="New project" onClick={actions.onCreateProject}><Plus size={15} /></button></div>
       <div className="project-tree">{children}</div>
@@ -58,7 +59,7 @@ export default function Sidebar({ data, actions, children }: SidebarProps) {
           </div>)}
           <div className="system-storage"><div className="storage-line"><HardDrive size={14} /><span>Stored on this device</span></div><div className="storage-meter"><i style={{ width: `${Math.min(100, storedBytes / (250 * 1024 * 1024) * 100)}%` }} /></div><span className="storage-caption">{formatSize(storedBytes)} used</span></div>
         </div>
-        <div className="sidebar-actions"><button onClick={actions.onSaveBackup} title="Save a workspace backup"><Download size={15} /> Backup</button><button onClick={() => actions.onRestoreBackup(backupInput.current)} title="Restore from backup"><Import size={15} /> Restore</button></div>
+        <div className="sidebar-actions"><button onClick={actions.onSaveBackup} title="Save a workspace backup"><Download size={15} /> Backup</button><button onClick={() => actions.onRestoreBackup(backupInput.current)} title="Restore from backup"><Import size={15} /> Restore</button><button data-testid="open-diagnostics" onClick={actions.onOpenDiagnostics} title="Open diagnostics"><Activity size={15} /> Diagnostics</button></div>
         <input ref={backupInput} className="hidden" type="file" accept="application/json,.json" onChange={actions.onBackupFileChange} />
       </div>
     </> : <div className="collapsed-nav">
