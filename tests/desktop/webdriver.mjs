@@ -104,11 +104,19 @@ export class DesktopWebDriver {
     }
   }
 
+  async waitForAppReady(timeout = 30_000) {
+    await this.waitFor(
+      () => this.execute('return Boolean(document.querySelector(".app-shell .workspace-switch-button")) && !document.querySelector(".startup-screen");'),
+      timeout,
+      'SiliconVault startup to finish',
+    );
+  }
+
   async restart() {
     await this.closeSession();
     await delay(700);
     await this.createSession();
-    await this.waitForCss('body', 30_000);
+    await this.waitForAppReady();
   }
 
   async crashAndRestart() {
@@ -121,7 +129,7 @@ export class DesktopWebDriver {
     await delay(500);
     await this.closeSession();
     await this.createSession();
-    await this.waitForCss('body', 30_000);
+    await this.waitForAppReady();
   }
 
   async stop() {
