@@ -27,6 +27,25 @@ This audit records the existing Dexie schema before adding storage features. The
 - Confirm the persistent WebView data location and restart/update behavior from a packaged Windows build.
 - Collect the seven startup, workspace, document and tab memory measurements listed in `AGENTS.md` using repeatable Windows measurements. No memory measurements are claimed by this audit.
 
+## Backup and migration fault-injection coverage
+
+The automated regression suite exercises the following failure boundaries:
+
+- A v2-to-current IndexedDB upgrade is interrupted after an earlier store has been modified. The upgrade must abort, and reopening through the v2 schema must expose the original metadata, preferences, and content.
+- Backup preparation rejects a file metadata record whose content record is missing. Restore rejects checksum mismatches, oversized records, dangling project/folder references, cross-workspace folder hierarchies, and folders assigned to projects in another workspace before replacing live data.
+- File import is interrupted between metadata and content writes; the transaction must leave neither an orphan metadata record nor a partial content record. Duplicate-name import attempts must preserve the existing file body.
+- Restore is interrupted after content writes begin and is also forced to fail with a quota error. Both failures must leave all live stores unchanged. Repeated restoration of one valid backup must produce identical store contents.
+- The editor recovery draft is read after closing and reopening a database instance. The committed body remains unchanged while the recovery draft is restored as dirty editor state.
+- Native dialog adapter tests verify picker options, cancellation behavior, the size check before native file reads, and propagation of filesystem write errors. These tests mock Tauri APIs; they do not replace manual checks against packaged Windows and Linux applications.
+
+## Remaining manual release gates
+
+- Migrate a representative installed Windows profile with the packaged upgrade and verify the existing WebView profile, metadata, preferences, and file contents are retained.
+- Exercise actual native open/save dialogs on packaged Windows and Linux builds, including a destination with insufficient free disk space.
+- Test process termination during restore and unsaved-draft recovery on an installed build. Automated transaction fault injection and database reopen tests do not substitute for killing the real application process.
+
+The v1 restore parser still reads the bounded backup file as text and parses it with `JSON.parse()` in a Worker. Streaming v2 parsing with staged records remains future hardening and is not claimed as implemented.
+ 
 ## Confidentiality boundary
 
 Dexie/IndexedDB provides local persistence, not encryption. Workspace records and exported JSON backups are not encrypted by the application. Access is governed by the operating-system account, application WebView profile, and device protections. Users should enable full-disk encryption where appropriate and protect exported backups as plaintext sensitive data.
