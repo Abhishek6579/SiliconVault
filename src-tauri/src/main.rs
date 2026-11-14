@@ -291,7 +291,7 @@ fn main() {
             logger.install_panic_hook();
             logger.info("application.ready", "SiliconVault backend initialized");
             let _ = logger::set_global(logger.clone());
-            app.manage(logger);
+            app.manage(logger.clone());
 
             let window_config = app
                 .config()
@@ -309,7 +309,6 @@ fn main() {
             let mut window_builder =
                 tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?;
 
-            let test_mode = is_desktop_test_mode();
             let data_directory = desktop_test_webview_data_directory();
             if let Some(data_directory) = data_directory {
                 fs::create_dir_all(&data_directory)?;
