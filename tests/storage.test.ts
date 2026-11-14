@@ -4,6 +4,7 @@ import { exportBackup, exportBackupStream, importBackup, prepareBackupExport } f
 import { createFolder, deleteWorkspace, getOrCreateImportedFolder, moveFile, moveFolder, renameFolder, restoreProject, softDeleteProject } from '../src/storage/hierarchy';
 import { createTextFile, emptyTrash, importFile, kindForFile, renameFile, restoreFile, saveFileText, softDeleteFile, validateFileName } from '../src/storage/files';
 import { flushPendingAutosaves } from '../src/storage/autosave';
+import { hydrateWorkspaceTab } from '../src/storage/tabSession';
 import { assertBackupFileSize, assertImportFileSize, MAX_BACKUP_FILE_SIZE_BYTES, MAX_BACKUP_INDIVIDUAL_FILE_BYTES, MAX_BACKUP_TOTAL_CONTENT_BYTES, MAX_IMPORT_FILE_SIZE_BYTES, MAX_PDF_FILE_SIZE_BYTES } from '../src/storage/limits';
 import { parseBackupFile } from '../src/features/backup/parse';
 
@@ -78,8 +79,23 @@ describe('application import and backup size limits', () => {
     await database.open();
     const file = new File(['small'], 'too-large.bin');
     Object.defineProperty(file, 'size', { value: MAX_IMPORT_FILE_SIZE_BYTES + 1 });
-    const { importFile } = await import('../src/storage/files');
     await expect(importFile(database, file)).rejects.toThrow(/limited to 64 MiB/);
+    expect(await database.files.count()).toBe(0);
+    expect(await database.contents.count()).toBe(0);
+  });
+
+  it('rolls back file metadata when storing imported content fails', async () => {
+    const database = createDatabase();
+    await database.open();
+    const stopFailure = database.contents.hook('creating').subscribe(() => {
+      throw new Error('injected import content failure');
+    });
+    try {
+      await expect(importFile(database, new File(['payload'], 'atomic-import.md')))
+        .rejects.toThrow('injected import content failure');
+    } finally {
+      stopFailure();
+    }
     expect(await database.files.count()).toBe(0);
     expect(await database.contents.count()).toBe(0);
   });
@@ -125,15 +141,16 @@ describe('file rename validation', () => {
     const database = createDatabase();
     await database.open();
     const folder = await createFolder(database, 'Designs');
-    const original = await createTextFile(database, 'Notes.md', 'text', { parentFolderId: folder.id, kind: 'markdown' });
+    const original = await createTextFile(database, 'Notes.md', 'original file contents', { parentFolderId: folder.id, kind: 'markdown' });
     await expect(createTextFile(database, 'notes.MD', 'duplicate', { parentFolderId: folder.id, kind: 'markdown' }))
       .rejects.toThrow(/case-insensitive/);
     await expect(renameFile(database, original.id, 'NOTES.md')).resolves.toBeUndefined();
     const otherFolder = await createFolder(database, 'Other');
     await expect(createTextFile(database, 'notes.md', 'different folder', { parentFolderId: otherFolder.id, kind: 'markdown' }))
       .resolves.toBeDefined();
-    await expect(importFile(database, new File(['duplicate'], 'NOTES.md'), { parentFolderId: folder.id }))
+    await expect(importFile(database, new File(['replacement contents'], 'NOTES.md'), { parentFolderId: folder.id }))
       .rejects.toThrow(/case-insensitive/);
+    expect(await database.contents.get(original.id)).toEqual({ fileId: original.id, data: 'original file contents' });
   });
 
   it('applies case-insensitive sibling rules to folder creation, rename, and move', async () => {
@@ -328,6 +345,20 @@ describe('workspace storage', () => {
     await expect(new Response(exportBackupStream(database)).text()).rejects.toThrow(/size metadata is inconsistent/);
   });
 
+  it('rejects backup preparation when a file has no corresponding stored content', async () => {
+    const database = createDatabase();
+    await database.open();
+    const now = Date.now();
+    await database.files.add({
+      id: 'missing-content', workspaceId: DEFAULT_WORKSPACE_ID, kind: 'text', name: 'missing.txt',
+      parentFolderId: null, projectId: null, size: 0, mimeType: 'text/plain',
+      createdAt: now, updatedAt: now, deletedAt: null,
+    });
+    await expect(prepareBackupExport(database)).rejects.toThrow('Missing content for file missing-content');
+    expect(await database.files.get('missing-content')).toBeDefined();
+    expect(await database.contents.count()).toBe(0);
+  });
+
   it('exports file contents one record at a time instead of materializing the contents table', async () => {
     const database = createDatabase();
     await database.open();
@@ -397,7 +428,7 @@ describe('workspace storage', () => {
     const bad = { ...backup, version: 999 };
     await expect(importBackup(database, { ...bad, version: 999 })).rejects.toThrow('unsupported version');
     const corrupt = structuredClone(backup);
-    corrupt.files[0].sha256 = 'bad-checksum';
+    corrupt.files[0].sha256 = '0'.repeat(64);
     await expect(importBackup(database, corrupt)).rejects.toThrow('Checksum validation failed');
     expect(await database.projects.toArray()).toEqual([{ id: 'keep', name: 'Keep', workspaceId: DEFAULT_WORKSPACE_ID, archived: false, createdAt: now, updatedAt: now }]);
     expect(await database.contents.get('f1')).toEqual({ fileId: 'f1', data: 'text' });
@@ -425,6 +456,32 @@ describe('workspace storage', () => {
       { id: 'b', workspaceId: DEFAULT_WORKSPACE_ID, name: 'B', parentFolderId: 'a', projectId: null, createdAt: now, updatedAt: now },
     ] };
     await expect(importBackup(database, cyclic)).rejects.toThrow('hierarchy cycle');
+
+    const missingProject = {
+      ...valid,
+      folders: [{ id: 'orphan-project-folder', workspaceId: DEFAULT_WORKSPACE_ID, name: 'Orphan', parentFolderId: null,
+        projectId: 'missing-project', createdAt: now, updatedAt: now }],
+    };
+    await expect(importBackup(database, missingProject)).rejects.toThrow('project that does not exist');
+
+    const otherWorkspace = { id: 'other-workspace', name: 'Other workspace', createdAt: now, updatedAt: now };
+    const crossWorkspaceParent = {
+      ...valid,
+      workspaces: [...(valid.workspaces ?? []), otherWorkspace],
+      folders: [
+        { id: 'parent-folder', workspaceId: DEFAULT_WORKSPACE_ID, name: 'Parent', parentFolderId: null, projectId: null, createdAt: now, updatedAt: now },
+        { id: 'child-folder', workspaceId: otherWorkspace.id, name: 'Child', parentFolderId: 'parent-folder', projectId: null, createdAt: now, updatedAt: now },
+      ],
+    };
+    await expect(importBackup(database, crossWorkspaceParent)).rejects.toThrow('inconsistent folder hierarchy');
+
+    const crossWorkspaceProject = {
+      ...valid,
+      workspaces: [...(valid.workspaces ?? []), otherWorkspace],
+      folders: [{ id: 'misassigned-folder', workspaceId: otherWorkspace.id, name: 'Misassigned', parentFolderId: null,
+        projectId: 'keep', createdAt: now, updatedAt: now }],
+    };
+    await expect(importBackup(database, crossWorkspaceProject)).rejects.toThrow('folder assigned to an inconsistent project');
     expect(await database.projects.get('keep')).toBeDefined();
   });
 
@@ -466,18 +523,65 @@ describe('workspace storage', () => {
       workspaces: await target.workspaces.toArray(),
     };
 
-    target.files.hook('creating').subscribe((_key, record) => {
+    const stopFileFailure = target.files.hook('creating').subscribe((_key, record) => {
       if (record.id === 'incoming-failure') throw new Error('injected restore write failure');
     });
+    try {
+      await expect(importBackup(target, backup)).rejects.toThrow('injected restore write failure');
+    } finally {
+      stopFileFailure();
+    }
 
-    await expect(importBackup(target, backup)).rejects.toThrow();
+    const assertTargetUnchanged = async () => {
+      expect(await target.files.toArray()).toEqual(before.files);
+      expect(await target.contents.toArray()).toEqual(before.contents);
+      expect(await target.folders.toArray()).toEqual(before.folders);
+      expect(await target.projects.toArray()).toEqual(before.projects);
+      expect(await target.preferences.toArray()).toEqual(before.preferences);
+      expect(await target.workspaces.toArray()).toEqual(before.workspaces);
+    };
+    await assertTargetUnchanged();
 
-    expect(await target.files.toArray()).toEqual(before.files);
-    expect(await target.contents.toArray()).toEqual(before.contents);
-    expect(await target.folders.toArray()).toEqual(before.folders);
-    expect(await target.projects.toArray()).toEqual(before.projects);
-    expect(await target.preferences.toArray()).toEqual(before.preferences);
-    expect(await target.workspaces.toArray()).toEqual(before.workspaces);
+    const stopQuotaFailure = target.contents.hook('creating').subscribe((_key, record) => {
+      if (record.fileId === 'incoming-failure') throw new DOMException('Not enough disk space', 'QuotaExceededError');
+    });
+    try {
+      await expect(importBackup(target, backup)).rejects.toThrow(/Not enough disk space/);
+    } finally {
+      stopQuotaFailure();
+    }
+    await assertTargetUnchanged();
+
+    await expect(importBackup(target, backup, (progress) => {
+      if (progress.stage === 'Restoring file content' && progress.current > 0) {
+        throw new Error('simulated restore interruption');
+      }
+    })).rejects.toThrow('simulated restore interruption');
+    await assertTargetUnchanged();
+  });
+
+  it('restores the same backup repeatedly without duplicating or losing records', async () => {
+    const source = createDatabase();
+    const target = createDatabase();
+    await Promise.all([source.open(), target.open()]);
+    await createTextFile(source, 'repeat.md', 'repeat restore payload', { kind: 'markdown' });
+    await source.preferences.put({ key: 'repeat-test', value: { enabled: true }, updatedAt: Date.now() });
+    const backup = await exportBackup(source);
+
+    await importBackup(target, backup);
+    const snapshot = async (database: WorkspaceDatabase) => ({
+      files: await database.files.toArray(),
+      contents: await database.contents.toArray(),
+      folders: await database.folders.toArray(),
+      projects: await database.projects.toArray(),
+      preferences: await database.preferences.toArray(),
+      workspaces: await database.workspaces.toArray(),
+    });
+    const firstRestore = await snapshot(target);
+    await importBackup(target, backup);
+    expect(await snapshot(target)).toEqual(firstRestore);
+    expect(await target.files.count()).toBe(1);
+    expect(await target.contents.count()).toBe(1);
   });
 
   it('moves a folder subtree atomically and rejects cycles and project mismatches', async () => {
@@ -619,6 +723,74 @@ describe('workspace storage', () => {
     expect(await upgraded.contents.get('legacy-file')).toEqual({ fileId: 'legacy-file', data: 'legacy' });
     expect(await upgraded.contents.get('legacy-deleted')).toEqual({ fileId: 'legacy-deleted', data: 'old' });
     expect(await upgraded.preferences.count()).toBe(0);
+  });
+
+  it('recovers the previous v2 database unchanged when workspace migration fails midway', async () => {
+    const name = `fixture-migration-failure-${crypto.randomUUID()}`;
+    const legacy = new WorkspaceDatabaseV2(name);
+    await legacy.open();
+    const now = Date.now();
+    await legacy.projects.add({ id: 'migration-project', name: 'Migration project', archived: false, createdAt: now, updatedAt: now } as never);
+    await legacy.folders.add({ id: 'migration-folder', name: 'Migration folder', parentFolderId: null,
+      projectId: 'migration-project', createdAt: now, updatedAt: now } as never);
+    await legacy.files.add({ id: 'migration-file', kind: 'markdown', name: 'migration.md', parentFolderId: 'migration-folder',
+      projectId: 'migration-project', size: 8, mimeType: 'text/markdown', createdAt: now, updatedAt: now, deletedAt: null } as never);
+    await legacy.contents.add({ fileId: 'migration-file', data: 'original' });
+    await legacy.preferences.add({ key: 'theme', value: 'dark', updatedAt: now });
+    legacy.close();
+
+    const upgrading = new WorkspaceDatabase(name);
+    databases.push(upgrading);
+    const originalUpdate = IDBCursor.prototype.update;
+    let fileMigrationReached = false;
+    const updateSpy = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
+      const source = this.source;
+      if (source instanceof IDBObjectStore && source.name === 'files') fileMigrationReached = true;
+      if (source instanceof IDBObjectStore && source.name === 'folders' && fileMigrationReached) {
+        throw new DOMException('Injected workspace migration failure', 'QuotaExceededError');
+      }
+      return originalUpdate.call(this, value);
+    });
+    try {
+      await expect(upgrading.open()).rejects.toThrow();
+    } finally {
+      updateSpy.mockRestore();
+      upgrading.close();
+    }
+    expect(fileMigrationReached).toBe(true);
+
+    const recovered = new WorkspaceDatabaseV2(name);
+    try {
+      await recovered.open();
+      expect(recovered.tables.map((table) => table.name).sort()).toEqual(['contents', 'files', 'folders', 'preferences', 'projects']);
+      expect(await recovered.projects.get('migration-project')).toMatchObject({ name: 'Migration project' });
+      expect(await recovered.folders.get('migration-folder')).toMatchObject({ projectId: 'migration-project' });
+      expect(await recovered.files.get('migration-file')).toMatchObject({ name: 'migration.md', size: 8 });
+      expect(await recovered.files.get('migration-file')).not.toHaveProperty('workspaceId');
+      expect(await recovered.contents.get('migration-file')).toEqual({ fileId: 'migration-file', data: 'original' });
+      expect(await recovered.preferences.get('theme')).toMatchObject({ value: 'dark' });
+    } finally {
+      recovered.close();
+      await recovered.delete();
+    }
+  });
+
+  it('recovers an unsaved editor draft after closing and reopening the database', async () => {
+    const name = `fixture-draft-recovery-${crypto.randomUUID()}`;
+    const beforeRestart = new WorkspaceDatabase(name);
+    await beforeRestart.open();
+    const file = await createTextFile(beforeRestart, 'draft.md', 'last committed text', { kind: 'markdown' });
+    await beforeRestart.preferences.put({ key: `draft:${file.id}`, value: 'new unsaved draft', updatedAt: Date.now() });
+    beforeRestart.close();
+
+    const afterRestart = new WorkspaceDatabase(name);
+    databases.push(afterRestart);
+    await afterRestart.open();
+    const recovered = await hydrateWorkspaceTab(afterRestart, {
+      id: file.id, meta: file, draft: '', dirty: false, hydrated: false, preview: true,
+    });
+    expect(recovered).toMatchObject({ draft: 'new unsaved draft', dirty: true, hydrated: true });
+    expect(await afterRestart.contents.get(file.id)).toEqual({ fileId: file.id, data: 'last committed text' });
   });
 
   it('upgrades a version 2 fixture into an isolated default workspace', async () => {
