@@ -224,7 +224,19 @@ export class DesktopWebDriver {
         // desktop integration runs. The path is printed so it can be inspected.
         process.stdout.write('Desktop test profile preserved at: ' + this.profile + '\\n');
       } else {
-        await rm(this.profile, { recursive: true, force: true });
+        // WebView2 can keep chrome_debug.log open briefly after the driver
+        // session and application have exited. Retry transient Windows locks
+        // so a successful test run does not fail in its cleanup hook.
+        const attempts = process.platform === 'win32' ? 10 : 1;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            await rm(this.profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 });
+            break;
+          } catch (error) {
+            if (attempt + 1 >= attempts || !['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error?.code)) throw error;
+            await delay(500);
+          }
+        }
       }
     }
     this.profile = null;
