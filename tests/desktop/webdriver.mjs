@@ -80,6 +80,7 @@ export class DesktopWebDriver {
     }
     if (lastError) throw new Error('tauri-driver did not start: ' + lastError.message);
     await this.createSession();
+    await this.waitForAppReady();
   }
 
   async createSession() {
@@ -132,7 +133,7 @@ export class DesktopWebDriver {
       );
       const expected = path.resolve(this.profile, 'webview2');
       const actual = diagnostics?.webviewDataDirectory ? path.resolve(diagnostics.webviewDataDirectory) : null;
-      if (diagnostics?.error || !actual || actual.toLowerCase() !== expected.toLowerCase()) {
+      if (diagnostics?.error || diagnostics?.desktopTestMode !== true || !actual || actual.toLowerCase() !== expected.toLowerCase()) {
         throw new Error('Desktop WebView2 profile configuration mismatch: ' + JSON.stringify({ expected, diagnostics }));
       }
       if (!diagnostics.webviewDataDirectoryExists || !Array.isArray(diagnostics.webviewDataDirectoryEntries) || diagnostics.webviewDataDirectoryEntries.length === 0) {
