@@ -35,12 +35,12 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Stop-Run "npm not found. Reinstall Node.js LTS." }
 $nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 18) { Stop-Run "Node $nodeMajor detected. Need 18 or newer." }
+if ($nodeMajor -lt 22) { Stop-Run "Node $nodeMajor detected. This project requires Node.js 22 or newer." }
 Write-Ok "Node $(node -v), npm $(npm -v)"
 
 Write-Step "Required npm scripts"
 $pkg = Get-Content ".\package.json" -Raw | ConvertFrom-Json
-$requiredScripts = @("build", "test", "test:e2e", "benchmark:storage", "benchmark:backup-memory", "check:architecture", "typecheck")
+$requiredScripts = @("build", "test", "test:desktop", "benchmark:storage", "benchmark:backup-memory", "check:architecture", "typecheck")
 $missingScripts = @($requiredScripts | Where-Object { -not $pkg.scripts.PSObject.Properties[$_] })
 if ($missingScripts.Count -gt 0) {
     Stop-Run "package.json is missing scripts: $($missingScripts -join ', ')"
@@ -56,8 +56,9 @@ Write-Ok "node_modules present"
 
 Write-Step "Dev tools"
 Ensure-DevPackage "typescript"
+# Playwright is used by the storage benchmark, not for browser E2E testing.
 Ensure-DevPackage "playwright"
-Write-Step "Playwright Chromium"
+Write-Step "Playwright Chromium (storage benchmark dependency)"
 Invoke-Native "playwright install chromium" { npx playwright install chromium }
 Write-Ok "Chromium ready"
 Write-Step "Unit tests";           Invoke-Native "unit tests"   { npm run test }
@@ -73,8 +74,12 @@ Write-Ok "Rust tests passed"
 
 Write-Step "Production build";     Invoke-Native "build"        { npm run build }
 Write-Ok "Build passed"
-Write-Step "E2E tests";            Invoke-Native "e2e"          { npm run test:e2e }
-Write-Ok "E2E passed"
+Write-Step "Native desktop integration tests"
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Stop-Run "Cargo not found. Install the Rust toolchain before running native desktop tests." }
+if (-not (Get-Command tauri-driver -ErrorAction SilentlyContinue)) { Stop-Run "tauri-driver not found. Install it with: cargo install --locked tauri-driver" }
+if (-not (Get-Command msedgedriver -ErrorAction SilentlyContinue)) { Stop-Run "msedgedriver not found. Install a WebView2-compatible Microsoft Edge WebDriver and add it to PATH." }
+Invoke-Native "native desktop integration tests" { npm run test:desktop }
+Write-Ok "Native desktop integration tests passed"
 Write-Step "Storage benchmark";    Invoke-Native "storage bench"{ npm run benchmark:storage }
 Write-Ok "Storage benchmark passed"
 Write-Step "Backup memory benchmark"; Invoke-Native "backup bench" { npm run benchmark:backup-memory }
