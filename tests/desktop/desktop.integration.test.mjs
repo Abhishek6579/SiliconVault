@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { DesktopWebDriver } from './webdriver.mjs';
 
 const app = new DesktopWebDriver();
-const K = { ENTER: '\uE007', CTRL: '\uE009', BACKSPACE: '\uE003' };
+const K = { ENTER: '\uE007' };
 
 async function openWorkspaceMenu() {
   await app.click('.workspace-switch-button');
@@ -24,9 +24,18 @@ async function createNote(name) {
   await app.click('.import-button');
   await app.clickText('.import-menu button', 'New note');
   await app.waitForCss('.app-dialog .dialog-input');
-  await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + name);
+  await app.clear('.dialog-input');
+  await app.sendKeys('.dialog-input', name);
   await app.click('.app-dialog button[type="submit"]');
-  await app.waitForCss('.editor-workspace');
+  const outcome = await app.waitFor(
+    () => app.execute('return document.querySelector(".editor-workspace") ? "editor" : document.querySelector(".error-banner") ? "error" : false;'),
+    10_000,
+    'editor to open or note creation error for ' + name,
+  );
+  if (outcome === 'error') {
+    const message = await app.execute('return document.querySelector(".error-banner")?.innerText || "Unknown note creation error";');
+    throw new Error('Could not create ' + name + ': ' + message);
+  }
   await app.waitForText('.file-tab', name);
 }
 
@@ -156,7 +165,8 @@ test('native desktop integration', async (t) => {
     await app.click('[data-testid="workspace-item-row"][data-item-name="desktop-move-note.md"] .row-action');
     await app.clickText('.item-context-menu button', 'Rename');
     await app.waitForText('.app-dialog h2', 'Rename file');
-    await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + 'desktop-renamed-note.md');
+    await app.clear('.dialog-input');
+    await app.sendKeys('.dialog-input', 'desktop-renamed-note.md');
     await app.click('.app-dialog button[type="submit"]');
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="desktop-renamed-note.md"]');
 
@@ -177,7 +187,8 @@ test('native desktop integration', async (t) => {
     await app.click('[data-testid="workspace-item-row"][data-item-name="Desktop Child"] .row-action');
     await app.clickText('.item-context-menu button', 'Rename');
     await app.waitForText('.app-dialog h2', 'Rename folder');
-    await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + 'Desktop Child Renamed');
+    await app.clear('.dialog-input');
+    await app.sendKeys('.dialog-input', 'Desktop Child Renamed');
     await app.click('.app-dialog button[type="submit"]');
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="Desktop Child Renamed"]');
 
@@ -264,7 +275,7 @@ test('native desktop integration', async (t) => {
     await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
 
-    await app.setFileInput(input, 'invalid-backup.json', '{"format":"invalid"}');
+    await app.setFileInput(input, 'invalid-backup.json', '{"format":');
     await app.waitForText('.error-banner', 'Backup validation failed', 10_000);
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
   });
