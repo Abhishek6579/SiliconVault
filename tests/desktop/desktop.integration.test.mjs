@@ -55,6 +55,21 @@ async function ensureMarkdownEditing() {
   await app.waitForCss('.cm-content[contenteditable="true"]');
 }
 
+async function waitForCrashRecoverySnapshot(fileName, marker) {
+  const snapshot = await app.waitFor(
+    () => app.executeAsync(
+      'const done=arguments[arguments.length-1]; const expectedName=arguments[0]; const expectedMarker=arguments[1]; const request=indexedDB.open("engineering-workspace"); request.onerror=()=>done({error:request.error?.message || "database open failed"}); request.onsuccess=()=>{ const database=request.result; let files=null, preferences=null, settled=false; const finish=()=>{ if(files===null || preferences===null || settled) return; settled=true; const file=files.find((item)=>item.name===expectedName && item.deletedAt===null); const draft=file ? preferences.find((item)=>item.key==="draft:"+file.id)?.value : undefined; const sessionValue=file ? preferences.find((item)=>item.key==="session:"+file.workspaceId)?.value : undefined; const session=sessionValue && typeof sessionValue==="object" ? sessionValue : {}; const sessionContainsTab=Boolean(file && Array.isArray(session.openFileIds) && session.openFileIds.includes(file.id) && session.activeFileId===file.id); done({ready:Boolean(file && typeof draft==="string" && draft.includes(expectedMarker) && sessionContainsTab),fileId:file?.id ?? null,draftPersisted:typeof draft==="string" && draft.includes(expectedMarker),sessionContainsTab,activeFileId:session.activeFileId ?? null,openFileIds:session.openFileIds ?? []}); database.close(); }; const tx=database.transaction(["files","preferences"],"readonly"); const fileRequest=tx.objectStore("files").getAll(); const preferenceRequest=tx.objectStore("preferences").getAll(); fileRequest.onsuccess=()=>{files=fileRequest.result;finish();}; preferenceRequest.onsuccess=()=>{preferences=preferenceRequest.result;finish();}; tx.onerror=()=>{if(!settled){settled=true;done({error:tx.error?.message || "database read failed"});database.close();}}; tx.onabort=()=>{if(!settled){settled=true;done({error:tx.error?.message || "database read aborted"});database.close();}}; };',
+      fileName,
+      marker,
+    ),
+    900,
+    'crash recovery draft and active tab to reach IndexedDB',
+  );
+  if (!snapshot?.ready) {
+    throw new Error('Crash recovery data was not durable before termination: ' + JSON.stringify(snapshot));
+  }
+}
+
 async function selectFolder(name) {
   await app.click('[data-testid="project-tree-item"][data-item-kind="folder"][data-item-name="' + name + '"] .tree-main');
   await app.waitForText('.workspace-switch-button', name);
@@ -245,7 +260,7 @@ test('native desktop integration', async (t) => {
     await app.waitForCss('.cm-content[contenteditable="true"]');
     await app.click('.cm-content[contenteditable="true"]');
     await app.sendKeys('.cm-content[contenteditable="true"]', '\nPending close recovery marker');
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await waitForCrashRecoverySnapshot('desktop-second-tab.md', 'Pending close recovery marker');
     await app.crashAndRestart();
     await app.waitForText('.file-tab', 'desktop-second-tab.md', 20_000);
     await app.waitForText('.cm-content', 'Pending close recovery marker', 15_000);
@@ -291,13 +306,21 @@ test('native desktop integration', async (t) => {
     await app.setFileInput(input, 'desktop-restore-fixture.json', backup);
     await app.waitForText('.app-dialog h2', 'Restore workspace backup?');
     await app.clickText('.app-dialog button', 'Restore backup', true);
-    const restoreResult = await app.waitFor(
-      () => app.execute(
-        'const active=document.querySelector(".workspace-switch-button")?.innerText || ""; if(active.includes("Restored Desktop Workspace")) return "restored"; const error=document.querySelector(".error-banner")?.innerText || ""; if(error.includes("Workspace restore failed")) return "error: " + error; const activity=Array.from(document.querySelectorAll(".activity-card")).find((item) => item.innerText.includes("Restoring workspace")); if(activity?.classList.contains("activity-error")) return "error: " + (activity.querySelector(".activity-detail")?.innerText || "unknown restore error"); return false;',
-      ),
-      20_000,
-      'workspace restore to complete or report an error',
-    );
+    let restoreResult;
+    try {
+      restoreResult = await app.waitFor(
+        () => app.execute(
+          'const active=document.querySelector(".workspace-switch-button")?.innerText || ""; if(active.includes("Restored Desktop Workspace")) return "restored"; const error=document.querySelector(".error-banner")?.innerText || ""; if(error.includes("Workspace restore failed")) return "error: " + error; const activity=Array.from(document.querySelectorAll(".activity-card")).find((item) => item.innerText.includes("Restoring workspace")); if(activity?.classList.contains("activity-error")) return "error: " + (activity.querySelector(".activity-detail")?.innerText || "unknown restore error"); return false;',
+        ),
+        20_000,
+        'workspace restore to complete or report an error',
+      );
+    } catch (error) {
+      const state = await app.execute(
+        'const activities=Array.from(document.querySelectorAll(".activity-card")).map((item)=>({className:item.className,title:item.querySelector(".activity-card-heading strong")?.innerText || "",detail:item.querySelector(".activity-detail")?.innerText || ""})); return JSON.stringify({activeWorkspace:document.querySelector(".workspace-switch-button")?.innerText || "",errorBanner:document.querySelector(".error-banner")?.innerText || "",alerts:Array.from(document.querySelectorAll("[role=alert]")).map((item)=>item.innerText),activities,dialog:document.querySelector(".app-dialog")?.innerText || ""});',
+      );
+      throw new Error('Backup restore diagnostic: ' + state + '; ' + error.message);
+    }
     if (restoreResult !== 'restored') throw new Error('Backup restore failed: ' + restoreResult);
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="restored-desktop-note.md"]');
 
