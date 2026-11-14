@@ -71,7 +71,9 @@ jobs:
   windows-desktop:
     name: Windows desktop build
     if: (github.event_name == 'push' && github.ref == 'refs/heads/slave') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: windows-latest
+    # WebView2 + msedgedriver session creation is currently broken on the
+    # Windows Server 2025 image; the same Tauri driver suite passes on 2022.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
         with:
@@ -130,6 +132,15 @@ jobs:
           cargo install --git https://github.com/chippers/msedgedriver-tool
           & "$HOME/.cargo/bin/msedgedriver-tool.exe"
           $PWD.Path >> $env:GITHUB_PATH
+      - name: Record native WebView2 and Edge WebDriver versions
+        shell: pwsh
+        run: |
+          $runtimeKey = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $runtime = Get-ItemProperty -Path $runtimeKey -ErrorAction SilentlyContinue
+          if (-not $runtime.pv) { throw "WebView2 Runtime version is not registered at $runtimeKey" }
+          Write-Host "WebView2 Runtime: $($runtime.pv)"
+          where.exe msedgedriver.exe
+          & msedgedriver.exe --version
       - name: Run native desktop UI integration tests
         run: npm run test:desktop
       - name: Build signed Tauri application
