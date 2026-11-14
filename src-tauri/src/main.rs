@@ -253,6 +253,32 @@ fn main() {
             logger.info("application.ready", "SiliconVault backend initialized");
             let _ = logger::set_global(logger.clone());
             app.manage(logger);
+
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "main window configuration is missing",
+                    )
+                })?;
+
+            let mut window_builder =
+                tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?;
+
+            if let Some(data_directory) =
+                std::env::var_os("SILICON_VAULT_WEBVIEW_DATA_DIR")
+            {
+                let data_directory = PathBuf::from(data_directory);
+                fs::create_dir_all(&data_directory)?;
+                window_builder = window_builder.data_directory(data_directory);
+            }
+
+            window_builder.build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, activity_log::activity_log_event, activity_log::activity_log_events, convert_office_to_pdf, updater::check_for_update, updater::install_update])
