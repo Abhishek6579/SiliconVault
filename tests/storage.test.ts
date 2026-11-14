@@ -87,15 +87,11 @@ describe('application import and backup size limits', () => {
   it('rolls back file metadata when storing imported content fails', async () => {
     const database = createDatabase();
     await database.open();
-    const stopFailure = database.contents.hook('creating').subscribe(() => {
+    database.contents.hook('creating').subscribe(() => {
       throw new Error('injected import content failure');
     });
-    try {
-      await expect(importFile(database, new File(['payload'], 'atomic-import.md')))
-        .rejects.toThrow('injected import content failure');
-    } finally {
-      stopFailure();
-    }
+    await expect(importFile(database, new File(['payload'], 'atomic-import.md')))
+      .rejects.toThrow('injected import content failure');
     expect(await database.files.count()).toBe(0);
     expect(await database.contents.count()).toBe(0);
   });
@@ -523,14 +519,12 @@ describe('workspace storage', () => {
       workspaces: await target.workspaces.toArray(),
     };
 
-    const stopFileFailure = target.files.hook('creating').subscribe((_key, record) => {
-      if (record.id === 'incoming-failure') throw new Error('injected restore write failure');
+    let injectFileFailure = true;
+    target.files.hook('creating').subscribe((_key, record) => {
+      if (injectFileFailure && record.id === 'incoming-failure') throw new Error('injected restore write failure');
     });
-    try {
-      await expect(importBackup(target, backup)).rejects.toThrow('injected restore write failure');
-    } finally {
-      stopFileFailure();
-    }
+    await expect(importBackup(target, backup)).rejects.toThrow('injected restore write failure');
+    injectFileFailure = false;
 
     const assertTargetUnchanged = async () => {
       expect(await target.files.toArray()).toEqual(before.files);
@@ -542,14 +536,14 @@ describe('workspace storage', () => {
     };
     await assertTargetUnchanged();
 
-    const stopQuotaFailure = target.contents.hook('creating').subscribe((_key, record) => {
-      if (record.fileId === 'incoming-failure') throw new DOMException('Not enough disk space', 'QuotaExceededError');
+    let injectQuotaFailure = true;
+    target.contents.hook('creating').subscribe((_key, record) => {
+      if (injectQuotaFailure && record.fileId === 'incoming-failure') {
+        throw new DOMException('Not enough disk space', 'QuotaExceededError');
+      }
     });
-    try {
-      await expect(importBackup(target, backup)).rejects.toThrow(/Not enough disk space/);
-    } finally {
-      stopQuotaFailure();
-    }
+    await expect(importBackup(target, backup)).rejects.toThrow(/Not enough disk space/);
+    injectQuotaFailure = false;
     await assertTargetUnchanged();
 
     await expect(importBackup(target, backup, (progress) => {
