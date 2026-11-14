@@ -237,6 +237,48 @@ async fn convert_office_to_pdf(bytes: Vec<u8>, extension: String) -> Result<Vec<
 fn get_system_stats(monitor: tauri::State<'_, Mutex<SystemMonitor>>) -> SystemStats {
     monitor.lock().unwrap_or_else(|p| p.into_inner()).sample()
 }
+
+fn is_desktop_test_mode() -> bool {
+    std::env::args_os().any(|arg| arg == "--silicon-vault-desktop-test")
+}
+
+fn desktop_test_webview_data_directory() -> Option<PathBuf> {
+    const PREFIX: &str = "--silicon-vault-webview-data-dir=";
+    std::env::args_os()
+        .find_map(|arg| {
+            arg.to_string_lossy()
+                .strip_prefix(PREFIX)
+                .map(PathBuf::from)
+        })
+        .or_else(|| std::env::var_os("SILICON_VAULT_WEBVIEW_DATA_DIR").map(PathBuf::from))
+}
+
+#[tauri::command]
+fn get_desktop_test_diagnostics() -> Result<serde_json::Value, String> {
+    if !is_desktop_test_mode() {
+        return Err("Desktop test diagnostics are available only in desktop test mode.".into());
+    }
+
+    let directory = desktop_test_webview_data_directory();
+    let entries = directory.as_ref().and_then(|path| {
+        fs::read_dir(path).ok().map(|items| {
+            items.filter_map(Result::ok)
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        })
+    });
+
+    Ok(serde_json::json!({
+        "pid": std::process::id(),
+        "executable": std::env::current_exe().ok().map(|path| path.display().to_string()),
+        "arguments": std::env::args().collect::<Vec<_>>(),
+        "webviewDataDirectory": directory.as_ref().map(|path| path.display().to_string()),
+        "webviewDataDirectoryExists": directory.as_ref().is_some_and(|path| path.is_dir()),
+        "webviewDataDirectoryEntries": entries,
+        "localAppData": std::env::var_os("LOCALAPPDATA").map(|value| value.to_string_lossy().into_owned())
+    }))
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .manage(Mutex::new(SystemMonitor::new()))
@@ -270,18 +312,29 @@ fn main() {
             let mut window_builder =
                 tauri::WebviewWindowBuilder::from_config(app.handle(), window_config)?;
 
-            if let Some(data_directory) =
-                std::env::var_os("SILICON_VAULT_WEBVIEW_DATA_DIR")
-            {
-                let data_directory = PathBuf::from(data_directory);
+            let test_mode = is_desktop_test_mode();
+            let data_directory = desktop_test_webview_data_directory();
+            if test_mode && data_directory.is_none() {
+                return Err(std::io::Error::other(
+                    "Desktop test startup failed: tauri-driver did not forward --silicon-vault-webview-data-dir to the application.",
+                ).into());
+            }
+
+            if let Some(data_directory) = data_directory {
                 fs::create_dir_all(&data_directory)?;
+                let data_directory = fs::canonicalize(&data_directory)?;
+                logger.info(
+                    "webview.profile",
+                    &format!("Using WebView2 data directory: {}", data_directory.display()),
+                );
                 window_builder = window_builder.data_directory(data_directory);
             }
 
             window_builder.build()?;
+            logger.info("webview.window.created", "Main WebView window created");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, activity_log::activity_log_event, activity_log::activity_log_events, convert_office_to_pdf, updater::check_for_update, updater::install_update])
+        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, get_desktop_test_diagnostics, activity_log::activity_log_event, activity_log::activity_log_events, convert_office_to_pdf, updater::check_for_update, updater::install_update])
         .build(tauri::generate_context!())
         .expect("failed to build SiliconVault");
     app.run(|_handle, event| {
