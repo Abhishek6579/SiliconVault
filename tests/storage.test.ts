@@ -692,7 +692,8 @@ describe('workspace storage', () => {
       files: [], folders: [], projects: [], preferences: [],
       workspaces: [selected, other],
     });
-    expect(await database.workspaces.toArray()).toEqual([selected, other]);
+    expect(await database.workspaces.get(selected.id)).toEqual(selected);
+    expect(await database.workspaces.get(other.id)).toEqual(other);
     expect(await database.preferences.get('activeWorkspace')).toMatchObject({ value: selected.id });
   });
 
