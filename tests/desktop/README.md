@@ -7,7 +7,7 @@ This suite launches the **Tauri application binary** and drives its embedded Web
 Requirements: Node.js 22+, Rust/Tauri build prerequisites, `npm ci`, `cargo install tauri-driver --locked`, and the native WebView driver.
 
 - Windows: WebView2 Runtime and a matching Microsoft Edge WebDriver on `PATH`. `msedgedriver-tool` can provision a matching driver.
-- Linux: `webkit2gtk-driver` and an active display; headless CI uses Xvfb.
+- Linux: the WebKitGTK WebDriver binary (`WebKitWebDriver`) and an active display. Ubuntu 26.04 uses the `webkitgtk-webdriver` package; headless CI uses Xvfb.
 
 Run:
 
@@ -30,7 +30,7 @@ Optional environment overrides:
 - Markdown editing, autosave, in-document find, tab switching, crash recovery draft and graceful reopen.
 - External file-drop event into the embedded WebView; PDF page navigation, full-text search, zoom and tab reopening.
 - Backup restore confirmation, cancellation, valid restore and invalid-backup error.
-- Diagnostics view and refresh.
+- Diagnostics view and refresh; export contents and native save-dialog failure cases are covered by the acceptance checklist.
 
 The synthetic file-drop test exercises the app's WebView drop handler. A physical drag from Explorer or a Linux file manager is listed separately below. Existing Vitest and Rust tests remain responsible for lower-level hierarchy, backup checksum/rollback, database and logging behavior.
 
@@ -60,4 +60,4 @@ Use `scripts/windows/validate-installed-upgrade.ps1` for the existing Windows in
 
 ## Search boundary
 
-Current global search is filename/folder-name search. The desktop suite separately checks content search inside an opened Markdown editor and PDF. It does not claim that global search indexes all workspace document contents; that is a distinct product capability.
+Current global search searches file and folder names. Content search is tested within an opened Markdown editor and PDF reader; the suite does not claim workspace-wide full-text indexing. Adding global content indexing is a separate product feature.

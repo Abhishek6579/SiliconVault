@@ -31,7 +31,7 @@ async function createNote(name) {
 }
 
 async function selectFolder(name) {
-  await app.click('[data-testid="workspace-item-row"][data-item-kind="folder"][data-item-name="' + name + '"] .file-name-button');
+  await app.click('[data-testid="project-tree-item"][data-item-kind="folder"][data-item-name="' + name + '"] .tree-main');
   await app.waitForText('.workspace-switch-button', name);
 }
 
@@ -175,6 +175,17 @@ test('native desktop integration', async (t) => {
     await app.sendKeys('.dialog-input', K.CTRL + 'a' + K.BACKSPACE + 'Desktop Child Renamed');
     await app.click('.app-dialog button[type="submit"]');
     await app.waitForCss('[data-testid="workspace-item-row"][data-item-name="Desktop Child Renamed"]');
+
+    await createFolder('Desktop Delete Folder');
+    await app.click('[data-testid="workspace-item-row"][data-item-name="Desktop Delete Folder"] .row-action');
+    await app.clickText('.item-context-menu button', 'Delete folder');
+    await app.waitForText('.app-dialog h2', 'Delete folder?');
+    await app.clickText('.app-dialog button', 'Delete folder', true);
+    await app.waitFor(
+      () => app.execute('return !document.querySelector(\'[data-testid="workspace-item-row"][data-item-name="Desktop Delete Folder"]\');'),
+      8_000,
+      'deleted nested folder to disappear',
+    );
   });
 
   await t.test('editor autosave, local content search, tabs and recovery draft', async () => {
@@ -270,6 +281,7 @@ test('native desktop integration', async (t) => {
     await app.restart();
     await app.waitForText('.workspace-switch-button', 'Restored Desktop Workspace', 20_000);
     await app.waitForText('.file-tab', 'restored-desktop-note.md', 20_000);
+    await app.clickText('.editor-tools button', 'Edit note');
     await app.waitForText('.cm-content', 'Backup round-trip marker', 15_000);
   });
 });

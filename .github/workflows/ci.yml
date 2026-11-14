@@ -160,11 +160,13 @@ jobs:
       - name: Install Tauri Linux prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install --yes build-essential curl file libssl-dev libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf webkit2gtk-driver xvfb
+          sudo apt-get install --yes build-essential curl file libssl-dev libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf webkitgtk-webdriver xvfb
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+      - name: Verify Linux WebDriver binary
+        run: command -v WebKitWebDriver
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

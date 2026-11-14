@@ -737,10 +737,17 @@ describe('workspace storage', () => {
     databases.push(upgrading);
     const originalUpdate = IDBCursor.prototype.update;
     let fileMigrationReached = false;
+    let folderMigrationReached = false;
     const updateSpy = vi.spyOn(IDBCursor.prototype, 'update').mockImplementation(function (this: IDBCursor, value) {
-      const source = this.source;
-      if (source instanceof IDBObjectStore && source.name === 'files') fileMigrationReached = true;
-      if (source instanceof IDBObjectStore && source.name === 'folders' && fileMigrationReached) {
+      // fake-indexeddb and browser engines can expose a cursor source differently
+      // (IDBObjectStore or IDBIndex). Identify the migration record itself so the
+      // fault injection remains deterministic across both implementations.
+      const record = value as { id?: string; workspaceId?: string };
+      if (record?.id === 'migration-file' && record.workspaceId === DEFAULT_WORKSPACE_ID) {
+        fileMigrationReached = true;
+      }
+      if (record?.id === 'migration-folder' && fileMigrationReached) {
+        folderMigrationReached = true;
         throw new DOMException('Injected workspace migration failure', 'QuotaExceededError');
       }
       return originalUpdate.call(this, value);
@@ -752,6 +759,7 @@ describe('workspace storage', () => {
       upgrading.close();
     }
     expect(fileMigrationReached).toBe(true);
+    expect(folderMigrationReached).toBe(true);
 
     const recovered = new WorkspaceDatabaseV2(name);
     try {
