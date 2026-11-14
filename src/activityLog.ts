@@ -23,7 +23,18 @@ function cleanParams(value: unknown): unknown {
 }
 function emit(kind: ActivityKind, name: string, component: string | null, params: unknown, actionId = currentActionId, outcome: string | null = null, durationMs: number | null = null, error: unknown = null) {
   queue.push({ ts: new Date().toISOString(), seq: ++sequence, sessionId: '', actionId, kind, name, component, params: cleanParams(params) ?? {}, outcome, durationMs, error: error ? cleanParams(error) : null });
-  if (!scheduled) { scheduled = true; queueMicrotask(() => { scheduled = false; const batch = queue.splice(0); void invoke('activity_log_events', { events: batch }).catch(() => {}); }); }
+  if (!scheduled) {
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      const batch = queue.splice(0);
+      // Keep diagnostics best-effort: a missing/unavailable Tauri bridge must
+      // never create a second unhandled exception while recording an event.
+      void Promise.resolve()
+        .then(() => invoke('activity_log_events', { events: batch }))
+        .catch(() => {});
+    });
+  }
 }
 export function logAction(name: string, component: string, params: unknown = {}) {
   currentActionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
