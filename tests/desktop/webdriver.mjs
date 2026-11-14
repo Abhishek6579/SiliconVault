@@ -149,7 +149,15 @@ export class DesktopWebDriver {
       await Promise.race([new Promise((resolve) => this.driver.once('exit', resolve)), delay(2_000)]);
     }
     this.driver = null;
-    if (this.profile) await rm(this.profile, { recursive: true, force: true });
+    if (this.profile) {
+      if (process.env.KEEP_DESKTOP_TEST_PROFILE === '1') {
+        // Keep the isolated app data, including Tauri diagnostics, for failed
+        // desktop integration runs. The path is printed so it can be inspected.
+        process.stdout.write('Desktop test profile preserved at: ' + this.profile + '\\n');
+      } else {
+        await rm(this.profile, { recursive: true, force: true });
+      }
+    }
     this.profile = null;
   }
 
