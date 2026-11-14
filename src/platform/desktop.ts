@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { trackedInvoke, trackOperation } from '../activityLog';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -100,21 +100,21 @@ async function saveDiagnosticsExport(content: string): Promise<boolean> {
 
 export const desktopPlatform: PlatformAdapter = {
   capabilities: { nativeBackupSave: true, nativeBackupOpen: true, systemDiagnostics: true, systemStats: true, officeConversion: true, updates: updatesSupported, safeShutdown: true },
-  log: (level, event, message) => invoke('log_frontend_event', { level, event, message }),
-  getSystemStats: () => invoke('get_system_stats'),
-  getDiagnostics: () => invoke('get_diagnostics'),
-  exportDiagnostics: () => invoke('export_diagnostics'),
-  convertOfficeToPdf: async (bytes, extension) => new Uint8Array(await invoke<number[]>('convert_office_to_pdf', { bytes: Array.from(bytes), extension })),
-  checkForUpdate: () => invoke('check_for_update'),
-  installUpdate: () => invoke('install_update'),
+  log: (level, event, message) => trackedInvoke('log_frontend_event', { level, event, message }),
+  getSystemStats: () => trackedInvoke('get_system_stats'),
+  getDiagnostics: () => trackedInvoke('get_diagnostics'),
+  exportDiagnostics: () => trackedInvoke('export_diagnostics'),
+  convertOfficeToPdf: async (bytes, extension) => new Uint8Array(await trackedInvoke<number[]>('convert_office_to_pdf', { bytes: Array.from(bytes), extension })),
+  checkForUpdate: () => trackedInvoke('check_for_update'),
+  installUpdate: () => trackedInvoke('install_update'),
   listen: async (event, handler) => listen(event, (payload) => handler(payload.payload as never)),
   onCloseRequested: async (handler) => getCurrentWindow().onCloseRequested(async (event) => {
     event.preventDefault();
     await handler(() => getCurrentWindow().destroy());
   }),
-  saveBackup: saveBackupToDesktop,
-  saveDiagnostics: saveDiagnosticsExport,
-  chooseBackup: chooseBackupToRestore,
+  saveBackup: (content) => trackOperation('backup.export', 'native-save-dialog', () => saveBackupToDesktop(content)),
+  saveDiagnostics: (content) => trackOperation('diagnostics.export', 'native-save-dialog', () => saveDiagnosticsExport(content)),
+  chooseBackup: () => trackOperation('backup.restore.choose', 'native-open-dialog', chooseBackupToRestore),
   chooseFiles: iterateDesktopFiles,
   chooseFolderFiles: iterateDesktopFolder,
   getRelativePath: (file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,

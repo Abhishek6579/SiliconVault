@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useReducer, type Dispatch, type PropsWithChildren, type SetStateAction } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type Dispatch, type PropsWithChildren, type SetStateAction } from 'react';
+import { logActivityState } from '../../../activityLog';
 
 export type WorkspaceView = 'workspace' | 'recent' | 'trash';
 interface WorkspaceNavState {
@@ -30,6 +31,11 @@ export function WorkspaceNavProvider({ children }: PropsWithChildren) {
   const [state, dispatch] = useReducer(reducer, {
     view: 'workspace', activeProject: null, selectedFolder: null, expanded: new Set<string>(),
   });
+  useEffect(() => {
+    logActivityState(state.view === 'workspace' ? 'workspace.opened' : 'workspace.view_changed', {
+      view: state.view, projectSelected: state.activeProject !== null, folderSelected: state.selectedFolder !== null,
+    });
+  }, [state.view, state.activeProject, state.selectedFolder]);
   const setView = useCallback((value: SetStateAction<WorkspaceView>) => dispatch({ key: 'view', value }), []);
   const setActiveProject = useCallback((value: SetStateAction<string | null>) => dispatch({ key: 'activeProject', value }), []);
   const setSelectedFolder = useCallback((value: SetStateAction<string | null>) => dispatch({ key: 'selectedFolder', value }), []);

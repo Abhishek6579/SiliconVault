@@ -206,6 +206,10 @@ Workspace data lives in the persistent WebView IndexedDB profile. Diagnostics us
 
 Diagnostic files include **app.log**, **crash.log**, and **startup.json**. Log rotation is implemented. Diagnostics export excludes Dexie workspace data and user documents.
 
+### Session activity logs
+
+SiliconVault also writes a separate JSON Lines activity log under the Tauri app log directory in `sessions/`. Each launch creates `session_YYYY-MM-DD_HH-MM-SS_<8-char-id>.log` using local time; startup removes the oldest named session files until nine remain, then creates the new log (ten total). Only names matching this session pattern are rotated. Each file is capped at 5 MiB and ends with a `log.truncated` event if the cap is reached. Lines include a sequence number, timestamp, event kind/name, component, redacted parameters, action correlation ID, outcome, duration, and error details where available. The first line records the app/platform header and prior shutdown status. For a readable timeline, call `prettyPrintSession(contents)` from `src/activityLog.ts`.
+
 ### Data safety
 
 - IndexedDB and exported JSON backups are **not encrypted by the application**.

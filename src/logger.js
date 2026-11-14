@@ -1,5 +1,6 @@
 import { platform } from './platform/index.ts';
 import { sanitizeDiagnosticText } from './shared/logging/sanitize.ts';
+import { logDiagnosticError } from './activityLog';
 
 const LEVELS = new Set(['debug', 'info', 'warn', 'error', 'fatal']);
 const MAX_MESSAGE_LENGTH = 2048;
@@ -9,6 +10,7 @@ function sanitize(value) { return sanitizeDiagnosticText(value, MAX_MESSAGE_LENG
 export async function log(level, event, message, context = undefined) {
   const normalizedLevel = LEVELS.has(level) ? level : 'info';
   const safeEvent = sanitize(event).replace(/\s+/g, '.').slice(0, 128) || 'frontend.event';
+  if (normalizedLevel === 'error' || normalizedLevel === 'fatal') { try { logDiagnosticError(safeEvent); } catch { /* activity logging must not affect diagnostics */ } }
   let line = sanitize(message);
   if (context !== undefined) {
     try { line += ' ' + sanitize(JSON.stringify(context)); } catch { line += ' [context unavailable]'; }

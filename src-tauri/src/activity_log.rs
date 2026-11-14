@@ -1,0 +1,36 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::{fs, fs::OpenOptions, io::Write, path::{Path, PathBuf}, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+
+const MAX_BYTES: u64 = 5 * 1024 * 1024;
+const PREFIX: &str = "session_";
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Event { pub ts: String, pub seq: u64, #[serde(alias="sessionId")] pub session_id: String, #[serde(alias="actionId")] pub action_id: Option<String>, pub kind: String, pub name: String, pub component: Option<String>, pub params: Value, pub outcome: Option<String>, #[serde(alias="durationMs")] pub duration_ms: Option<u64>, pub error: Option<Value> }
+pub struct ActivityLog { path: PathBuf, session_id: String, seq: Mutex<u64>, disabled: Mutex<bool>, bytes: Mutex<u64> }
+impl ActivityLog {
+ pub fn initialize(directory: PathBuf) -> Option<Self> {
+  let dir=directory.join("sessions"); fs::create_dir_all(&dir).ok()?;
+  let mut files: Vec<(String,PathBuf)> = fs::read_dir(&dir).ok()?.flatten().filter_map(|e| { let n=e.file_name().to_string_lossy().into_owned(); is_session_file(&n).then_some((n,e.path())) }).collect();
+  files.sort_by(|a,b| a.0.cmp(&b.0));
+  while files.len()>9 { let (_,p)=files.remove(0); let _=fs::remove_file(p); }
+  let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default(); let local=chrono_free_local_stamp();
+  let (id,path)= (0u32..).find_map(|attempt| { let mixed=now.subsec_nanos().wrapping_add(std::process::id()).wrapping_add(attempt.wrapping_mul(0x9e3779b9)); let short=format!("{mixed:08x}"); let id=format!("{local}_{short}"); let path=dir.join(format!("{PREFIX}{id}.log")); OpenOptions::new().write(true).create_new(true).open(&path).ok().map(|_|(id,path)) })?;
+  let previous=fs::read_to_string(directory.join("startup.json")).ok().and_then(|s|serde_json::from_str::<Value>(&s).ok()).and_then(|v|v.get("cleanShutdown").cloned());
+  let log=Self { path, session_id:id.clone(), seq:Mutex::new(0), disabled:Mutex::new(false), bytes:Mutex::new(0) };
+  log.write_raw(serde_json::json!({"ts":timestamp_ms(),"seq":0,"session_id":id,"action_id":null,"kind":"STATE","name":"session.start","component":null,"params":{"app_version":env!("CARGO_PKG_VERSION"),"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"start_time":timestamp_ms(),"previous_shutdown_status":previous}}));
+  Some(log)
+ }
+ pub fn write_event(&self, mut event: Event) { let Ok(mut seq)=self.seq.lock() else{return}; *seq+=1; event.seq=*seq; event.session_id=self.session_id.clone(); event.ts=timestamp_ms(); if let Ok(line)=serde_json::to_value(event) { self.write_raw(line); } }
+ fn write_raw(&self, mut value: Value) { redact(&mut value); let Ok(mut disabled)=self.disabled.lock() else{return}; if *disabled{return;} let Ok(mut bytes)=self.bytes.lock() else{return;}; let Ok(mut line)=serde_json::to_vec(&value) else{return;}; line.push(b'\n'); if *bytes+line.len() as u64>MAX_BYTES { let truncated=serde_json::json!({"ts":timestamp_ms(),"seq":value.get("seq"),"session_id":self.session_id,"action_id":null,"kind":"STATE","name":"log.truncated","component":null,"params":{},"outcome":null,"duration_ms":null,"error":null}); if let Ok(mut last)=serde_json::to_vec(&truncated){last.push(b'\n');if *bytes+last.len() as u64<=MAX_BYTES { if let Ok(mut f)=OpenOptions::new().append(true).open(&self.path){let _=f.write_all(&last);let _=f.flush();*bytes+=last.len() as u64;}}} *disabled=true; return; } if let Ok(mut f)=OpenOptions::new().create(true).append(true).open(&self.path){ if f.write_all(&line).and_then(|_|f.flush()).is_ok(){*bytes+=line.len() as u64}else{*disabled=true;} } else {*disabled=true;} }
+ pub fn directory(&self)->&Path { self.path.parent().unwrap_or_else(||Path::new(".")) }
+ pub fn recent(&self,n:usize,max_bytes:usize)->Vec<String>{ let Ok(entries)=fs::read_dir(self.directory()) else{return vec![]};let mut files:Vec<_>=entries.flatten().filter_map(|e|{let name=e.file_name().to_string_lossy().into_owned();is_session_file(&name).then_some((name,e.path()))}).collect();files.sort_by(|a,b|b.0.cmp(&a.0));files.into_iter().take(n).filter_map(|(_,p)|fs::read(p).ok().map(|b|String::from_utf8_lossy(&b[b.len().saturating_sub(max_bytes)..]).into_owned())).collect() }
+}
+fn is_session_file(n:&str)->bool { let b=n.as_bytes(); b.len()==40&&b.starts_with(b"session_")&&b[8..18].iter().enumerate().all(|(i,c)|if i==4||i==7{*c==b'-'}else{c.is_ascii_digit()})&&b[18]==b'_'&&b[19..27].iter().enumerate().all(|(i,c)|if i==2||i==5{*c==b'-'}else{c.is_ascii_digit()})&&b[27]==b'_'&&b[28..36].iter().all(u8::is_ascii_hexdigit)&&&b[36..]==b".log" }
+fn timestamp_ms()->String { chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f%:z").to_string() }
+fn chrono_free_local_stamp()->String { chrono::Local::now().format("%Y-%m-%d_%H-%M-%S").to_string() }
+pub fn redact(value:&mut Value){match value{Value::Object(map)=>{let old=std::mem::take(map);for(k,mut v)in old{let low=k.to_ascii_lowercase();if ["password","token","secret","api_key","apikey","document_text","content"].iter().any(|s|low.contains(s)){map.insert(k,Value::String("[REDACTED]".into()));}else{redact(&mut v);map.insert(k,v);}}},Value::Array(a)=>for v in a{redact(v)},Value::String(s)=>{for var in ["USERPROFILE","HOME"]{if let Ok(home)=std::env::var(var){if !home.is_empty(){*s=s.replace(&home,"<user-home>");}}}if s.contains(":\\")||s.starts_with("/"){let name=Path::new(s).file_name().and_then(|v|v.to_str()).unwrap_or("file");*s=name.to_owned();}},_=>{}}}
+#[tauri::command]
+pub fn activity_log_event(log:tauri::State<'_,ActivityLog>, event:Event){log.write_event(event)}
+#[tauri::command]
+pub fn activity_log_events(log:tauri::State<'_,ActivityLog>, events:Vec<Event>){for event in events.into_iter().take(100){log.write_event(event)}}
+#[cfg(test)] mod tests {use super::*;#[test]fn redact_removes_secrets_and_home_paths(){let mut v=serde_json::json!({"password":"swordfish","document_text":"private document","path":"C:\\Users\\someone\\notes.md"});redact(&mut v);let s=v.to_string();assert!(!s.contains("swordfish"));assert!(!s.contains("private document"));assert!(!s.contains("C:\\Users"));assert!(s.contains("notes.md"));}#[test]fn session_filename_filter_is_exact(){assert!(is_session_file("session_2026-11-14_12-30-45_12345678.log"));assert!(!is_session_file("session_backup.log"));}#[test]fn startup_keeps_ten_session_files_and_unrelated_files(){let dir=std::env::temp_dir().join(format!("sv-activity-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));let sessions=dir.join("sessions");fs::create_dir_all(&sessions).unwrap();fs::write(sessions.join("keep.txt"),"keep").unwrap();for day in 1..=10{fs::write(sessions.join(format!("session_2026-11-{day:02}_00-00-00_00000000.log")),"old\n").unwrap();}let log=ActivityLog::initialize(dir.clone()).unwrap();let names:Vec<_>=fs::read_dir(&sessions).unwrap().flatten().map(|e|e.file_name().to_string_lossy().to_string()).collect();assert_eq!(names.iter().filter(|n|is_session_file(n)).count(),10);assert!(!sessions.join("session_2026-11-01_00-00-00_00000000.log").exists());assert!(sessions.join("keep.txt").exists());let second=ActivityLog::initialize(dir.clone()).unwrap();assert_ne!(log.path,second.path);let _=fs::remove_dir_all(dir);}}

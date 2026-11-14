@@ -1,4 +1,4 @@
-use crate::{error_handler::AppError, logger::Logger, system_monitor::{SystemMonitor, SystemStats}};
+use crate::{activity_log::ActivityLog, error_handler::AppError, logger::Logger, system_monitor::{SystemMonitor, SystemStats}};
 use serde::Serialize;
 use std::{fs, sync::Mutex, time::Instant};
 use tauri::{AppHandle, Manager, State};
@@ -24,7 +24,8 @@ pub fn export_diagnostics(app: AppHandle, logger: State<'_, Logger>, state: Stat
     let snapshot = collect(&app, &logger, &state, system);
     let app_log = logger.read_recent("app.log", 64 * 1024).unwrap_or_default();
     let crash_log = logger.read_recent("crash.log", 64 * 1024).unwrap_or_default();
-    let payload = serde_json::json!({ "diagnostics": snapshot, "logs": { "app": app_log, "crashes": crash_log },
+    let sessions = app.try_state::<ActivityLog>().map(|activity| serde_json::json!({"directory":"app_log_dir/sessions","recent":activity.recent(3, 16 * 1024)}));
+    let payload = serde_json::json!({ "diagnostics": snapshot, "logs": { "app": app_log, "crashes": crash_log }, "sessionActivity": sessions,
         "privacy": "Export excludes Dexie data, knowledge-base records, document contents, and user-selected files." });
     serde_json::to_string_pretty(&payload).map_err(|e| AppError::new("DIAGNOSTICS_SERIALIZATION_FAILED", e.to_string(), true).into_command_error())
 }

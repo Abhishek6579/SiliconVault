@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod diagnostics;
+mod activity_log;
 mod error_handler;
 mod logger;
 mod system_monitor;
@@ -244,7 +245,9 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let directory = app.path().app_log_dir()?.join("diagnostics");
+            let log_directory = app.path().app_log_dir()?;
+            if let Some(activity) = activity_log::ActivityLog::initialize(log_directory.clone()) { app.manage(activity); }
+            let directory = log_directory.join("diagnostics");
             let logger = logger::Logger::initialize(directory).map_err(std::io::Error::other)?;
             logger.install_panic_hook();
             logger.info("application.ready", "SiliconVault backend initialized");
@@ -252,7 +255,7 @@ fn main() {
             app.manage(logger);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, convert_office_to_pdf, updater::check_for_update, updater::install_update])
+        .invoke_handler(tauri::generate_handler![get_system_stats, diagnostics::get_diagnostics, diagnostics::export_diagnostics, diagnostics::log_frontend_event, activity_log::activity_log_event, activity_log::activity_log_events, convert_office_to_pdf, updater::check_for_update, updater::install_update])
         .build(tauri::generate_context!())
         .expect("failed to build SiliconVault");
     app.run(|_handle, event| {
@@ -261,6 +264,7 @@ fn main() {
                 logger.info("application.shutdown", "SiliconVault exited cleanly");
                 logger.mark_clean_shutdown();
             }
+            if let Some(activity) = _handle.try_state::<activity_log::ActivityLog>() { activity.write_event(activity_log::Event { ts:String::new(),seq:0,session_id:String::new(),action_id:None,kind:"STATE".into(),name:"application.shutdown.clean".into(),component:None,params:serde_json::json!({}),outcome:Some("success".into()),duration_ms:None,error:None }); }
         }
     });
 }
